@@ -1,0 +1,161 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="devices-container">
+    <h2>Edit Device</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+    
+    <form action="/devices/edit/{{.Device.ID}}" method="post" class="device-form">
+        <input type="hidden" name="form_token" value="{{.FormToken}}">
+        <div class="form-group">
+            <label for="name">Device Name:</label>
+            <input type="text" class="form-control {{if .ErrorFields.name}}input-error{{end}}" id="name" name="name" value="{{if .FormData.name}}{{.FormData.name}}{{else}}{{.Device.Name}}{{end}}" required>
+        </div>
+        <div class="form-group">
+            <label for="type">Device Type:</label>
+            <select class="form-control {{if .ErrorFields.type}}input-error{{end}}" id="type" name="type" required>
+                <option value="" {{if and (eq .FormData.type "") (eq .Device.Type "")}}selected{{end}}>Select a type</option>
+                <option value="server" {{if or (eq .FormData.type "server") (and (eq .FormData.type "") (eq .Device.Type "server"))}}selected{{end}}>Server</option>
+                <option value="workstation" {{if or (eq .FormData.type "workstation") (and (eq .FormData.type "") (eq .Device.Type "workstation"))}}selected{{end}}>Workstation</option>
+                <option value="endpoint" {{if or (eq .FormData.type "endpoint") (and (eq .FormData.type "") (eq .Device.Type "endpoint"))}}selected{{end}}>Endpoint</option>
+                <option value="pc" {{if or (eq .FormData.type "pc") (and (eq .FormData.type "") (eq .Device.Type "pc"))}}selected{{end}}>PC</option>
+                <option value="laptop" {{if or (eq .FormData.type "laptop") (and (eq .FormData.type "") (eq .Device.Type "laptop"))}}selected{{end}}>Laptop</option>
+                <option value="network" {{if or (eq .FormData.type "network") (and (eq .FormData.type "") (eq .Device.Type "network"))}}selected{{end}}>Network Device</option>
+                <option value="iot" {{if or (eq .FormData.type "iot") (and (eq .FormData.type "") (eq .Device.Type "iot"))}}selected{{end}}>IoT Device</option>
+                <option value="other" {{if or (eq .FormData.type "other") (and (eq .FormData.type "") (eq .Device.Type "other"))}}selected{{end}}>Other</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="status">Status:</label>
+            <select class="form-control {{if .ErrorFields.status}}input-error{{end}}" id="status" name="status" required>
+                <option value="" {{if and (eq .FormData.status "") (eq .Device.Status "")}}selected{{end}}>Select status</option>
+                <option value="online" {{if or (eq .FormData.status "online") (and (eq .FormData.status "") (eq .Device.Status "online"))}}selected{{end}}>Online</option>
+                <option value="offline" {{if or (eq .FormData.status "offline") (and (eq .FormData.status "") (eq .Device.Status "offline"))}}selected{{end}}>Offline</option>
+                <option value="maintenance" {{if or (eq .FormData.status "maintenance") (and (eq .FormData.status "") (eq .Device.Status "maintenance"))}}selected{{end}}>Maintenance</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="ip_address">IP Address:</label>
+            <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{if .FormData.ip_address}}{{.FormData.ip_address}}{{else}}{{.Device.IPAddress}}{{end}}" placeholder="e.g. 192.168.1.100" required>
+        </div>
+        
+        <fieldset class="form-section">
+            <legend>Setup Authentication</legend>
+            <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
+            
+            <div class="form-group">
+                <label for="setup_user">Setup Username:</label>
+                <input type="text" class="form-control {{if .ErrorFields.setup_user}}input-error{{end}}" id="setup_user" name="setup_user" value="{{if .FormData.setup_user}}{{.FormData.setup_user}}{{else}}{{.Device.SetupUser}}{{end}}" placeholder="e.g. root" required>
+            </div>
+        </fieldset>
+        
+        <fieldset class="form-section">
+            <legend>Monitoring Configuration</legend>
+            <p class="help-text">These settings determine how the device will be monitored</p>
+            
+            <div class="form-group">
+                <label for="ssh_user">SSH Username:</label>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{if .FormData.ssh_user}}{{.FormData.ssh_user}}{{else}}{{.Device.SSHUser}}{{end}}" placeholder="e.g. monitor-user" {{if not .RandomUser}}required{{end}}>
+            </div>
+            
+            <div class="form-group">
+                <label for="ssh_group">SSH Group:</label>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{if .FormData.ssh_group}}{{.FormData.ssh_group}}{{else}}{{.Device.SSHGroup}}{{end}}" placeholder="e.g. monitor-group" {{if not .RandomUser}}required{{end}}>
+            </div>
+            
+            <div class="form-group">
+                <div class="checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random SSH Username
+                    </label>
+                </div>
+                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="ssh_key_path">SSH Key Path:</label>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" {{if not .RandomKey}}required{{end}}>
+                <small class="form-text text-muted">Using system default SSH key. The public key must be manually copied to the target device.</small>
+            </div>
+            
+            <div class="form-group">
+                <div class="checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
+                    </label>
+                </div>
+                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="ssh_port">SSH Port (default: 22):</label>
+                <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}{{.Device.SSHPort}}{{end}}" min="1" max="65535" required>
+            </div>
+        </fieldset>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Update Device</button>
+            <a href="/devices" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const randomUserCheckbox = document.getElementById('random_user');
+        const sshUserField = document.getElementById('ssh_user');
+        const sshGroupField = document.getElementById('ssh_group');
+        const randomKeyCheckbox = document.getElementById('random_key');
+        const sshKeyPathField = document.getElementById('ssh_key_path');
+        
+        function toggleSshFields() {
+            if (randomUserCheckbox.checked) {
+                sshUserField.disabled = true;
+                sshGroupField.disabled = true;
+                sshUserField.required = false;
+                sshGroupField.required = false;
+                sshUserField.parentElement.classList.add('disabled');
+                sshGroupField.parentElement.classList.add('disabled');
+            } else {
+                sshUserField.disabled = false;
+                sshGroupField.disabled = false;
+                sshUserField.required = true;
+                sshGroupField.required = true;
+                sshUserField.parentElement.classList.remove('disabled');
+                sshGroupField.parentElement.classList.remove('disabled');
+            }
+        }
+        
+        function toggleSshKeyPathField() {
+            if (randomKeyCheckbox.checked) {
+                sshKeyPathField.disabled = true;
+                sshKeyPathField.required = false;
+                sshKeyPathField.parentElement.classList.add('disabled');
+            } else {
+                sshKeyPathField.disabled = false;
+                sshKeyPathField.required = true;
+                sshKeyPathField.parentElement.classList.remove('disabled');
+            }
+        }
+        
+        // Initial setup
+        toggleSshFields();
+        toggleSshKeyPathField();
+        
+        // Add event listener for checkbox changes
+        randomUserCheckbox.addEventListener('change', toggleSshFields);
+        randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
+    });
+</script>
+{{end}}

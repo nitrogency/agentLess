@@ -1,0 +1,114 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="devices-container">
+    <h2>Device Management</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+
+    <div class="device-actions">
+        <a href="/devices/add" class="btn btn-primary">Add Device</a>
+    </div>
+
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>IP Address</th>
+                <th>SSH User</th>
+                <th>Last Updated</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Devices}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td>{{.Name}}</td>
+                <td>{{.Type}}</td>
+                <td>{{.Status}}</td>
+                <td>{{if .IPAddress}}{{.IPAddress}}{{else}}-{{end}}</td>
+                <td>{{if .SSHUser}}{{.SSHUser}}{{else}}-{{end}}</td>
+                <td>{{.LastUpdated.Format "2006-01-02 15:04:05"}}</td>
+                <td>
+                    {{if .IPAddress}}
+                    <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>
+                    {{end}}
+                    <a href="/devices/edit/{{.ID}}" class="btn btn-sm btn-secondary">Edit</a>
+                    <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="8" class="text-center">No devices found</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+
+    <!-- Edit Device Form -->
+    <form id="editDeviceForm" method="POST" action="/devices" class="device-form hidden">
+        <h3>Edit Device</h3>
+        <input type="hidden" name="action" value="edit">
+        <input type="hidden" id="editDeviceId" name="deviceId">
+        <div class="form-group">
+            <label for="editName">Device Name:</label>
+            <input type="text" id="editName" name="name" required>
+        </div>
+        <div class="form-group">
+            <label for="editType">Device Type:</label>
+            <select id="editType" name="type" required>
+                <option value="sensor">Sensor</option>
+                <option value="controller">Controller</option>
+                <option value="display">Display</option>
+                <option value="endpoint">Endpoint</option>
+                <option value="pc">PC</option>
+                <option value="laptop">Laptop</option>
+                <option value="server">Server</option>
+                <option value="workstation">Workstation</option>
+                <option value="network">Network Device</option>
+                <option value="iot">IoT Device</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="editStatus">Status:</label>
+            <select id="editStatus" name="status" required>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+                <option value="maintenance">Maintenance</option>
+            </select>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Update Device</button>
+            <button type="button" onclick="hideForm('editDeviceForm')" class="btn btn-secondary">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<script>
+function showEditForm(id, name, type, status) {
+    const form = document.getElementById('editDeviceForm');
+    document.getElementById('editDeviceId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editType').value = type;
+    document.getElementById('editStatus').value = status;
+    form.classList.remove('hidden');
+}
+
+function hideForm(formId) {
+    document.getElementById(formId).classList.add('hidden');
+}
+</script>
+{{end}}

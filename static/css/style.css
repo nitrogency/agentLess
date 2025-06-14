@@ -1,0 +1,661 @@
+/* Variables */
+:root {
+    --primary-dark: #1a1a1a;
+    --secondary-dark: #2d2d2d;
+    --accent-red: #b01c2e;
+    --accent-red-light: #c42638;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --text-muted: #999999;
+    --danger: #ff4444;
+    --success: #00c851;
+    --border-color: #3d3d3d;
+    --primary: #b01c2e;
+    --hover-color: #3a3a3a;
+}
+
+/* Base styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: var(--primary-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Navigation */
+nav {
+    background-color: var(--secondary-dark);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.nav-left a {
+    color: var(--text-primary);
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.nav-left a:hover {
+    background-color: var(--accent-red);
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.nav-right .username {
+    color: var(--text-secondary);
+}
+
+/* Main content */
+main {
+    flex: 1;
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.content {
+    background-color: var(--secondary-dark);
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2, h3 {
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+input[type="text"],
+input[type="password"],
+select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+    margin-top: 0.5rem;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--accent-red);
+    box-shadow: 0 0 0 2px rgba(176, 28, 46, 0.2);
+}
+
+/* Checkbox styling */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--accent-red);
+}
+
+/* Form actions */
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+/* Button Styles */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: center;
+    text-decoration: none;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #951828;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+}
+
+.btn-edit {
+    background-color: #6c757d;
+    color: white;
+    min-width: 60px;
+    width: auto;
+}
+
+.btn-edit:hover {
+    background-color: #5a6268;
+}
+
+.btn-delete {
+    background-color: #6c757d;
+    color: white;
+    min-width: 60px;
+    width: auto;
+}
+
+.btn-delete:hover {
+    background-color: #5a6268;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background-color: var(--secondary-dark);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+th, td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    background-color: var(--accent-red);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+tr:hover {
+    background-color: rgba(176, 28, 46, 0.1);
+}
+
+/* Table Cell Styles */
+.users-table td:last-child,
+.devices-table td:last-child {
+    white-space: nowrap;
+    width: 1%;
+}
+
+/* Messages */
+.error-message {
+    background-color: rgba(255, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.success-message {
+    background-color: rgba(0, 200, 81, 0.1);
+    border: 1px solid var(--success);
+    color: var(--success);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.info-message {
+    background-color: rgba(70, 130, 180, 0.1);
+    border: 1px solid #4682b4;
+    color: #4682b4;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+/* Footer */
+footer {
+    background-color: var(--secondary-dark);
+    color: var(--text-muted);
+    text-align: center;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Login form */
+.login-form {
+    background-color: var(--secondary-dark);
+    max-width: 400px;
+    margin: 2rem auto;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Lists */
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* User and Device forms */
+.user-form,
+.device-form {
+    background-color: var(--secondary-dark);
+    padding: 2rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 2rem;
+}
+
+/* Danger Zone */
+.danger-zone {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.danger-zone h3 {
+    color: var(--danger);
+}
+
+/* Edit User Page */
+.content {
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 1rem;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.user-form {
+    padding: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.danger-zone {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.danger-zone h3 {
+    color: var(--danger);
+    margin-bottom: 1rem;
+}
+
+.danger-zone p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+/* User Management Styles */
+.users-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+}
+
+.users-container h2 {
+    color: var(--primary);
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 10px;
+}
+
+.user-actions {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.user-form {
+    background-color: var(--secondary-dark);
+    border: 1px solid var(--primary);
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.3);
+}
+
+.user-form h3 {
+    color: var(--primary);
+    margin-top: 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--primary);
+    padding-bottom: 10px;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: var(--secondary-dark);
+}
+
+.users-table th,
+.users-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.users-table th {
+    background-color: var(--primary);
+    color: var(--text-primary);
+    font-weight: bold;
+}
+
+.users-table tr:hover {
+    background-color: var(--hover-color);
+}
+
+/* Device Management Styles */
+.devices-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);
+}
+
+.devices-container h2 {
+    color: var(--primary);
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 10px;
+}
+
+.device-actions {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.device-form {
+    background-color: var(--secondary-dark);
+    border: 1px solid var(--primary);
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 10px rgba(176, 28, 46, 0.3);
+}
+
+.device-form h3 {
+    color: var(--primary);
+    margin-top: 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--primary);
+    padding-bottom: 10px;
+}
+
+.devices-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: var(--secondary-dark);
+}
+
+.devices-table th,
+.devices-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.devices-table th {
+    background-color: var(--primary);
+    color: var(--text-primary);
+    font-weight: bold;
+}
+
+.devices-table tr:hover {
+    background-color: var(--hover-color);
+}
+
+/* Password validation styling */
+.password-requirements {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: var(--secondary-dark);
+    border: 1px solid var(--border-color);
+}
+
+.requirement {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.requirement.valid {
+    color: var(--success);
+}
+
+.requirement::before {
+    content: '✗';
+    margin-right: 8px;
+    color: var(--danger);
+}
+
+.requirement.valid::before {
+    content: '✓';
+    color: var(--success);
+}
+
+.help-text {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+/* Form validation */
+.input-error {
+    border: 2px solid var(--danger) !important;
+    background-color: rgba(255, 68, 68, 0.1) !important;
+}
+
+.input-error:focus {
+    box-shadow: 0 0 0 0.2rem rgba(255, 68, 68, 0.25) !important;
+}
+
+/* Utility Classes */
+.hidden {
+    display: none !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    nav {
+        flex-direction: column;
+        gap: 1rem;
+        height: auto;
+    }
+
+    .nav-left,
+    .nav-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    main {
+        padding: 1rem;
+    }
+
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+
+/* Device Monitoring Styles */
+.card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    background-color: var(--secondary-dark);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: var(--accent-red);
+    color: var(--text-primary);
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-body {
+    padding: 15px;
+    color: var(--text-primary);
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+.col {
+    flex-basis: 0;
+    flex-grow: 1;
+    max-width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+.mt-4 {
+    margin-top: 1.5rem;
+}
+
+.float-right {
+    float: right;
+}
+
+.status-online {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-offline {
+    color: #b01c2e;
+    font-weight: bold;
+}
+
+.status-maintenance {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+/* Input field error styling */
+.input-error {
+    border-color: #dc3545 !important;
+}
+
+/* Form controls consistency */
+.form-control, 
+select.form-control,
+input[type="text"].form-control,
+input[type="number"].form-control,
+input[type="email"].form-control,
+input[type="password"].form-control {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #fff;
+    background-color: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+select.form-control {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23fff' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    padding-right: 30px;
+}

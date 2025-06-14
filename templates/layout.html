@@ -1,0 +1,38 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Go Web App</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    {{block "page_resources" .}}{{end}}
+</head>
+<body>
+    {{if .Username}}
+    <nav>
+        <div class="nav-left">
+            <a href="/">Home</a>
+            <a href="/devices">Devices</a>
+            {{if .IsAdmin}}
+            <a href="/users">User Management</a>
+            {{end}}
+        </div>
+        <div class="nav-right">
+            <a href="/users/edit" class="username">{{.Username}}</a>
+            <form method="POST" action="/login" style="display: inline;">
+                <input type="hidden" name="action" value="logout">
+                <button type="submit" class="btn btn-secondary">Logout</button>
+            </form>
+        </div>
+    </nav>
+    {{end}}
+    <main>
+        {{block "content" .}}{{end}}
+    </main>
+    <footer>
+        <p>&copy; 2025 Go Web App Example</p>
+    </footer>
+</body>
+</html>
+{{end}}

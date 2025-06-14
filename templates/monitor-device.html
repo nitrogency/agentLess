@@ -1,0 +1,212 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="container">
+    <h2>Device Monitoring: {{.Device.Name}}</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+
+    <div class="card">
+        <div class="card-header">
+            <h3>Device Information</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col">
+                    <p><strong>ID:</strong> {{.Device.ID}}</p>
+                    <p><strong>Name:</strong> {{.Device.Name}}</p>
+                    <p><strong>Type:</strong> {{.Device.Type}}</p>
+                    <p><strong>Status:</strong> <span class="status-{{.Device.Status}}">{{.Device.Status}}</span></p>
+                </div>
+                <div class="col">
+                    <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
+                    <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
+                    <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
+                    <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h3>Monitoring Data</h3>
+            <button class="btn btn-secondary btn-sm float-right">Refresh Data</button>
+        </div>
+        <div class="card-body">
+            <h4>System Information</h4>
+            <table class="users-table mb-4">
+                <tbody>
+                    {{range $key, $value := .MonitoringData}}
+                    <tr>
+                        <td><strong>{{$key}}</strong></td>
+                        <td>{{$value}}</td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="2" class="text-center">No monitoring data available</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            
+            <h4>Audit Logs</h4>
+            
+            <!-- Search and page size controls -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 15px;">
+                <!-- Search bar -->
+                <div style="display: flex; align-items: center;">
+                    <form action="" method="GET" style="display: flex; align-items: center;">
+                        <input type="text" name="search" class="form-control" placeholder="Search logs..." value="{{.Data.SearchTerm}}" style="margin-right: 10px; width: 250px;">
+                        <button class="btn btn-primary" type="submit" style="margin-right: 10px;">Search</button>
+                        {{if .Data.SearchTerm}}
+                        <a href="?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
+                        {{end}}
+                    </form>
+                </div>
+                
+                <!-- Page size controls -->
+                <div style="display: flex; align-items: center;">
+                    <div class="btn-group" role="group" style="margin-right: 15px;">
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
+                    </div>
+                    <span>Total: {{.Data.TotalLogs}} logs</span>
+                </div>
+            </div>
+            
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Type</th>
+                        <th>Key</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $log := .Data.AuditLogs}}
+                    <tr>
+                        <td>{{$log.Timestamp.Format "2006-01-02 15:04:05"}}</td>
+                        <td>{{$log.Type}}</td>
+                        <td>{{$log.Key}}</td>
+                        <td>{{$log.Message}}</td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="4" class="text-center">No audit logs available</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            
+            <!-- Pagination controls -->
+            {{if gt .Data.TotalPages 1}}
+            <div class="pagination-container mt-3 text-center">
+                <div class="btn-group" role="group">
+                    <!-- Previous page button -->
+                    <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
+                        &laquo;
+                    </a>
+                    
+                    <!-- First page -->
+                    <a href="?page=1&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-primary{{else}}btn-outline-primary{{end}}">1</a>
+                    
+                    <!-- Ellipsis if needed -->
+                    {{if gt .Data.CurrentPage 3}}
+                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
+                    {{end}}
+                    
+                    <!-- Current page (if not first or last) -->
+                    {{if and (gt .Data.CurrentPage 1) (lt .Data.CurrentPage .Data.TotalPages)}}
+                    <a href="?page={{.Data.CurrentPage}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm btn-primary">{{.Data.CurrentPage}}</a>
+                    {{end}}
+                    
+                    <!-- Ellipsis if needed -->
+                    {{if lt .Data.CurrentPage (sub .Data.TotalPages 2)}}
+                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
+                    {{end}}
+                    
+                    <!-- Last page (if not first page) -->
+                    {{if gt .Data.TotalPages 1}}
+                    <a href="?page={{.Data.TotalPages}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-primary{{else}}btn-outline-primary{{end}}">{{.Data.TotalPages}}</a>
+                    {{end}}
+                    
+                    <!-- Next page button -->
+                    <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
+                        &raquo;
+                    </a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="card mt-4 bg-dark text-light">
+        <div class="card-header">
+            <h3>Device Setup</h3>
+        </div>
+        <div class="card-body">
+            <h4 class="card-title">Setup Instructions</h4>
+            <p>To set up this device for monitoring, follow these steps:</p>
+            <ol>
+                <li>Copy the server's public key to the client device:
+                    <pre class="code-block">ssh-copy-id -i ~/.ssh/id_rsa.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
+                    <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
+                </li>
+                <li>Run the enlist.sh script from your terminal:
+                    <pre class="code-block">./scripts/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+                    <p></p>
+                </li>
+            </ol>
+            <div class="alert alert-info mt-3">
+                <h4>Important!</h4>
+                <p>If this is the first device you're setting up, you must run the cron monitoring script to start automatically monitoring your devices (may require sudo):</p>
+                <pre class="code-block">./scripts/setup-monitoring-cron.sh</pre>
+                <p>This will set up a cron job on your server that runs the monitoring script automatically.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions mt-4">
+        <a href="/devices" class="btn btn-secondary">Back to Devices</a>
+        <a href="/devices/edit/{{.Device.ID}}" class="btn btn-primary">Edit Device</a>
+        <a href="/devices/delete/{{.Device.ID}}" class="btn btn-danger">Delete Device</a>
+    </div>
+</div>
+
+<style>
+.code-block {
+    background-color: #212529;
+    color: #f8f9fa;
+    border: 1px solid #495057;
+    border-radius: 3px;
+    padding: 10px;
+    margin: 10px 0;
+    overflow-x: auto;
+    font-family: monospace;
+}
+.note {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    margin-top: 5px;
+    font-style: italic;
+}
+.alert-info {
+    background-color: #1a3c42;
+    border-color: #164450;
+    color: var(--text-primary);
+    padding: 15px;
+    border-radius: 5px;
+}
+</style>
+{{end}}

@@ -1,0 +1,44 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="users-container">
+    <h2>User Management</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+
+    <div class="user-actions">
+        <a href="/users/add" class="btn btn-primary">Create New User</a>
+    </div>
+
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Admin</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td>{{.Username}}</td>
+                <td>{{if .IsAdmin}}Yes{{else}}No{{end}}</td>
+                <td>
+                    <a href="/users/edit?id={{.ID}}" class="btn btn-edit">Edit</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

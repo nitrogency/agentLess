@@ -1,0 +1,146 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="content">
+    <h1>Create New User</h1>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+
+    <form method="POST" action="/users" class="user-form">
+        <input type="hidden" name="action" value="create">
+        
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="isAdmin" id="isAdmin" onchange="updatePermissions()">
+                Is Admin (full access to all features)
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <h4>Permissions</h4>
+            <p class="permission-note">Note: Admin users automatically have all permissions.</p>
+            
+            <div class="permission-section">
+                <fieldset>
+                    <legend>Device Management</legend>
+                    <div class="permission-content">
+                        <p>These settings determine what device operations the user can perform</p>
+                        
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="canAddDevices" id="canAddDevices">
+                            Can Add Devices
+                        </label>
+                        
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="canModifyDevices" id="canModifyDevices">
+                            Can Modify/Delete Devices
+                        </label>
+                    </div>
+                </fieldset>
+            </div>
+            
+            <div class="permission-section">
+                <fieldset>
+                    <legend>User Management</legend>
+                    <div class="permission-content">
+                        <p>These settings determine what user operations the user can perform</p>
+                        
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="canAddUsers" id="canAddUsers">
+                            Can Add Users
+                        </label>
+                        
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="canModifyUsers" id="canModifyUsers">
+                            Can Modify/Delete Users
+                        </label>
+                    </div>
+                </fieldset>
+            </div>
+        </div>
+        
+        <style>
+            .permission-section {
+                margin-bottom: 20px;
+            }
+            
+            fieldset {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                padding: 0;
+            }
+            
+            legend {
+                font-weight: bold;
+                padding: 0 10px;
+                margin-left: 10px;
+            }
+            
+            .permission-content {
+                padding: 15px;
+            }
+            
+            .permission-content p {
+                margin-top: 0;
+                color: #666;
+                font-size: 0.9em;
+                margin-bottom: 15px;
+            }
+        </style>
+        
+        <script>
+            function updatePermissions() {
+                const isAdmin = document.getElementById('isAdmin').checked;
+                const canAddDevices = document.getElementById('canAddDevices');
+                const canModifyDevices = document.getElementById('canModifyDevices');
+                const canAddUsers = document.getElementById('canAddUsers');
+                const canModifyUsers = document.getElementById('canModifyUsers');
+                
+                if (isAdmin) {
+                    // If admin is checked, check and disable other permissions
+                    canAddDevices.checked = true;
+                    canAddDevices.disabled = true;
+                    canModifyDevices.checked = true;
+                    canModifyDevices.disabled = true;
+                    canAddUsers.checked = true;
+                    canAddUsers.disabled = true;
+                    canModifyUsers.checked = true;
+                    canModifyUsers.disabled = true;
+                } else {
+                    // If admin is unchecked, enable other permissions
+                    canAddDevices.disabled = false;
+                    canModifyDevices.disabled = false;
+                    canAddUsers.disabled = false;
+                    canModifyUsers.disabled = false;
+                }
+            }
+            
+            // Run on page load to set initial state
+            document.addEventListener('DOMContentLoaded', updatePermissions);
+        </script>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create User</button>
+            <a href="/users" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{{end}}

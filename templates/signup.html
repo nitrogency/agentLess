@@ -1,0 +1,38 @@
+{{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
+{{end}}
+
+{{define "content"}}
+<div class="content">
+    <h2>Create Admin Account</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    <form method="POST" action="/signup" class="user-form">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <!-- Password requirements will be inserted here by JavaScript -->
+        </div>
+        
+        <div class="form-group">
+            <label for="confirm_password">Confirm Password:</label>
+            <input type="password" id="confirm_password" name="confirm_password" required>
+            <p class="help-text">Note: Make sure you never lose this information. There is no way to recover it without reinstalling the application.</p>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create Account</button>
+        </div>
+    </form>
+</div>
+
+<script src="/static/js/password-validation.js"></script>
+{{end}}
