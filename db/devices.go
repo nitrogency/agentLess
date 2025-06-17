@@ -3,9 +3,11 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"os/exec"
+	"sync"
 	"time"
 )
 
@@ -218,6 +220,42 @@ func GetDeviceByID(id int64) (*Device, error) {
 	}
 
 	return &d, nil
+}
+
+// deviceNameCache is a simple cache to avoid frequent database lookups for device names
+var deviceNameCache = struct {
+	sync.RWMutex
+	names map[int64]string
+}{
+	names: make(map[int64]string),
+}
+
+// GetDeviceNameByID returns the name of a device by its ID
+// Uses a cache to avoid frequent database lookups
+func GetDeviceNameByID(id int64) string {
+	// Check cache first
+	deviceNameCache.RLock()
+	name, found := deviceNameCache.names[id]
+	deviceNameCache.RUnlock()
+	
+	if found {
+		return name
+	}
+	
+	// Not in cache, look up in database
+	var deviceName string
+	err := db.QueryRow("SELECT name FROM devices WHERE id = ?", id).Scan(&deviceName)
+	if err != nil {
+		// If error, return a formatted string with the ID
+		return fmt.Sprintf("Device %d", id)
+	}
+	
+	// Store in cache for future lookups
+	deviceNameCache.Lock()
+	deviceNameCache.names[id] = deviceName
+	deviceNameCache.Unlock()
+	
+	return deviceName
 }
 
 // UpdateDevice updates a device's information

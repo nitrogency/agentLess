@@ -304,7 +304,11 @@ EOF
         local escaped_line=$(echo "$line" | sed "s/'/''/g")
         
         # Add INSERT statement to batch file
-        echo "INSERT INTO audit_logs (device_id, timestamp, event_time, type, key, message, raw_log) VALUES ('$device_id', '$event_time', '$event_time', '$type', '$key', '$message', '$escaped_line');" >> "$temp_sql_file"
+        # Explicitly save both timestamps:
+        # - timestamp: when log arrived at server (CURRENT_TIMESTAMP)
+        # - event_time: when the event actually occurred on the device
+        local server_time=$(date +"%Y-%m-%d %H:%M:%S")
+        echo "INSERT INTO audit_logs (device_id, timestamp, event_time, type, key, message, raw_log) VALUES ('$device_id', '$server_time', '$event_time', '$type', '$key', '$message', '$escaped_line');" >> "$temp_sql_file"
         
         log_count=$((log_count + 1))
     done < "$log_file"

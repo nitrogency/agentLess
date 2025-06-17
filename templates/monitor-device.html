@@ -57,11 +57,16 @@
                     {{end}}
                 </tbody>
             </table>
+        </div>
+    </div>
             
-            <h4>Audit Logs</h4>
-            
+    <div class="card mt-4">
+        <div class="card-header">
+            <h3>Log Entries</h3>
+        </div>
+        <div class="card-body">
             <!-- Search and page size controls -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <!-- Search bar -->
                 <div style="display: flex; align-items: center;">
                     <form action="" method="GET" style="display: flex; align-items: center;">
@@ -84,30 +89,36 @@
                 </div>
             </div>
             
-            <table class="users-table">
-                <thead>
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Type</th>
-                        <th>Key</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{range $log := .Data.AuditLogs}}
-                    <tr>
-                        <td>{{$log.Timestamp.Format "2006-01-02 15:04:05"}}</td>
-                        <td>{{$log.Type}}</td>
-                        <td>{{$log.Key}}</td>
-                        <td>{{$log.Message}}</td>
-                    </tr>
-                    {{else}}
-                    <tr>
-                        <td colspan="4" class="text-center">No audit logs available</td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
+            <div style="padding: 0 15px;">
+                <table class="users-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Event Time</th>
+                            <th>Received Time</th>
+                            <th>Type</th>
+                            <th>Key</th>
+                            <th>Message</th>
+                            <th>Raw Log</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $log := .Data.AuditLogs}}
+                        <tr>
+                            <td>{{$log.EventTime}}</td>
+                            <td>{{$log.Timestamp.Format "2006-01-02 15:04:05"}}</td>
+                            <td>{{$log.Type}}</td>
+                            <td>{{$log.Key}}</td>
+                            <td><div class="log-message">{{$log.Message}}</div></td>
+                            <td><pre class="raw-log">{{$log.RawLog}}</pre></td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="6" class="text-center">No audit logs available</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
             
             <!-- Pagination controls -->
             {{if gt .Data.TotalPages 1}}
@@ -207,6 +218,24 @@
     color: var(--text-primary);
     padding: 15px;
     border-radius: 5px;
+}
+.log-message {
+    max-height: 60px; /* Adjust as needed */
+    overflow-y: auto;
+    font-size: 0.9em;
+    white-space: pre-wrap; /* Allows wrapping long lines */
+    word-break: break-all; /* Breaks long words if necessary */
+}
+.raw-log {
+    max-height: 100px; /* Adjust as needed */
+    width: 300px;
+    overflow: auto;
+    background-color: #212529;
+    padding: 5px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 </style>
 {{end}}

@@ -751,6 +751,9 @@ func renderTemplate(w http.ResponseWriter, tmpl string, data PageData) {
 		"sub": func(a, b int) int {
 			return a - b
 		},
+		"deviceName": func(id int64) string {
+			return db.GetDeviceNameByID(id)
+		},
 	}
 
 	// First, try to parse both the layout and the specific template
@@ -1715,7 +1718,15 @@ func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil || page < 1 {
 		page = 1
 	}
-	pageSize := 20 // Or make this configurable
+	
+	pageSize := 20 // Default page size
+	
+	// Check if pageSize parameter is provided in the URL
+	if pageSizeParam := r.URL.Query().Get("pageSize"); pageSizeParam != "" {
+		if ps, err := strconv.Atoi(pageSizeParam); err == nil && (ps == 10 || ps == 20 || ps == 50) {
+			pageSize = ps
+		}
+	}
 
 	var filterDeviceID int64
 	if filterDeviceIDStr != "" {

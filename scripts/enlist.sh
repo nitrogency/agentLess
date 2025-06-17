@@ -28,6 +28,37 @@ generate_random_name() {
     echo "${adj}_${noun}"
 }
 
+# Function to execute SQLite commands with encryption
+execute_sqlite() {
+    local query="$1"
+    local db_path="$(dirname "$0")/../data/site.db"
+    
+    # Check if sqlcipher is installed
+    if ! command -v sqlcipher &> /dev/null; then
+        echo "Error: sqlcipher is not installed. Please install it with:"
+        echo "  sudo apt update && sudo apt install -y sqlcipher"
+        exit 1
+    fi
+    
+    # Get database encryption key
+    local db_key=""
+    if [ -n "$DB_ENCRYPTION_KEY" ]; then
+        db_key="$DB_ENCRYPTION_KEY"
+    else
+        # Use default development key (matches the Go application)
+        db_key="default-dev-encryption-key-do-not-use-in-production"
+    fi
+    
+    # Use SQLCipher with the encryption key
+    # Suppress output for INSERT/UPDATE operations, preserve for SELECT
+    if [[ "$query" =~ ^[[:space:]]*(INSERT|UPDATE|DELETE) ]]; then
+        sqlcipher "$db_path" "PRAGMA key = '$db_key'; $query" > /dev/null 2>&1
+    else
+        # For SELECT queries, filter out the 'ok' output
+        sqlcipher "$db_path" "PRAGMA key = '$db_key'; $query" 2>/dev/null | grep -v '^ok$'
+    fi
+}
+
 # Check if a command exists
 command_exists() {
     command -v "$1" &> /dev/null
@@ -197,7 +228,14 @@ sudo grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || {
         sudo bash -c 'echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config'
     fi
     # Restart SSH service
-    sudo systemctl restart sshd || sudo service ssh restart
+    if sudo systemctl restart ssh 2>/dev/null; then
+        echo "SSH service restarted successfully."
+    elif sudo systemctl restart sshd 2>/dev/null; then
+        echo "SSHD service restarted successfully."
+    else
+        echo "⚠️ Warning: Could not restart SSH service. This is expected on some systems like Ubuntu 25.04 that use socket activation."
+        echo "SSH changes will be applied on next connection."
+    fi
 }
 
 # Set up sudoers entry for specific commands
@@ -212,27 +250,59 @@ echo "Created sudoers entry in /etc/sudoers.d/$REMOTE_USER with permissions:"
 # Set up audit rules, install auditd if not already installed
 if ! command -v auditctl >/dev/null 2>&1; then
     echo "Installing auditd and auditctl..."
-    sudo apt-get update
-    sudo apt-get install -y auditd audispd-plugins
-    sudo systemctl enable auditd
-    sudo systemctl start auditd
+    
+    # Try to update package lists with error handling
+    echo "Updating package lists..."
+    if ! sudo apt-get update -q; then
+        echo "⚠️ Warning: apt-get update failed. Continuing with existing package lists..."
+    fi
+    
+    # Try to install auditd with error handling
+    echo "Installing auditd packages..."
+    if ! sudo apt-get install -y auditd audispd-plugins; then
+        echo "⚠️ Warning: Failed to install auditd. Audit functionality will be limited."
+        AUDITD_INSTALLED=false
+    else
+        AUDITD_INSTALLED=true
+        # Only try to enable and start the service if installation succeeded
+        echo "Enabling and starting auditd service..."
+        sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
+        sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+    fi
+else
+    AUDITD_INSTALLED=true
 fi
 
 echo "Setting up audit rules..."
-# Check if auditd service is running
-sudo systemctl status auditd >/dev/null 2>&1 || {
-    echo "Starting auditd service..."
-    sudo systemctl enable auditd
-    sudo systemctl start auditd
-}
-    
-# Clean up any existing audit rules to prevent duplicates
-echo "Cleaning up existing audit rules..."
-sudo rm -f /etc/audit/rules.d/audit.rules
 
-# Create a comprehensive audit rules file
-echo "Creating comprehensive audit rules configuration..."
-sudo tee /etc/audit/rules.d/audit.rules > /dev/null << 'AUDIT_EOF'
+# Only proceed with audit rules setup if auditd is installed
+if [ "$AUDITD_INSTALLED" = true ]; then
+    # Check if auditd service is running
+    if ! sudo systemctl status auditd >/dev/null 2>&1; then
+        echo "Starting auditd service..."
+        sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
+        sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+    fi
+    
+    # Clean up any existing audit rules to prevent duplicates
+    echo "Cleaning up existing audit rules..."
+    sudo rm -f /etc/audit/rules.d/audit.rules 2>/dev/null || echo "⚠️ Warning: Could not remove existing audit rules file"
+    
+    # Create a comprehensive audit rules file
+    echo "Creating comprehensive audit rules configuration..."
+    
+    # Check if the rules.d directory exists
+    if [ ! -d "/etc/audit/rules.d" ]; then
+        echo "⚠️ Warning: Audit rules directory does not exist. Creating it..."
+        sudo mkdir -p /etc/audit/rules.d || {
+            echo "⚠️ Warning: Could not create audit rules directory. Skipping audit rules setup."
+            AUDITD_INSTALLED=false
+            return 0
+        }
+    fi
+    
+    # Create the audit rules file
+    sudo tee /etc/audit/rules.d/audit.rules > /dev/null << 'AUDIT_EOF'
 ## First rule - delete all
 -D
 
@@ -320,20 +390,28 @@ sudo tee /etc/audit/rules.d/audit.rules > /dev/null << 'AUDIT_EOF'
 -a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
 AUDIT_EOF
 
-# Restart audit services to apply new rules
-echo "Restarting audit services..."
-sudo systemctl stop auditd 2>/dev/null || true
-sudo systemctl stop audit-rules.service 2>/dev/null || true
+    # Restart audit services to apply new rules
+    echo "Restarting audit services..."
+    sudo systemctl stop auditd 2>/dev/null || echo "⚠️ Warning: Failed to stop auditd service"
+    sudo systemctl stop audit-rules.service 2>/dev/null || true
 
-# Wait a moment for services to stop
-sleep 2
+    # Wait a moment for services to stop
+    sleep 2
 
-# Start services in correct order
-sudo systemctl start auditd
-sudo systemctl enable auditd
+    # Start services in correct order
+    sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+    sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
 
-# Force reload of audit rules
-sudo auditctl -R /etc/audit/rules.d/audit.rules 2>/dev/null || true
+    # Verify the rules were loaded
+    echo "Verifying audit rules are loaded..."
+    sudo auditctl -l || echo "⚠️ Warning: Could not verify audit rules"
+    
+    # Force reload of audit rules
+    echo "Forcing reload of audit rules..."
+    sudo auditctl -R /etc/audit/rules.d/audit.rules 2>/dev/null || echo "⚠️ Warning: Could not reload audit rules"
+else
+    echo "⚠️ Skipping audit rules setup as auditd is not installed."
+fi
 
 echo "Audit rules configured successfully"
 
@@ -545,9 +623,16 @@ EOF
             sudo sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
             sudo sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
             
-            # Restart SSH service
+            # Restart SSH service to apply changes
             echo \"Restarting SSH service...\"
-            sudo systemctl restart sshd || sudo service ssh restart
+            if sudo systemctl restart ssh 2>/dev/null; then
+                echo \"SSH service restarted successfully.\"
+            elif sudo systemctl restart sshd 2>/dev/null; then
+                echo \"SSHD service restarted successfully.\"
+            else
+                echo \"⚠️ Warning: Could not restart SSH service. This is expected on some systems like Ubuntu 25.04 that use socket activation.\"
+                echo \"SSH changes will be applied on next connection.\"
+            fi
             
             # Try copying the key directly
             echo \"Copying the key directly...\"
@@ -572,6 +657,25 @@ EOF
 }
 
 # Register the device with the IDS server
+# Update device in database with actual generated username and group
+update_device_in_database() {
+    echo "Updating device in database with actual generated username and group..."
+    
+    # Find the device ID by IP address
+    DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;")
+    
+    if [ -z "$DEVICE_ID" ]; then
+        echo "Warning: Device with IP $TARGET_IP not found in the database"
+        return 1
+    fi
+    
+    # Update the device with the actual generated username and group
+    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO' WHERE id = $DEVICE_ID;"
+    
+    echo "✅ Device updated in database with actual username: $REMOTE_USER"
+    return 0
+}
+
 register_with_server() {
     echo "Registering device with IDS server..."
     
@@ -591,10 +695,8 @@ register_with_server() {
     echo "  User: $REMOTE_USER"
     echo "  Group: $REMOTE_GROUP"
     
-    # In a real implementation, you would make an HTTP request to your server API
-    # curl -X POST -H "Content-Type: application/json" \
-    #   -d "{\"ip\":\"$TARGET_IP\",\"hostname\":\"$HOSTNAME\",\"os\":\"$OS_INFO\",\"user\":\"$REMOTE_USER\",\"group\":\"$REMOTE_GROUP\"}" \
-    #   http://your-server/api/devices
+    # Update the device in the database with the actual generated username and group
+    update_device_in_database
     
     echo "✅ Device registered successfully!"
 }

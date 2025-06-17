@@ -51,9 +51,9 @@
             <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 15px;">
                 <div style="display: flex; align-items: center;">
                     <div class="btn-group" role="group" style="margin-right: 15px;">
-                        <a href="/logs?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
-                        <a href="/logs?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
-                        <a href="/logs?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
+                        <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
                     </div>
                     <span>Total: {{.Data.TotalLogs}} logs</span>
                 </div>
@@ -63,8 +63,9 @@
             <table class="users-table" style="width: 100%;">
                 <thead>
                     <tr>
-                        <th>Timestamp</th>
-                        <th>Device ID</th>
+                        <th>Event Time</th>
+                        <th>Received Time</th>
+                        <th>Device</th>
                         <th>Type</th>
                         <th>Key</th>
                         <th>Message</th>
@@ -74,8 +75,9 @@
                 <tbody>
                     {{range .Data.AuditLogs}}
                     <tr>
+                        <td>{{.EventTime}}</td>
                         <td>{{.Timestamp.Format "2006-01-02 15:04:05"}}</td>
-                        <td>{{.DeviceID}}</td>
+                        <td>{{deviceName .DeviceID}}</td>
                         <td>{{.Type}}</td>
                         <td>{{.Key}}</td>
                         <td><div class="log-message">{{.Message}}</div></td>
@@ -83,7 +85,7 @@
                     </tr>
                     {{else}}
                     <tr>
-                        <td colspan="6" class="text-center">No audit logs found.</td>
+                        <td colspan="7" class="text-center">No audit logs found.</td>
                     </tr>
                     {{end}}
                 </tbody>
@@ -95,7 +97,7 @@
             <div class="pagination-container mt-3 text-center">
                 <div class="btn-group" role="group">
                     <!-- Previous page button -->
-                    <a href="/logs?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | add1 | sub1 | sub1 }}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" 
+                    <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" 
                        class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
                         &laquo;
                     </a>
@@ -104,13 +106,13 @@
                         {{if eq . 0}}
                             <span class="btn btn-sm btn-outline-secondary disabled">...</span>
                         {{else}}
-                            <a href="/logs?page={{.}}&pageSize={{$.Data.PageSize}}{{if $.Data.SearchTerm}}&search={{$.Data.SearchTerm}}{{end}}{{if $.Data.FilterDeviceID}}&device_id={{$.Data.FilterDeviceID}}{{end}}" 
+                            <a href="?page={{.}}&pageSize={{$.Data.PageSize}}{{if $.Data.SearchTerm}}&search={{$.Data.SearchTerm}}{{end}}{{if $.Data.FilterDeviceID}}&device_id={{$.Data.FilterDeviceID}}{{end}}" 
                                class="btn btn-sm {{if eq $.Data.CurrentPage .}}btn-primary{{else}}btn-outline-primary{{end}}">{{.}}</a>
                         {{end}}
                     {{end}}
                     
                     <!-- Next page button -->
-                    <a href="/logs?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" 
+                    <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}" 
                        class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
                         &raquo;
                     </a>

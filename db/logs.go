@@ -6,6 +6,31 @@ import (
 	"time"
 )
 
+// parseTimestamp attempts to parse a timestamp string using multiple formats
+func parseTimestamp(timestamp string) time.Time {
+	// Try standard SQLite format first
+	parsedTime, err := time.Parse("2006-01-02 15:04:05", timestamp)
+	if err == nil {
+		return parsedTime
+	}
+
+	// Try RFC3339 format
+	parsedTime, err = time.Parse(time.RFC3339, timestamp)
+	if err == nil {
+		return parsedTime
+	}
+
+	// Try SQLite timestamp with T separator
+	parsedTime, err = time.Parse("2006-01-02T15:04:05Z", timestamp)
+	if err == nil {
+		return parsedTime
+	}
+
+	// If all parsing attempts fail, log the error but return a valid time
+	fmt.Printf("Warning: Could not parse timestamp '%s': %v\n", timestamp, err)
+	return time.Now() // Return current time as fallback
+}
+
 // AuditLog represents an audit log entry from a monitored device
 type AuditLog struct {
 	ID        int64
@@ -77,8 +102,8 @@ func GetAllAuditLogs() ([]AuditLog, error) {
 			return nil, err
 		}
 
-		// Parse the timestamp
-		log.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
+		// Parse the timestamp using the helper function
+		log.Timestamp = parseTimestamp(timestamp)
 		logs = append(logs, log)
 	}
 
@@ -111,7 +136,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 		`
 		searchPattern := "%" + searchTerm + "%"
 		args = []interface{}{deviceID, searchPattern, searchPattern, searchPattern, searchPattern, pageSize, offset}
-		
+
 		countQuery = `
 			SELECT COUNT(*)
 			FROM audit_logs
@@ -132,7 +157,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 			LIMIT ? OFFSET ?
 		`
 		args = []interface{}{deviceID, pageSize, offset}
-		
+
 		countQuery = `
 			SELECT COUNT(*)
 			FROM audit_logs
@@ -143,14 +168,14 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	// Get total count for pagination
 	var totalCount int
 	var countArgs []interface{}
-	
+
 	if searchTerm != "" {
 		searchPattern := "%" + searchTerm + "%"
 		countArgs = []interface{}{deviceID, searchPattern, searchPattern, searchPattern, searchPattern}
 	} else {
 		countArgs = []interface{}{deviceID}
 	}
-	
+
 	err := db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, err
@@ -182,14 +207,13 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 			return nil, 0, err
 		}
 
-		// Parse the timestamp
-		log.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
+		// Parse the timestamp using the helper function
+		log.Timestamp = parseTimestamp(timestamp)
 		logs = append(logs, log)
 	}
 
 	return logs, totalCount, nil
 }
-
 
 // GetAuditLogs returns audit logs, optionally filtered by deviceID, with pagination and search
 func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]AuditLog, int, error) {
@@ -266,8 +290,8 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]Audi
 			return nil, 0, fmt.Errorf("error scanning audit log row: %w", err)
 		}
 
-		// Parse the timestamp
-		logEntry.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp) // Consider handling parse error
+		// Parse the timestamp using the helper function
+		logEntry.Timestamp = parseTimestamp(timestamp)
 		logs = append(logs, logEntry)
 	}
 

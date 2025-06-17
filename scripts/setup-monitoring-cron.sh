@@ -81,13 +81,12 @@ while IFS="|" read -r id ip_address ssh_user ssh_key_path ssh_port random_user s
         ssh_key_path="/home/$(whoami)/.ssh/ids_monitoring_key"
     fi
     
-    # Check if random_user is enabled (1) and use setup_user instead
-    if [ "$random_user" = "1" ] && [ -n "$setup_user" ]; then
-        ssh_user="$setup_user"
-        echo "Using random user '$setup_user' for device $id ($ip_address)"
-    # Use default SSH user if not specified
-    elif [ -z "$ssh_user" ]; then
+    # When ssh_user is empty, use default monitor user
+    if [ -z "$ssh_user" ]; then
         ssh_user="monitor"
+        echo "Using default user 'monitor' for device $id ($ip_address)"
+    else
+        echo "Using configured user '$ssh_user' for device $id ($ip_address)"
     fi
     
     echo "Adding cron job for device $id ($ip_address)..."
