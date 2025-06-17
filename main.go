@@ -387,6 +387,7 @@ func main() {
 	mux.HandleFunc("/devices/edit/", sessionMiddleware(authRequired(editDeviceHandler)))
 	mux.HandleFunc("/devices/delete/", sessionMiddleware(authRequired(deleteDeviceHandler)))
 	mux.HandleFunc("/devices/monitor/", sessionMiddleware(authRequired(monitorDeviceHandler)))
+	mux.HandleFunc("/logs", sessionMiddleware(authRequired(allLogsHandler)))
 
 	// API routes
 	mux.HandleFunc("/api/devices/", apiDeviceHandler)
@@ -835,15 +836,21 @@ func devicesHandler(w http.ResponseWriter, r *http.Request) {
 		session.Save(r, w)
 	}
 
-	// Get all devices
-	devices, err := db.GetAllDevices()
+	// Get all devices and filter out deleted ones
+	allDevices, err := db.GetAllDevices()
 	if err != nil {
 		log.Printf("Error getting devices: %v", err)
 		data.Error = "Failed to load devices"
 		renderTemplate(w, "devices", data)
 		return
 	}
-	data.Devices = devices
+	var activeDevices []db.Device
+	for _, device := range allDevices {
+		if device.Status != "deleted" {
+			activeDevices = append(activeDevices, device)
+		}
+	}
+	data.Devices = activeDevices
 
 	switch r.Method {
 	case "POST":
@@ -906,13 +913,21 @@ func devicesHandler(w http.ResponseWriter, r *http.Request) {
 			data.Success = "Device deleted successfully"
 		}
 
-		// Refresh device list after any action
-		devices, err := db.GetAllDevices()
+		// Refresh device list after any action and filter out deleted ones
+		allDevicesAfterAction, err := db.GetAllDevices()
 		if err != nil {
-			log.Printf("Error getting devices: %v", err)
-			data.Error = "Failed to load devices"
+			log.Printf("Error refreshing devices: %v", err)
+			data.Error = "Failed to refresh device list after action"
+			// data.Devices will retain the previously filtered list if refresh fails
+		} else {
+			var activeDevicesAfterAction []db.Device
+			for _, device := range allDevicesAfterAction {
+				if device.Status != "deleted" {
+					activeDevicesAfterAction = append(activeDevicesAfterAction, device)
+				}
+			}
+			data.Devices = activeDevicesAfterAction
 		}
-		data.Devices = devices
 	}
 
 	renderTemplate(w, "devices", data)
@@ -1670,6 +1685,179 @@ func monitorDeviceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderTemplate(w, "monitor-device", data)
+}
+
+
+func allLogsHandler(w http.ResponseWriter, r *http.Request) {
+	data := getPageData(w, r)
+	data.Title = "System Audit Logs"
+
+	// Fetch all active devices for the filter dropdown
+	allDbDevices, err := db.GetAllDevices()
+	if err != nil {
+		log.Printf("Error getting all devices for logs page: %v", err)
+		// Continue without devices if there's an error, or handle error appropriately
+	}
+	activeDevices := []db.Device{}
+	for _, dev := range allDbDevices {
+		if dev.Status != "deleted" {
+			activeDevices = append(activeDevices, dev)
+		}
+	}
+	data.Devices = activeDevices // Pass all active devices to the template
+
+	// Get filter parameters from request
+	filterDeviceIDStr := r.URL.Query().Get("device_id")
+	searchTerm := r.URL.Query().Get("search")
+	pageStr := r.URL.Query().Get("page")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	pageSize := 20 // Or make this configurable
+
+	var filterDeviceID int64
+	if filterDeviceIDStr != "" {
+		filterDeviceID, err = strconv.ParseInt(filterDeviceIDStr, 10, 64)
+		if err != nil {
+			log.Printf("Invalid device_id for logs page: %s, error: %v", filterDeviceIDStr, err)
+			filterDeviceID = 0 // Default to all devices if ID is invalid
+		}
+	}
+
+	// Fetch logs using the new db.GetAuditLogs function
+	logs, totalLogs, err := db.GetAuditLogs(filterDeviceID, page, pageSize, searchTerm)
+	if err != nil {
+		log.Printf("Error getting audit logs: %v", err)
+		data.Error = "Failed to load audit logs."
+		// Render template even with error to show filters and error message
+	} else {
+		data.Data = make(map[string]interface{})
+		data.Data["AuditLogs"] = logs
+		data.Data["CurrentPage"] = page
+		data.Data["TotalPages"] = (totalLogs + pageSize - 1) / pageSize
+		data.Data["TotalLogs"] = totalLogs
+		data.Data["PageSize"] = pageSize
+		data.Data["SearchTerm"] = searchTerm
+		data.Data["FilterDeviceID"] = filterDeviceID // Pass the applied device filter back to template
+
+		// Generate pagination numbers
+		totalPgs := data.Data["TotalPages"].(int)
+		currentPg := data.Data["CurrentPage"].(int)
+		data.Data["Pagination"] = generatePaginationNumbers(currentPg, totalPgs, 2) // Show 2 pages around current
+	}
+
+	renderTemplate(w, "logs", data)
+}
+
+// generatePaginationNumbers creates a list of page numbers for pagination controls.
+// It includes the first page, last page, pages around the current page, and 0 for ellipses.
+func generatePaginationNumbers(currentPage, totalPages, window int) []int {
+	if totalPages <= 1 {
+		return []int{}
+	}
+
+	var pages []int
+	showEllipsisStart := false
+	showEllipsisEnd := false
+
+	// Always add the first page
+	pages = append(pages, 1)
+
+	// Determine start and end for the window around current page
+	start := currentPage - window
+	end := currentPage + window
+
+	if start <= 1 {
+		start = 2
+	}
+	if end >= totalPages {
+		end = totalPages - 1
+	}
+
+	// Add ellipsis if there's a gap after the first page
+	if start > 2 {
+		showEllipsisStart = true
+	}
+
+	// Add page numbers in the window
+	for i := start; i <= end; i++ {
+		if i > 1 && i < totalPages {
+			pages = append(pages, i)
+		}
+	}
+
+	// Add ellipsis if there's a gap before the last page
+	if end < totalPages-1 {
+		showEllipsisEnd = true
+	}
+
+	// Add the last page if it's not the first page
+	if totalPages > 1 {
+		pages = append(pages, totalPages)
+	}
+
+	// Reconstruct pages with ellipses (0 represents ellipsis)
+	var finalPages []int
+	finalPages = append(finalPages, 1) // First page
+
+	if showEllipsisStart {
+		finalPages = append(finalPages, 0) // Ellipsis
+	}
+
+	for i := start; i <= end; i++ {
+		if i > 1 && i < totalPages && !contains(finalPages, i) {
+			finalPages = append(finalPages, i)
+		}
+	}
+
+	if showEllipsisEnd {
+		if !contains(finalPages, 0) || (end < totalPages-2 && currentPage < totalPages-window-1) {
+            // Add ellipsis if not already added or if there's a significant gap
+            // and current page is far enough from the end.
+            if finalPages[len(finalPages)-1] != 0 { // Avoid double ellipsis if last page is also in window
+                 finalPages = append(finalPages, 0) // Ellipsis
+            }
+        }
+	}
+
+	// Add last page if not already included
+	if totalPages > 1 && !contains(finalPages, totalPages) {
+		finalPages = append(finalPages, totalPages)
+	}
+    
+    // Remove duplicate 0 if first page is 1, ellipsis, then 2 (e.g. 1,0,2...)
+    // and total pages is small, leading to 1,0,2,0,N. This is a bit of a hack.
+    if len(finalPages) > 3 && finalPages[1] == 0 && finalPages[3] == 0 && finalPages[2] < totalPages {
+        // if we have 1, 0, X, 0, Y and X is not Y-1
+        if len(finalPages) > 4 && finalPages[2] != finalPages[4]-1 {
+            // check if X is far from Y
+             if finalPages[4] - finalPages[2] > 1 {
+                // keep both ellipses
+             } else {
+                // remove second ellipsis if X and Y are consecutive or same
+                finalPages = append(finalPages[:3], finalPages[4:]...)
+             }
+        } else if len(finalPages) == 4 && finalPages[0] == 1 && finalPages[1] == 0 && finalPages[2] == totalPages-1 && finalPages[3] == 0 { // Case 1,0,N-1,0 -> 1,0,N-1,N
+            // This case is actually fine, e.g. 1 ... 4 5. No, it should be 1 ... 4. Then 5.
+            // Let's test: current=3, total=5, window=1. Pages: 1. start=2, end=4. pages=[1,2,3,4]. showEllipsisStart=false, showEllipsisEnd=false. finalPages=[1,2,3,4,5]
+            // current=1, total=5, window=1. Pages: 1. start=2, end=2. pages=[1,2]. showEllipsisStart=false, showEllipsisEnd=true. finalPages=[1,2,0,5]
+            // current=5, total=5, window=1. Pages: 1. start=4, end=4. pages=[1,4]. showEllipsisStart=true, showEllipsisEnd=false. finalPages=[1,0,4,5]
+        }
+    }
+
+	return finalPages
+}
+
+// contains checks if a slice contains an integer.
+func contains(slice []int, val int) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
 
 // startStatusChecker starts a goroutine to periodically check device statuses

@@ -1,6 +1,8 @@
 package db
 
 import (
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -183,6 +185,90 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 		// Parse the timestamp
 		log.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
 		logs = append(logs, log)
+	}
+
+	return logs, totalCount, nil
+}
+
+
+// GetAuditLogs returns audit logs, optionally filtered by deviceID, with pagination and search
+func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]AuditLog, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Build the query parts
+	selectClause := "SELECT id, device_id, timestamp, event_time, type, key, message, raw_log FROM audit_logs"
+	countSelectClause := "SELECT COUNT(*) FROM audit_logs"
+	whereClauses := []string{}
+	args := []interface{}{}
+	countArgs := []interface{}{}
+
+	// Add deviceID filter if provided and valid
+	if deviceID > 0 {
+		whereClauses = append(whereClauses, "device_id = ?")
+		args = append(args, deviceID)
+		countArgs = append(countArgs, deviceID)
+	}
+
+	// Add search term filter if provided
+	if searchTerm != "" {
+		searchPattern := "%" + searchTerm + "%"
+		searchCondition := "(type LIKE ? OR key LIKE ? OR message LIKE ? OR raw_log LIKE ?)"
+		whereClauses = append(whereClauses, searchCondition)
+		for i := 0; i < 4; i++ { // Add searchPattern four times for main query and count query
+			args = append(args, searchPattern)
+			countArgs = append(countArgs, searchPattern)
+		}
+	}
+
+	// Construct the final WHERE clause
+	whereClause := ""
+	if len(whereClauses) > 0 {
+		whereClause = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Construct the full queries
+	query := selectClause + whereClause + " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+	args = append(args, pageSize, offset)
+
+	countQuery := countSelectClause + whereClause
+
+	// Get total count for pagination
+	var totalCount int
+	err := db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error counting audit logs: %w", err)
+	}
+
+	// Execute the main query
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error fetching audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []AuditLog
+	for rows.Next() {
+		var logEntry AuditLog
+		var timestamp string
+
+		err := rows.Scan(
+			&logEntry.ID,
+			&logEntry.DeviceID,
+			&timestamp,
+			&logEntry.EventTime,
+			&logEntry.Type,
+			&logEntry.Key,
+			&logEntry.Message,
+			&logEntry.RawLog,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("error scanning audit log row: %w", err)
+		}
+
+		// Parse the timestamp
+		logEntry.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp) // Consider handling parse error
+		logs = append(logs, logEntry)
 	}
 
 	return logs, totalCount, nil

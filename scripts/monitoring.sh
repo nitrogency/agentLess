@@ -9,7 +9,44 @@ set -e
 # Configuration
 DB_PATH="data/site.db"  # Path to the SQLite database relative to the script
 AUDIT_LOG_RETENTION_DAYS=30  # Number of days to keep audit logs
-DEBUG=true  # Set to true to enable debug output
+DEBUG=false  # Set to true to enable debug output
+
+# Load environment variables from .env file if it exists
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Get database encryption key
+get_db_encryption_key() {
+    if [ -n "$DB_ENCRYPTION_KEY" ]; then
+        echo "$DB_ENCRYPTION_KEY"
+    else
+        # Use default development key (matches the Go application)
+        echo "default-dev-encryption-key-do-not-use-in-production"
+    fi
+}
+
+# Function to execute SQLite commands with encryption
+execute_sqlite() {
+    local query="$1"
+    local db_key=$(get_db_encryption_key)
+    
+    # Check if sqlcipher is installed
+    if ! command -v sqlcipher &> /dev/null; then
+        echo "Error: sqlcipher is not installed. Please install it with:"
+        echo "  sudo apt update && sudo apt install -y sqlcipher"
+        exit 1
+    fi
+    
+    # Use SQLCipher with the encryption key
+    # Suppress output for INSERT/UPDATE operations, preserve for SELECT
+    if [[ "$query" =~ ^[[:space:]]*(INSERT|UPDATE|DELETE) ]]; then
+        sqlcipher "$DB_PATH" "PRAGMA key = '$db_key'; $query" > /dev/null 2>&1
+    else
+        # For SELECT queries, filter out the 'ok' output
+        sqlcipher "$DB_PATH" "PRAGMA key = '$db_key'; $query" 2>/dev/null | grep -v '^ok$'
+    fi
+}
 
 # Function to print debug messages
 debug() {
@@ -81,8 +118,8 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     exit 1
 fi
 
-# Get device ID from the database
-DEVICE_ID=$(sqlite3 "$DB_PATH" "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' LIMIT 1;")
+# Get device ID from the database - exclude deleted devices
+DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;")
 if [ -z "$DEVICE_ID" ]; then
     echo " Device with IP $TARGET_IP not found in the database"
     exit 1
@@ -101,7 +138,7 @@ get_audit_logs() {
     if ! timeout 10 ssh -i "$SSH_KEY_PATH" -p "$SSH_PORT" -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$REMOTE_USER@$TARGET_IP" "echo 'Connection test successful'" > /dev/null 2>&1; then
         echo " Failed to connect to $TARGET_IP"
         # Update device status in the database
-        sqlite3 "$DB_PATH" "UPDATE devices SET status = 'offline', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
+        execute_sqlite "UPDATE devices SET status = 'offline', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
         return 1
     fi
     
@@ -137,7 +174,7 @@ get_audit_logs() {
         echo " Successfully retrieved audit logs from $TARGET_IP"
         
         # Update device status in the database
-        sqlite3 "$DB_PATH" "UPDATE devices SET status = 'online', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
+        execute_sqlite "UPDATE devices SET status = 'online', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
         
         # Process the logs directly
         process_audit_logs "$temp_log_file" "$DEVICE_ID"
@@ -150,7 +187,7 @@ get_audit_logs() {
         echo " No audit logs retrieved from $TARGET_IP"
         
         # Update device status in the database
-        sqlite3 "$DB_PATH" "UPDATE devices SET status = 'offline', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
+        execute_sqlite "UPDATE devices SET status = 'offline', last_updated = CURRENT_TIMESTAMP WHERE ip_address = '$TARGET_IP';"
         
         # Clean up
         rm -f "$temp_log_file"
@@ -180,7 +217,17 @@ process_audit_logs() {
     
     debug "Processing log file: $log_file"
     
-    # Process each line of the audit log
+    # Create a temporary SQL file for batch insert
+    local temp_sql_file="/tmp/audit_batch_insert_$$.sql"
+    local db_key=$(get_db_encryption_key)
+    
+    # Start the SQL file with pragma and begin transaction
+    cat > "$temp_sql_file" << EOF
+PRAGMA key = '$db_key';
+BEGIN TRANSACTION;
+EOF
+    
+    # Process each line of the audit log and build batch insert
     while IFS= read -r line; do
         # Skip empty lines
         if [ -z "$line" ]; then
@@ -193,46 +240,100 @@ process_audit_logs() {
             continue
         fi
         
-        debug "Processing log line: ${line:0:30}..."
-        
         # Extract basic information from the log
-        local event_time=$(date +"%Y-%m-%d %H:%M:%S")
+        # Parse audit log timestamp (format: audit(1234567890.123:456))
+        local audit_timestamp=$(echo "$line" | grep -o 'audit([0-9]*\.[0-9]*:[0-9]*)' | sed 's/audit(\([0-9]*\)\.[0-9]*:[0-9]*)/\1/')
+        local event_time=""
+        if [ -n "$audit_timestamp" ]; then
+            # Convert Unix timestamp to readable format
+            event_time=$(date -d "@$audit_timestamp" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "")
+        fi
+        
+        # If timestamp extraction failed, use current time
+        if [ -z "$event_time" ]; then
+            event_time=$(date +"%Y-%m-%d %H:%M:%S")
+        fi
+        
+        # Extract type, key, and other fields
         local type=$(echo "$line" | grep -o 'type=[^ ]*' | cut -d= -f2)
         local key=$(echo "$line" | grep -o 'key=[^ ]*' | cut -d= -f2)
         
-        # If we couldn't extract a type, use a default
+        # Extract message content - look for common audit log message patterns
+        local message=""
+        if echo "$line" | grep -q 'comm='; then
+            local comm=$(echo "$line" | grep -o 'comm="[^"]*"' | sed 's/comm="\(.*\)"/\1/')
+            local exe=$(echo "$line" | grep -o 'exe="[^"]*"' | sed 's/exe="\(.*\)"/\1/')
+            if [ -n "$exe" ]; then
+                message="Command: $comm ($exe)"
+            else
+                message="Command: $comm"
+            fi
+        elif echo "$line" | grep -q 'proctitle='; then
+            local proctitle=$(echo "$line" | grep -o 'proctitle=[^ ]*' | cut -d= -f2)
+            # Convert hex-encoded proctitle to readable text
+            message=$(echo "$proctitle" | xxd -r -p 2>/dev/null | tr '\0' ' ' | sed 's/^ *//;s/ *$//' || echo "Process: $proctitle")
+            [ -z "$message" ] && message="Process: $proctitle"
+        elif echo "$line" | grep -q 'op='; then
+            local op=$(echo "$line" | grep -o 'op=[^ ]*' | cut -d= -f2)
+            message="Operation: $op"
+        elif echo "$line" | grep -q 'syscall='; then
+            local syscall=$(echo "$line" | grep -o 'syscall=[^ ]*' | cut -d= -f2)
+            message="System call: $syscall"
+        elif echo "$line" | grep -q 'acct='; then
+            local acct=$(echo "$line" | grep -o 'acct="[^"]*"' | sed 's/acct="\(.*\)"/\1/')
+            message="Account: $acct"
+        else
+            # Use type as message if nothing else found
+            message="$type event"
+        fi
+        
+        # Apply defaults if extraction failed
         if [ -z "$type" ]; then
             type="UNKNOWN"
         fi
         
-        # If we couldn't extract a key, use a default
         if [ -z "$key" ]; then
             key="no_key"
         fi
         
-        debug "Extracted type=$type, key=$key"
+        if [ -z "$message" ]; then
+            message="Audit log entry"
+        fi
         
         # Escape single quotes for SQL
         local escaped_line=$(echo "$line" | sed "s/'/''/g")
         
-        # Insert into database
-        sqlite3 "$DB_PATH" "INSERT INTO audit_logs (device_id, event_time, type, key, message, raw_log) 
-            VALUES ('$device_id', '$event_time', '$type', '$key', 'Raw log entry', '$escaped_line');"
+        # Add INSERT statement to batch file
+        echo "INSERT INTO audit_logs (device_id, timestamp, event_time, type, key, message, raw_log) VALUES ('$device_id', '$event_time', '$event_time', '$type', '$key', '$message', '$escaped_line');" >> "$temp_sql_file"
         
         log_count=$((log_count + 1))
     done < "$log_file"
     
-    debug "Processed $log_count audit log entries"
+    # Complete the transaction
+    echo "COMMIT;" >> "$temp_sql_file"
     
+    # Execute the batch insert with a single database connection
     if [ $log_count -gt 0 ]; then
-        echo " Successfully processed and stored $log_count audit log entries in database"
+        echo " Inserting $log_count audit log entries in batch..."
+        
+        if sqlcipher "$DB_PATH" < "$temp_sql_file" > /dev/null 2>&1; then
+            echo " Successfully inserted $log_count audit log entries into database"
+        else
+            echo " Failed to insert audit log entries into database"
+            # Clean up and return error
+            rm -f "$temp_sql_file"
+            return 1
+        fi
     else
-        echo " No valid audit log entries were found to process"
+        echo " No audit log entries were processed"
     fi
     
-    # Delete old audit logs based on retention policy
-    sqlite3 "$DB_PATH" "DELETE FROM audit_logs WHERE timestamp < datetime('now', '-$AUDIT_LOG_RETENTION_DAYS day');"
-    echo "Removed audit logs older than $AUDIT_LOG_RETENTION_DAYS days"
+    # Clean up temporary SQL file
+    rm -f "$temp_sql_file"
+    
+    # Delete old audit logs based on retention policy (separate transaction)
+    execute_sqlite "DELETE FROM audit_logs WHERE timestamp < datetime('now', '-$AUDIT_LOG_RETENTION_DAYS day');"
+    echo " Removed audit logs older than $AUDIT_LOG_RETENTION_DAYS days"
     
     return 0
 }

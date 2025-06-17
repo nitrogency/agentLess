@@ -244,11 +244,12 @@ func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUse
 }
 
 // UpdateDeviceStatus updates just the status of a device
+// Will not update devices that are already marked as 'deleted'
 func UpdateDeviceStatus(id int64, status string) error {
 	_, err := db.Exec(`
 		UPDATE devices 
 		SET status = ?, last_updated = CURRENT_TIMESTAMP
-		WHERE id = ?
+		WHERE id = ? AND status != 'deleted'
 	`, status, id)
 	return err
 }
@@ -291,7 +292,7 @@ func UpdateAllDeviceStatuses() error {
 	rows, err := db.Query(`
 		SELECT id, ip_address 
 		FROM devices 
-		WHERE ip_address IS NOT NULL AND ip_address != ''
+		WHERE ip_address IS NOT NULL AND ip_address != '' AND status != 'deleted'
 	`)
 	if err != nil {
 		return err
@@ -329,9 +330,9 @@ func UpdateAllDeviceStatuses() error {
 	return rows.Err()
 }
 
-// DeleteDevice deletes a device
+// DeleteDevice deletes a device (soft delete by setting status to 'deleted')
 func DeleteDevice(id int64) error {
-	_, err := db.Exec("DELETE FROM devices WHERE id = ?", id)
+	_, err := db.Exec("UPDATE devices SET status = 'deleted' WHERE id = ?", id)
 	return err
 }
 
@@ -361,7 +362,7 @@ func DeviceExistsByIP(ipAddress string, excludeID int64) (bool, error) {
 		return false, nil // Empty IP addresses are allowed (e.g., for non-monitored devices)
 	}
 
-	query := "SELECT COUNT(*) FROM devices WHERE ip_address = ?"
+	query := "SELECT COUNT(*) FROM devices WHERE ip_address = ? AND status != 'deleted'"
 	args := []interface{}{ipAddress}
 
 	// If excludeID is provided, exclude that device from the check (for updates)

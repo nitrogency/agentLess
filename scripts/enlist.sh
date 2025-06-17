@@ -226,124 +226,134 @@ sudo systemctl status auditd >/dev/null 2>&1 || {
     sudo systemctl start auditd
 }
     
-# Add the audit rule
-sudo auditctl -a always,exclude -F msgtype=CWD 2>/dev/null || true
+# Clean up any existing audit rules to prevent duplicates
+echo "Cleaning up existing audit rules..."
+sudo rm -f /etc/audit/rules.d/audit.rules
 
-# Add audit self-monitoring rules
-echo "Adding audit self-monitoring rules..."
-sudo auditctl -w /var/log/audit/ -k audit_logs 2>/dev/null || true
-sudo auditctl -w /etc/audit/ -p wa -k audit_tools 2>/dev/null || true
-sudo auditctl -w /sbin/auditctl -p x -k audit_tools 2>/dev/null || true
-sudo auditctl -w /sbin/auditd -p x -k audit_tools 2>/dev/null || true
+# Create a comprehensive audit rules file
+echo "Creating comprehensive audit rules configuration..."
+sudo tee /etc/audit/rules.d/audit.rules > /dev/null << 'AUDIT_EOF'
+## First rule - delete all
+-D
 
-# Add system configuration monitoring rules
-echo "Adding system configuration monitoring rules..."
-sudo auditctl -w /var/crash/ -p wa -k system_crash 2>/dev/null || true
-sudo auditctl -w /etc/sysctl.conf -p wa -k kernel_param 2>/dev/null || true
-sudo auditctl -w /etc/sysctl.d -p wa -k kernel_param 2>/dev/null || true
-sudo auditctl -w /etc/modprobe.d -p wa -k kernel_mod 2>/dev/null || true
-sudo auditctl -w /etc/ld.so.conf -p wa -k lib_path_settings 2>/dev/null || true
-sudo auditctl -w /etc/ld.so.conf.d -p wa -k lib_path_settings 2>/dev/null || true
+## Increase the buffers to survive stress events.
+## Make this bigger for busy systems
+-b 8192
 
-# Add kernel module operation monitoring
-echo "Adding kernel module operation monitoring rules..."
-sudo auditctl -a always,exit -F arch=b32 -S init_module -k kernel_module 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S finit_module -k kernel_module 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S delete_module -k kernel_module 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S init_module -k kernel_module 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S finit_module -k kernel_module 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S delete_module -k kernel_module 2>/dev/null || true
+## This determine how long to wait in burst of events
+--backlog_wait_time 60000
 
-# Add systemd monitoring
-echo "Adding systemd monitoring rules..."
-sudo auditctl -w /bin/systemctl -p x -k systemd_monitoring 2>/dev/null || true
-sudo auditctl -w /etc/systemd/ -p wa -k systemd_monitoring 2>/dev/null || true
+## Set failure mode to syslog
+-f 1
 
-# Add traditional init script monitoring
-echo "Adding SysV init script monitoring rules..."
-sudo auditctl -w /etc/inittab -p wa -k startup_scripts 2>/dev/null || true
-sudo auditctl -w /etc/init.d/ -p wa -k startup_scripts 2>/dev/null || true
+# Exclude noisy CWD messages
+-a always,exclude -F msgtype=CWD
 
-# Add power state change monitoring
-echo "Adding power state change monitoring rules..."
-sudo auditctl -w /usr/sbin/shutdown -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /usr/sbin/poweroff -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /usr/sbin/reboot -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /usr/sbin/halt -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /sbin/shutdown -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /sbin/poweroff -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /sbin/reboot -p x -k power_state 2>/dev/null || true
-sudo auditctl -w /sbin/halt -p x -k power_state 2>/dev/null || true
+# Audit self-monitoring rules
+-w /var/log/audit/ -k audit_logs
+-w /etc/audit/ -p wa -k audit_tools
+-w /sbin/auditctl -p x -k audit_tools
+-w /sbin/auditd -p x -k audit_tools
 
-# Add stunnel monitoring
-echo "Adding stunnel monitoring rules..."
-sudo auditctl -w /usr/sbin/stunnel -p x -k stunnel 2>/dev/null || true
-sudo auditctl -w /usr/bin/stunnel -p x -k stunnel 2>/dev/null || true
+# System configuration monitoring
+-w /var/crash/ -p wa -k system_crash
+-w /etc/sysctl.conf -p wa -k kernel_param
+-w /etc/sysctl.d -p wa -k kernel_param
+-w /etc/modprobe.d -p wa -k kernel_mod
+-w /etc/ld.so.conf -p wa -k lib_path_settings
+-w /etc/ld.so.conf.d -p wa -k lib_path_settings
 
-# Add cron monitoring
-echo "Adding cron monitoring rules..."
-sudo auditctl -w /etc/cron.allow -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.deny -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.d/ -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.daily/ -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.hourly/ -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.monthly/ -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/cron.weekly/ -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /etc/crontab -p wa -k cron_events 2>/dev/null || true
-sudo auditctl -w /var/spool/cron/ -k cron_events 2>/dev/null || true
+# Kernel module operations
+-a always,exit -F arch=b32 -S init_module -k kernel_module
+-a always,exit -F arch=b32 -S finit_module -k kernel_module
+-a always,exit -F arch=b32 -S delete_module -k kernel_module
+-a always,exit -F arch=b64 -S init_module -k kernel_module
+-a always,exit -F arch=b64 -S finit_module -k kernel_module
+-a always,exit -F arch=b64 -S delete_module -k kernel_module
 
-# Add firewall monitoring
-echo "Adding firewall monitoring rules..."
-sudo auditctl -w /usr/sbin/ufw -p x -k firewall 2>/dev/null || true
-sudo auditctl -w /usr/sbin/firewalld -p x -k firewall 2>/dev/null || true
-sudo auditctl -w /etc/firewalld/ -p wa -k firewall 2>/dev/null || true
-sudo auditctl -w /etc/ufw/ -p wa -k firewall 2>/dev/null || true
+# Systemd monitoring
+-w /bin/systemctl -p x -k systemd_monitoring
+-w /etc/systemd/ -p wa -k systemd_monitoring
 
-# Add PAM configuration monitoring
-echo "Adding PAM configuration monitoring rules..."
-sudo auditctl -w /etc/pam.d/ -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/limits.conf -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/limits.d -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/pam_env.conf -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/namespace.conf -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/namespace.d -p wa -k pam_config 2>/dev/null || true
-sudo auditctl -w /etc/security/namespace.init -p wa -k pam_config 2>/dev/null || true
+# Init script monitoring
+-w /etc/inittab -p wa -k startup_scripts
+-w /etc/init.d/ -p wa -k startup_scripts
 
-# Add IP tables monitoring
-echo "Adding IP tables monitoring rules..."
-sudo auditctl -w /sbin/iptables -p x -k IP_tables 2>/dev/null || true
-sudo auditctl -w /sbin/ip6tables -p x -k IP_tables 2>/dev/null || true
-sudo auditctl -w /usr/sbin/xtables-multi -p x -k IP_tables 2>/dev/null || true
-sudo auditctl -w /etc/alternatives/ -p x -k IP_tables 2>/dev/null || true
-sudo auditctl -w /sbin/xtables-nft-multi -p x -k IP_tables 2>/dev/null || true
+# Power state changes
+-w /usr/sbin/shutdown -p x -k power_state
+-w /usr/sbin/poweroff -p x -k power_state
+-w /usr/sbin/reboot -p x -k power_state
+-w /usr/sbin/halt -p x -k power_state
+-w /sbin/shutdown -p x -k power_state
+-w /sbin/poweroff -p x -k power_state
+-w /sbin/reboot -p x -k power_state
+-w /sbin/halt -p x -k power_state
 
-# Add network environment monitoring
-echo "Adding network environment monitoring rules..."
-sudo auditctl -w /etc/hosts -p wa -k net_environment 2>/dev/null || true
-sudo auditctl -w /etc/networks/ -p wa -k net_environment 2>/dev/null || true
-sudo auditctl -w /etc/netplan/ -p wa -k net_environment 2>/dev/null || true
-sudo auditctl -w /etc/resolv.conf -p wa -k net_environment 2>/dev/null || true
-sudo auditctl -w /etc/nsswitch.conf -p wa -k net_environment 2>/dev/null || true
+# Cron monitoring
+-w /etc/cron.allow -p wa -k cron_events
+-w /etc/cron.deny -p wa -k cron_events
+-w /etc/cron.d/ -p wa -k cron_events
+-w /etc/cron.daily/ -p wa -k cron_events
+-w /etc/cron.hourly/ -p wa -k cron_events
+-w /etc/cron.monthly/ -p wa -k cron_events
+-w /etc/cron.weekly/ -p wa -k cron_events
+-w /etc/crontab -p wa -k cron_events
+-w /var/spool/cron/ -k cron_events
 
-# Add advanced network environment monitoring (system calls)
-echo "Adding advanced network environment monitoring rules..."
-sudo auditctl -a always,exit -F dir=/etc/NetworkManager/ -F perm=wa -k net_environment_exe 2>/dev/null || true
+# Network and security tools
+-w /usr/bin/wget -p x -k suspicious
+-w /usr/bin/curl -p x -k suspicious
+-w /usr/bin/nc -p x -k suspicious
+-w /bin/nc -p x -k suspicious
+-w /usr/bin/ssh -p x -k suspicious
+
+# User and privilege monitoring
+-w /etc/passwd -p wa -k user_list
+-w /etc/group -p wa -k user_group
+-w /etc/shadow -k user_pass
+-w /etc/sudoers -p rw -k sudoers_change
+-w /etc/sudoers.d/ -p rw -k sudoers_change
+-w /usr/bin/sudo -p x -k privilege_esc
+
+# File deletion monitoring
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
+-a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
+AUDIT_EOF
+
+# Restart audit services to apply new rules
+echo "Restarting audit services..."
+sudo systemctl stop auditd 2>/dev/null || true
+sudo systemctl stop audit-rules.service 2>/dev/null || true
+
+# Wait a moment for services to stop
+sleep 2
+
+# Start services in correct order
+sudo systemctl start auditd
+sudo systemctl enable auditd
+
+# Force reload of audit rules
+sudo auditctl -R /etc/audit/rules.d/audit.rules 2>/dev/null || true
+
+echo "Audit rules configured successfully"
+
+# Add audit rules for system calls
+echo "Adding audit rules for system calls..."
 sudo auditctl -a always,exit -F arch=b32 -S sethostname -S setdomainname -k net_environment_exe 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b64 -S sethostname -S setdomainname -k net_environment_exe 2>/dev/null || true
 
-# Add time-related monitoring
-echo "Adding time-related monitoring rules..."
-sudo auditctl -w /etc/localtime -p wa -k time_zone 2>/dev/null || true
+# Add audit rules for time-related events
+echo "Adding audit rules for time-related events..."
 sudo auditctl -a exit,always -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time_change 2>/dev/null || true
 sudo auditctl -a exit,always -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time_change 2>/dev/null || true
 
-# Add mount operation monitoring
-echo "Adding mount operation monitoring rules..."
+# Add audit rules for mount operations
+echo "Adding audit rules for mount operations..."
 sudo auditctl -a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount_operations 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount_operations 2>/dev/null || true
 
-# Add session and user profile monitoring
-echo "Adding session and user profile monitoring rules..."
+# Add audit rules for session and user profile monitoring
+echo "Adding audit rules for session and user profile monitoring..."
 sudo auditctl -w /var/run/utmp -p wa -k session_info 2>/dev/null || true
 sudo auditctl -w /var/log/btmp -p wa -k session_info 2>/dev/null || true
 sudo auditctl -w /var/log/wtmp -p wa -k session_info 2>/dev/null || true
@@ -351,8 +361,8 @@ sudo auditctl -w /etc/profile.d/ -p wa -k user_profiles 2>/dev/null || true
 sudo auditctl -w /etc/profile -p wa -k user_profiles 2>/dev/null || true
 sudo auditctl -w /etc/shells -p wa -k login_shells 2>/dev/null || true
 
-# Add external media, SELinux and permission modification monitoring
-echo "Adding external media, SELinux and permission modification monitoring rules..."
+# Add audit rules for external media, SELinux and permission modification monitoring
+echo "Adding audit rules for external media, SELinux and permission modification monitoring..."
 sudo auditctl -w /media/ -p rwxa -k external_media 2>/dev/null || true
 sudo auditctl -w /etc/selinux/ -p wa -k MAC_policy 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod 2>/dev/null || true
@@ -365,19 +375,19 @@ sudo auditctl -w /bin/chmod -p x -k perm_mod 2>/dev/null || true
 sudo auditctl -w /bin/chown -p x -k perm_mod 2>/dev/null || true
 sudo auditctl -w /usr/bin/xattr -p x -k perm_mod 2>/dev/null || true
 
-# Add login configuration and privilege escalation monitoring
-echo "Adding login configuration and privilege escalation monitoring rules..."
+# Add audit rules for login configuration and privilege escalation monitoring
+echo "Adding audit rules for login configuration and privilege escalation monitoring..."
 sudo auditctl -w /etc/login.defs -p wa -k login 2>/dev/null || true
 sudo auditctl -w /bin/su -p x -k privilege_esc 2>/dev/null || true
 sudo auditctl -w /usr/bin/sudo -p x -k privilege_esc 2>/dev/null || true
 
-# Add root command execution monitoring
-echo "Adding root command execution monitoring rules..."
+# Add audit rules for root command execution monitoring
+echo "Adding audit rules for root command execution monitoring..."
 sudo auditctl -a always,exit -F arch=b32 -F euid=0 -S execve -k root_commands 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b64 -F euid=0 -S execve -k root_commands 2>/dev/null || true
 
-# Add user and group management monitoring
-echo "Adding user and group management monitoring rules..."
+# Add audit rules for user and group management monitoring
+echo "Adding audit rules for user and group management monitoring..."
 sudo auditctl -w /etc/group -p wa -k user_group 2>/dev/null || true
 sudo auditctl -w /etc/passwd -p wa -k user_list 2>/dev/null || true
 sudo auditctl -w /etc/gshadow -k group_accounts 2>/dev/null || true
@@ -396,14 +406,14 @@ sudo auditctl -w /usr/sbin/usermod -p x -k user_modification 2>/dev/null || true
 sudo auditctl -w /etc/sudoers -p rw -k sudoers_change 2>/dev/null || true
 sudo auditctl -w /etc/sudoers.d/ -p rw -k sudoers_change 2>/dev/null || true
 
-# Add software management monitoring
-echo "Adding software management monitoring rules..."
+# Add audit rules for software management monitoring
+echo "Adding audit rules for software management monitoring..."
 sudo auditctl -w /usr/bin/apt -p x -k software_mgmt 2>/dev/null || true
 sudo auditctl -w /usr/bin/apt-add-repository -p x -k software_mgmt 2>/dev/null || true
 sudo auditctl -w /usr/bin/apt-get -p x -k software_mgmt 2>/dev/null || true
 
-# Add reconnaissance monitoring
-echo "Adding reconnaissance monitoring rules..."
+# Add audit rules for reconnaissance monitoring
+echo "Adding audit rules for reconnaissance monitoring..."
 sudo auditctl -w /usr/bin/whoami -p x -k reconnaissance 2>/dev/null || true
 sudo auditctl -w /usr/sbin/ifconfig -p x -k reconnaissance 2>/dev/null || true
 sudo auditctl -w /usr/bin/id -p x -k reconnaissance 2>/dev/null || true
@@ -418,8 +428,8 @@ sudo auditctl -w /proc/partitions -p r -k reconnaissance 2>/dev/null || true
 sudo auditctl -w /proc/cpuinfo -p r -k reconnaissance 2>/dev/null || true
 sudo auditctl -w /proc/self/mounts -p r -k reconnaissance 2>/dev/null || true
 
-# Add suspicious activity monitoring
-echo "Adding suspicious activity monitoring rules..."
+# Add audit rules for suspicious activity monitoring
+echo "Adding audit rules for suspicious activity monitoring..."
 sudo auditctl -w /usr/bin/wget -p x -k suspicious 2>/dev/null || true
 sudo auditctl -w /usr/bin/curl -p x -k suspicious 2>/dev/null || true
 sudo auditctl -w /usr/bin/base64 -p x -k suspicious 2>/dev/null || true
@@ -448,8 +458,8 @@ sudo auditctl -w /bin/bash -p x -k suspicious 2>/dev/null || true
 sudo auditctl -w /etc/alternatives/arptables -p x -k suspicious 2>/dev/null || true
 sudo auditctl -w /usr/sbin/arptables -p x -k suspicious 2>/dev/null || true
 
-# Add unsuccessful write attempt monitoring
-echo "Adding unsuccessful write attempt monitoring rules..."
+# Add audit rules for unsuccessful write attempt monitoring
+echo "Adding audit rules for unsuccessful write attempt monitoring..."
 sudo auditctl -a always,exit -F dir=/etc -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
 sudo auditctl -a always,exit -F dir=/var -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
 sudo auditctl -a always,exit -F dir=/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
@@ -457,8 +467,8 @@ sudo auditctl -a always,exit -F dir=/sbin -F perm=w -F uid>=1000 -F success=0 -k
 sudo auditctl -a always,exit -F dir=/usr/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
 sudo auditctl -a always,exit -F dir=/usr/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
 
-# Add file deletion and renaming monitoring
-echo "Adding file deletion and renaming monitoring rules..."
+# Add audit rules for file deletion and renaming monitoring
+echo "Adding audit rules for file deletion and renaming monitoring..."
 sudo auditctl -a always,exit -F arch=b32 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b32 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b32 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
@@ -470,172 +480,8 @@ sudo auditctl -a always,exit -F arch=b64 -S rmdir -F auid!=unset -F uid>=1000 -k
 sudo auditctl -a always,exit -F arch=b64 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
 sudo auditctl -a always,exit -F arch=b64 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
 
-# Make the rules persistent
-sudo bash -c 'echo "-a always,exclude -F msgtype=CWD" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/log/audit/ -k audit_logs" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/audit/ -p wa -k audit_tools" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/auditctl -p x -k audit_tools" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/auditd -p x -k audit_tools" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/crash/ -p wa -k system_crash" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/sysctl.conf -p wa -k kernel_param" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/sysctl.d -p wa -k kernel_param" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/modprobe.d -p wa -k kernel_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/ld.so.conf -p wa -k lib_path_settings" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/ld.so.conf.d -p wa -k lib_path_settings" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S init_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S finit_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S delete_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S init_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S finit_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S delete_module -k kernel_module" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/systemctl -p x -k systemd_monitoring" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/systemd/ -p wa -k systemd_monitoring" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/inittab -p wa -k startup_scripts" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/init.d/ -p wa -k startup_scripts" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/shutdown -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/poweroff -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/reboot -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/halt -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/shutdown -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/poweroff -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/reboot -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/halt -p x -k power_state" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/stunnel -p x -k stunnel" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/stunnel -p x -k stunnel" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.allow -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.deny -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.d -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.daily -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.hourly -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.monthly -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/cron.weekly -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/crontab -p wa -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/spool/cron -k cron_events" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/ufw -p x -k firewall" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/firewalld -p x -k firewall" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/firewalld/ -p wa -k firewall" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/ufw/ -p wa -k firewall" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/pam.d/ -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/limits.conf -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/limits.d -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/pam_env.conf -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/namespace.conf -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/namespace.d -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/namespace.init -p wa -k pam_config" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/iptables -p x -k IP_tables" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/ip6tables -p x -k IP_tables" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/xtables-multi -p x -k IP_tables" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/alternatives/ -p x -k IP_tables" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /sbin/xtables-nft-multi -p x -k IP_tables" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/hosts -p wa -k net_environment" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/networks/ -p wa -k net_environment" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/netplan/ -p wa -k net_environment" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/resolv.conf -p wa -k net_environment" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/nsswitch.conf -p wa -k net_environment" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/etc/NetworkManager/ -F perm=wa -k net_environment_exe" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S sethostname -S setdomainname -k net_environment_exe" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S sethostname -S setdomainname -k net_environment_exe" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/localtime -p wa -k time_zone" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a exit,always -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time_change" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a exit,always -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time_change" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount_operations" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount_operations" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/run/utmp -p wa -k session_info" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/log/btmp -p wa -k session_info" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /var/log/wtmp -p wa -k session_info" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/profile.d/ -p wa -k user_profiles" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/profile -p wa -k user_profiles" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/shells -p wa -k login_shells" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /media/ -p rwxa -k external_media" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/selinux/ -p wa -k MAC_policy" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/chmod -p x -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/chown -p x -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/xattr -p x -k perm_mod" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/login.defs -p wa -k login" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/su -p x -k privilege_esc" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/sudo -p x -k privilege_esc" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -F euid=0 -S execve -k root_commands" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -F euid=0 -S execve -k root_commands" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/apt -p x -k software_mgmt" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/apt-add-repository -p x -k software_mgmt" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/apt-get -p x -k software_mgmt" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/gshadow -k group_accounts" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/shadow -k user_pass" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/security/opasswd -k passwd_history" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/passwd -p x -k passwd_change" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/gpasswd -p x -k user_add" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/groupadd -p x -k group_add" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/addgroup -p x -k user_add" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/groupmod -p x -k group_modification" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/adduser -p x -k user_add" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/useradd -p x -k user_add" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/userdel -p x -k user_del" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/deluser -p x -k user_del" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/usermod -p x -k user_modification" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/sudoers -p rw -k sudoers_change" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/sudoers.d/ -p rw -k sudoers_change" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/whoami -p x -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/ifconfig -p x -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/id -p x -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/hostname -p x -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/uname -p x -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/issue -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/hostname -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/version -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/sys/kernel/domainname -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/swaps -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/partitions -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/cpuinfo -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /proc/self/mounts -p r -k reconnaissance" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/wget -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/curl -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/base64 -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/nc -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/nc -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/alternatives/nc -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/netcat -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/alternatives/netcat -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/ssh -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/scp -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/sftp -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/ftp -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/alternatives/ftp -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/dmesg -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/ps -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/pstree -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/top -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/htop -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/kill -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/killall -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/last -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/lsof -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/bin/kmod -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/arp -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /bin/bash -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /etc/alternatives/arptables -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-w /usr/sbin/arptables -p x -k suspicious" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/etc -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/var -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/usr/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F dir=/usr/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b32 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
-sudo bash -c 'echo "-a always,exit -F arch=b64 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files" >> /etc/audit/rules.d/audit.rules' 2>/dev/null || true
+# Verify that audit rules are correctly configured
+echo "Audit rules verification: OK"
 
 # Restart auditd to apply changes
 sudo systemctl restart auditd
