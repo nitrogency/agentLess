@@ -6,6 +6,83 @@
 
 set -e
 
+# Function to determine security level based on audit key or log content
+determine_security_level() {
+    local log_text="$1"
+    local log_text_lower=$(echo "$log_text" | tr '[:upper:]' '[:lower:]')
+    
+    # First try to extract audit key from the log
+    local audit_key=$(echo "$log_text" | grep -o 'key="\?[a-zA-Z0-9_-]\+"\?' | sed 's/key="\?\([a-zA-Z0-9_-]\+\)"\?/\1/')
+    
+    # If we found an audit key, use it to determine security level
+    if [ -n "$audit_key" ]; then
+        # High security keys
+        local high_keys="privilege_esc|suspicious|user_pass|sudoers_change|root_commands|authentication|failed_login|user_del|mac_policy|audit_tools|audit_logs"
+        
+        # Medium security keys
+        local medium_keys="user_add|user_modification|group_add|group_modification|user_list|user_group|group_accounts|passwd_change|passwd_history|kernel_module|kernel_param|systemd_monitoring|startup_scripts|cron_events|software_mgmt|perm_mod|mount_operations|time_change|net_environment_exe|reconnaissance"
+        
+        # Check if the key matches high security keys
+        if echo "$audit_key" | grep -E "$high_keys" > /dev/null; then
+            echo "high"
+            return
+        fi
+        
+        # Check if the key matches medium security keys
+        if echo "$audit_key" | grep -E "$medium_keys" > /dev/null; then
+            echo "medium"
+            return
+        fi
+        
+        # All other keys are low security
+        echo "low"
+        return
+    fi
+    
+    # Fallback to content-based analysis if no key found
+    
+    # Special case for login events
+    if echo "$log_text_lower" | grep -E "login" > /dev/null; then
+        if echo "$log_text_lower" | grep -E "failed password|authentication failure|invalid user" > /dev/null; then
+            echo "high"
+            return
+        fi
+        echo "low"
+        return
+    fi
+    
+    # Special case for syscall events
+    if echo "$log_text_lower" | grep -E "syscall" > /dev/null; then
+        if echo "$log_text_lower" | grep -E "execve|unlink|rmdir|delete" > /dev/null; then
+            echo "medium"
+            return
+        fi
+        echo "low"
+        return
+    fi
+    
+    # High security patterns for fallback
+    local high_patterns="unauthorized|suspicious|privilege escalation|root access|failed password for root|authentication failure|user not in sudoers|permission denied|brute force|invalid user|illegal user|ssh invalid|failed login|failed auth|multiple auth failures"
+    
+    # Medium security patterns for fallback
+    local medium_patterns="cron job|kernel module|firewall rule|pam_unix|timezone change|time zone change|chmod \+x|new user|password change|sudo command"
+    
+    # Check for high security patterns
+    if echo "$log_text_lower" | grep -E "$high_patterns" > /dev/null; then
+        echo "high"
+        return
+    fi
+    
+    # Check for medium security patterns
+    if echo "$log_text_lower" | grep -E "$medium_patterns" > /dev/null; then
+        echo "medium"
+        return
+    fi
+    
+    # Default to low security
+    echo "low"
+}
+
 # Configuration
 DB_PATH="data/site.db"  # Path to the SQLite database relative to the script
 AUDIT_LOG_RETENTION_DAYS=30  # Number of days to keep audit logs
@@ -258,6 +335,12 @@ EOF
         local type=$(echo "$line" | grep -o 'type=[^ ]*' | cut -d= -f2)
         local key=$(echo "$line" | grep -o 'key=[^ ]*' | cut -d= -f2)
         
+        # Skip logs without an audit key, with (null) keys, or with ARCH suffix
+        if [ -z "$key" ] || [[ "$key" == "(null)"* ]] || [[ "$key" == *"ARCH"* ]]; then
+            debug "Skipping log with no/null/ARCH key: ${line:0:30}..."
+            continue
+        fi
+        
         # Extract message content - look for common audit log message patterns
         local message=""
         if echo "$line" | grep -q 'comm='; then
@@ -303,12 +386,15 @@ EOF
         # Escape single quotes for SQL
         local escaped_line=$(echo "$line" | sed "s/'/''/g")
         
+        # Determine security level
+        local security_level=$(determine_security_level "$line")
+
         # Add INSERT statement to batch file
         # Explicitly save both timestamps:
         # - timestamp: when log arrived at server (CURRENT_TIMESTAMP)
         # - event_time: when the event actually occurred on the device
         local server_time=$(date +"%Y-%m-%d %H:%M:%S")
-        echo "INSERT INTO audit_logs (device_id, timestamp, event_time, type, key, message, raw_log) VALUES ('$device_id', '$server_time', '$event_time', '$type', '$key', '$message', '$escaped_line');" >> "$temp_sql_file"
+        echo "INSERT INTO audit_logs (device_id, timestamp, event_time, type, key, message, raw_log, security_level) VALUES ('$device_id', '$server_time', '$event_time', '$type', '$key', '$message', '$escaped_line', '$security_level');" >> "$temp_sql_file"
         
         log_count=$((log_count + 1))
     done < "$log_file"

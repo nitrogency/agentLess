@@ -52,19 +52,32 @@ type PageData struct {
 func getPageData(w http.ResponseWriter, r *http.Request) PageData {
 	if store == nil {
 		log.Printf("Session store is not initialized")
-		return PageData{}
+		return PageData{
+			Data:        make(map[string]interface{}),
+			FormData:    make(map[string]string),
+			ErrorFields: make(map[string]bool),
+		}
 	}
 
 	session, err := store.Get(r, "session-name")
 	if err != nil {
 		log.Printf("Error getting session in getPageData: %v", err)
-		return PageData{}
+		return PageData{
+			Data:        make(map[string]interface{}),
+			FormData:    make(map[string]string),
+			ErrorFields: make(map[string]bool),
+		}
 	}
 
 	// Get username from session
 	username, ok := session.Values["username"].(string)
 	if !ok {
-		return PageData{}
+		// Even if no username, return properly initialized PageData
+		return PageData{
+			Data:        make(map[string]interface{}),
+			FormData:    make(map[string]string),
+			ErrorFields: make(map[string]bool),
+		}
 	}
 
 	// Get user from database to check admin status
@@ -74,7 +87,12 @@ func getPageData(w http.ResponseWriter, r *http.Request) PageData {
 		user, err := db.GetUserByUsername(username)
 		if err != nil {
 			log.Printf("Error getting user: %v", err)
-			return PageData{}
+			return PageData{
+			Username:    username,
+			Data:        make(map[string]interface{}),
+			FormData:    make(map[string]string),
+			ErrorFields: make(map[string]bool),
+		}
 		}
 		if user != nil {
 			isAdmin = user.IsAdmin
@@ -83,9 +101,12 @@ func getPageData(w http.ResponseWriter, r *http.Request) PageData {
 	}
 
 	return PageData{
-		Username: username,
-		UserID:   userID,
-		IsAdmin:  isAdmin,
+		Username:    username,
+		UserID:      userID,
+		IsAdmin:     isAdmin,
+		Data:        make(map[string]interface{}),
+		FormData:    make(map[string]string),
+		ErrorFields: make(map[string]bool),
 	}
 }
 
@@ -629,8 +650,39 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := getPageData(w, r)
-	data.Title = "Home"
-	data.Content = "Welcome to our Go Web Application!"
+	data.Title = "Dashboard"
+	
+	// Get statistics
+	// 1. Count of devices
+	devices, err := db.GetAllDevices()
+	deviceCount := 0
+	if err == nil {
+		deviceCount = len(devices)
+	} else {
+		log.Printf("Error fetching devices: %v", err)
+	}
+	
+	// 2. Count of logs
+	_, logCount, err := db.GetAuditLogs(0, 1, 1, "", "") // Just to get the count
+	if err != nil {
+		log.Printf("Error counting logs: %v", err)
+		logCount = 0
+	}
+	
+	// 3. Count of users
+	users, err := db.GetAllUsers()
+	userCount := 0
+	if err == nil {
+		userCount = len(users)
+	} else {
+		log.Printf("Error fetching users: %v", err)
+	}
+	
+	// Add statistics to page data
+	data.Data["DeviceCount"] = deviceCount
+	data.Data["LogCount"] = logCount
+	data.Data["UserCount"] = userCount
+	
 	renderTemplate(w, "home", data)
 }
 
@@ -705,6 +757,7 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		session.Values["username"] = username
+		session.Values["authenticated"] = true
 		if err := session.Save(r, w); err != nil {
 			data.Error = "Error saving session"
 			renderTemplate(w, "signup", data)
@@ -1690,6 +1743,23 @@ func monitorDeviceHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "monitor-device", data)
 }
 
+// Helper function to get pagination parameters from request
+func getPaginationParams(r *http.Request) (int, int) {
+	pageStr := r.URL.Query().Get("page")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	
+	pageSize := 20 // Default page size
+	if pageSizeParam := r.URL.Query().Get("pageSize"); pageSizeParam != "" {
+		if ps, err := strconv.Atoi(pageSizeParam); err == nil && ps > 0 {
+			pageSize = ps
+		}
+	}
+	
+	return page, pageSize
+}
 
 func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 	data := getPageData(w, r)
@@ -1710,35 +1780,21 @@ func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 	data.Devices = activeDevices // Pass all active devices to the template
 
 	// Get filter parameters from request
-	filterDeviceIDStr := r.URL.Query().Get("device_id")
+	page, pageSize := getPaginationParams(r)
 	searchTerm := r.URL.Query().Get("search")
-	pageStr := r.URL.Query().Get("page")
-
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		page = 1
-	}
+	filterDeviceIDStr := r.URL.Query().Get("device_id")
+	filterSecurityLevel := r.URL.Query().Get("security_level")
+	var filterDeviceID int64 = 0
 	
-	pageSize := 20 // Default page size
-	
-	// Check if pageSize parameter is provided in the URL
-	if pageSizeParam := r.URL.Query().Get("pageSize"); pageSizeParam != "" {
-		if ps, err := strconv.Atoi(pageSizeParam); err == nil && (ps == 10 || ps == 20 || ps == 50) {
-			pageSize = ps
-		}
-	}
-
-	var filterDeviceID int64
-	if filterDeviceIDStr != "" {
-		filterDeviceID, err = strconv.ParseInt(filterDeviceIDStr, 10, 64)
-		if err != nil {
-			log.Printf("Invalid device_id for logs page: %s, error: %v", filterDeviceIDStr, err)
-			filterDeviceID = 0 // Default to all devices if ID is invalid
+	// Parse device ID filter if provided
+	if filterDeviceIDStr != "" && filterDeviceIDStr != "0" {
+		if id, err := strconv.ParseInt(filterDeviceIDStr, 10, 64); err == nil && id > 0 {
+			filterDeviceID = id
 		}
 	}
 
 	// Fetch logs using the new db.GetAuditLogs function
-	logs, totalLogs, err := db.GetAuditLogs(filterDeviceID, page, pageSize, searchTerm)
+	logs, totalLogs, err := db.GetAuditLogs(filterDeviceID, page, pageSize, searchTerm, filterSecurityLevel)
 	if err != nil {
 		log.Printf("Error getting audit logs: %v", err)
 		data.Error = "Failed to load audit logs."
@@ -1752,6 +1808,7 @@ func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 		data.Data["PageSize"] = pageSize
 		data.Data["SearchTerm"] = searchTerm
 		data.Data["FilterDeviceID"] = filterDeviceID // Pass the applied device filter back to template
+		data.Data["FilterSecurityLevel"] = filterSecurityLevel // Pass the applied security level filter back to template
 
 		// Generate pagination numbers
 		totalPgs := data.Data["TotalPages"].(int)

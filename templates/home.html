@@ -3,16 +3,172 @@
 {{end}}
 
 {{define "content"}}
-<div class="content">
-    <p>{{.Content}}</p>
-    <div class="features">
-        <h2>Features</h2>
-        <ul>
-            <li>Simple and clean design</li>
-            <li>Go templates</li>
-            <li>Static file serving</li>
-            <li>Multiple pages</li>
-        </ul>
+<div class="container">
+    <h2>System Dashboard</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3>System Statistics</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Devices Card -->
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-card-header">Devices</div>
+                                <div class="stat-card-body">
+                                    <div class="stat-value">{{.Data.DeviceCount}}</div>
+                                    <div class="stat-label">Enrolled Devices</div>
+                                </div>
+                                <div class="stat-card-footer">
+                                    <a href="/devices" class="btn btn-primary">View Devices</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Logs Card -->
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-card-header">Audit Logs</div>
+                                <div class="stat-card-body">
+                                    <div class="stat-value">{{.Data.LogCount}}</div>
+                                    <div class="stat-label">Total Log Entries</div>
+                                </div>
+                                <div class="stat-card-footer">
+                                    <a href="/logs" class="btn btn-primary">View Logs</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Users Card -->
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-card-header">Users</div>
+                                <div class="stat-card-body">
+                                    <div class="stat-value">{{.Data.UserCount}}</div>
+                                    <div class="stat-label">System Users</div>
+                                </div>
+                                <div class="stat-card-footer">
+                                    <a href="/users" class="btn btn-primary">Manage Users</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Quick Actions</h3>
+                </div>
+                <div class="card-body">
+                    <div class="action-buttons">
+                        <a href="/devices/add" class="btn btn-primary">Add New Device</a>
+                        <a href="/users/add" class="btn btn-primary">Add New User</a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<style>
+.stat-card {
+    border: 1px solid #2c3034;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    background-color: #212529;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-card-header {
+    background-color: #2c3034;
+    padding: 10px 15px;
+    font-weight: bold;
+    border-bottom: 1px solid #2c3034;
+    font-size: 1.1em;
+}
+
+.stat-card-body {
+    padding: 20px;
+    text-align: center;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.stat-value {
+    font-size: 3em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: white;
+}
+
+.stat-label {
+    font-size: 1.1em;
+    color: #adb5bd;
+}
+
+.stat-card-footer {
+    padding: 10px 15px;
+    text-align: center;
+    border-top: 1px solid #2c3034;
+}
+
+.action-buttons {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+}
+
+.action-buttons .btn {
+    margin: 10px;
+    min-width: 150px;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+.col-md-4 {
+    flex: 0 0 33.333333%;
+    max-width: 33.333333%;
+    padding-right: 15px;
+    padding-left: 15px;
+    position: relative;
+    width: 100%;
+}
+
+.col-md-12 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+    position: relative;
+    width: 100%;
+}
+
+.mt-4 {
+    margin-top: 1.5rem;
+}
+</style>
 {{end}}

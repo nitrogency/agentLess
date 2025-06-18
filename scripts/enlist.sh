@@ -183,7 +183,7 @@ echo "✅ SSH connection successful!"
 
 # Set up the remote device
 setup_remote_device() {
-    echo "Setting up monitoring user on $TARGET_IP..."
+    echo "Setting up remote device $TARGET_IP..."
     
     # Create a temporary script file locally
     TMP_SCRIPT_FILE=$(mktemp)
@@ -248,8 +248,28 @@ sudo chmod 440 /etc/sudoers.d/$REMOTE_USER
 echo "Created sudoers entry in /etc/sudoers.d/$REMOTE_USER with permissions:"
 
 # Set up audit rules, install auditd if not already installed
-if ! command -v auditctl >/dev/null 2>&1; then
-    echo "Installing auditd and auditctl..."
+echo "Checking for auditd installation..."
+AUDITD_INSTALLED=false
+
+# First check if auditctl exists
+if command -v auditctl >/dev/null 2>&1; then
+    echo "auditctl command found, checking auditd service..."
+    # Check if auditd service exists and is active
+    if sudo systemctl is-active auditd >/dev/null 2>&1; then
+        echo "✅ auditd service is active"
+        AUDITD_INSTALLED=true
+    elif sudo systemctl is-enabled auditd >/dev/null 2>&1; then
+        echo "auditd service is enabled but not active, starting it..."
+        sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+        AUDITD_INSTALLED=true
+    else
+        echo "auditd service is installed but not enabled, enabling and starting it..."
+        sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
+        sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+        AUDITD_INSTALLED=true
+    fi
+else
+    echo "auditctl not found, installing auditd..."
     
     # Try to update package lists with error handling
     echo "Updating package lists..."
@@ -259,24 +279,41 @@ if ! command -v auditctl >/dev/null 2>&1; then
     
     # Try to install auditd with error handling
     echo "Installing auditd packages..."
-    if ! sudo apt-get install -y auditd audispd-plugins; then
-        echo "⚠️ Warning: Failed to install auditd. Audit functionality will be limited."
-        AUDITD_INSTALLED=false
-    else
-        AUDITD_INSTALLED=true
+    if sudo apt-get install -y auditd audispd-plugins; then
+        echo "✅ auditd installed successfully"
         # Only try to enable and start the service if installation succeeded
         echo "Enabling and starting auditd service..."
         sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
         sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
+        
+        # Verify auditctl is now available
+        if command -v auditctl >/dev/null 2>&1; then
+            echo "✅ auditctl command is now available"
+            AUDITD_INSTALLED=true
+        else
+            echo "❌ auditctl command still not available after installation"
+            AUDITD_INSTALLED=false
+        fi
+    else
+        echo "❌ Failed to install auditd. Audit functionality will be limited."
+        AUDITD_INSTALLED=false
     fi
-else
-    AUDITD_INSTALLED=true
 fi
 
 echo "Setting up audit rules..."
 
-# Only proceed with audit rules setup if auditd is installed
-if [ "$AUDITD_INSTALLED" = true ]; then
+# Double-check that auditctl is available before proceeding
+if command -v auditctl >/dev/null 2>&1; then
+    AUDITD_INSTALLED=true
+    echo "✅ Confirmed auditctl is available"
+    
+    # Temporarily disable audit logging during setup
+    echo "Temporarily disabling audit logging during setup..."
+    if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+        echo "\$SUDO_PASSWORD" | sudo -S auditctl -e 0 || echo "Warning: Could not disable audit logging"
+    else
+        sudo auditctl -e 0 || echo "Warning: Could not disable audit logging"
+    fi
     # Check if auditd service is running
     if ! sudo systemctl status auditd >/dev/null 2>&1; then
         echo "Starting auditd service..."
@@ -410,7 +447,8 @@ AUDIT_EOF
     echo "Forcing reload of audit rules..."
     sudo auditctl -R /etc/audit/rules.d/audit.rules 2>/dev/null || echo "⚠️ Warning: Could not reload audit rules"
 else
-    echo "⚠️ Skipping audit rules setup as auditd is not installed."
+    echo "❌ Skipping audit rules setup as auditctl command is not available."
+    AUDITD_INSTALLED=false
 fi
 
 echo "Audit rules configured successfully"
@@ -570,6 +608,26 @@ echo "Verifying SSH key setup:"
 sudo ls -la /home/$REMOTE_USER/.ssh/
 sudo cat /home/$REMOTE_USER/.ssh/authorized_keys
 
+# Re-enable audit logging after setup is complete
+echo "Re-enabling audit logging..."
+if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+    echo "\$SUDO_PASSWORD" | sudo -S auditctl -e 1 || echo "Warning: Could not re-enable audit logging"
+else
+    sudo auditctl -e 1 || echo "Warning: Could not re-enable audit logging"
+fi
+
+# Clear audit logs to remove setup-related entries
+echo "Clearing audit logs to remove setup-related entries..."
+if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+    echo "\$SUDO_PASSWORD" | sudo -S bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
+    echo "\$SUDO_PASSWORD" | sudo -S ausearch --start today --format raw | sudo tee /var/log/audit/audit.log.bak > /dev/null || echo "Warning: Could not backup audit logs"
+    echo "\$SUDO_PASSWORD" | sudo -S bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
+else
+    sudo bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
+    sudo ausearch --start today --format raw | sudo tee /var/log/audit/audit.log.bak > /dev/null || echo "Warning: Could not backup audit logs"
+    sudo bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
+fi
+
 echo "Remote setup completed successfully"
 EOF
     
@@ -654,6 +712,8 @@ EOF
             exit 1
         fi
     fi
+    
+    # Re-enable audit logging is handled in the script
 }
 
 # Register the device with the IDS server
@@ -673,6 +733,28 @@ update_device_in_database() {
     execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO' WHERE id = $DEVICE_ID;"
     
     echo "✅ Device updated in database with actual username: $REMOTE_USER"
+    return 0
+}
+
+# Clear any audit logs in the database for this device
+clear_device_audit_logs() {
+    echo "Clearing any existing audit logs for the device from the database..."
+    
+    # Find the device ID by IP address
+    DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;")
+    
+    if [ -z "$DEVICE_ID" ]; then
+        echo "Warning: Device with IP $TARGET_IP not found in the database"
+        return 1
+    fi
+    
+    # Count how many logs will be deleted
+    LOG_COUNT=$(execute_sqlite "SELECT COUNT(*) FROM audit_logs WHERE device_id = $DEVICE_ID;")
+    
+    # Delete all audit logs for this device
+    execute_sqlite "DELETE FROM audit_logs WHERE device_id = $DEVICE_ID;"
+    
+    echo "✅ Cleared $LOG_COUNT audit logs for device ID: $DEVICE_ID"
     return 0
 }
 
@@ -705,6 +787,9 @@ register_with_server() {
 echo "Starting device enrollment for $TARGET_IP..."
 setup_remote_device
 register_with_server
+
+# Clear any audit logs generated during setup
+clear_device_audit_logs
 
 echo ""
 echo "Device enrollment completed successfully!"

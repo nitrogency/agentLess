@@ -31,16 +31,27 @@ func parseTimestamp(timestamp string) time.Time {
 	return time.Now() // Return current time as fallback
 }
 
+// SecurityLevel represents the importance/suspiciousness level of an audit log
+type SecurityLevel string
+
+// Security level constants
+const (
+	LowSecurity    SecurityLevel = "low"
+	MediumSecurity SecurityLevel = "medium"
+	HighSecurity   SecurityLevel = "high"
+)
+
 // AuditLog represents an audit log entry from a monitored device
 type AuditLog struct {
-	ID        int64
-	DeviceID  int64
-	Timestamp time.Time
-	EventTime string
-	Type      string
-	Key       string
-	Message   string
-	RawLog    string
+	ID            int64
+	DeviceID      int64
+	Timestamp     time.Time
+	EventTime     string
+	Type          string
+	Key           string
+	Message       string
+	RawLog        string
+	SecurityLevel SecurityLevel
 }
 
 // InitAuditLogTable initializes the audit_logs table
@@ -55,6 +66,7 @@ func InitAuditLogTable() error {
 			key TEXT,
 			message TEXT,
 			raw_log TEXT,
+			security_level TEXT DEFAULT 'low',
 			FOREIGN KEY (device_id) REFERENCES devices(id)
 		)
 	`)
@@ -74,7 +86,7 @@ func InitAuditLogTable() error {
 // GetAllAuditLogs returns all audit logs
 func GetAllAuditLogs() ([]AuditLog, error) {
 	rows, err := db.Query(`
-		SELECT id, device_id, timestamp, event_time, type, key, message, raw_log
+		SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
 		FROM audit_logs
 		ORDER BY timestamp DESC
 	`)
@@ -123,7 +135,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	if searchTerm != "" {
 		// If search term is provided, filter by it
 		query = `
-			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log
+			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
 			FROM audit_logs
 			WHERE device_id = ? AND (
 				type LIKE ? OR 
@@ -150,7 +162,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	} else {
 		// If no search term, get all logs for the device
 		query = `
-			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log
+			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
 			FROM audit_logs
 			WHERE device_id = ?
 			ORDER BY timestamp DESC
@@ -193,6 +205,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 		var log AuditLog
 		var timestamp string
 
+		var securityLevelStr string
 		err := rows.Scan(
 			&log.ID,
 			&log.DeviceID,
@@ -202,9 +215,20 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 			&log.Key,
 			&log.Message,
 			&log.RawLog,
+			&securityLevelStr,
 		)
 		if err != nil {
 			return nil, 0, err
+		}
+
+		// Convert string to SecurityLevel type
+		switch securityLevelStr {
+		case string(HighSecurity):
+			log.SecurityLevel = HighSecurity
+		case string(MediumSecurity):
+			log.SecurityLevel = MediumSecurity
+		default:
+			log.SecurityLevel = LowSecurity
 		}
 
 		// Parse the timestamp using the helper function
@@ -215,13 +239,13 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	return logs, totalCount, nil
 }
 
-// GetAuditLogs returns audit logs, optionally filtered by deviceID, with pagination and search
-func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]AuditLog, int, error) {
+// GetAuditLogs returns audit logs, optionally filtered by deviceID and security level, with pagination and search
+func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel string) ([]AuditLog, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
 	// Build the query parts
-	selectClause := "SELECT id, device_id, timestamp, event_time, type, key, message, raw_log FROM audit_logs"
+	selectClause := "SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level FROM audit_logs"
 	countSelectClause := "SELECT COUNT(*) FROM audit_logs"
 	whereClauses := []string{}
 	args := []interface{}{}
@@ -232,6 +256,15 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]Audi
 		whereClauses = append(whereClauses, "device_id = ?")
 		args = append(args, deviceID)
 		countArgs = append(countArgs, deviceID)
+	}
+
+	// Add security level filter if provided
+	if securityLevel != "" {
+		// Convert to lowercase for case-insensitive comparison
+		normalizedSecurityLevel := strings.ToLower(securityLevel)
+		whereClauses = append(whereClauses, "LOWER(security_level) = ?")
+		args = append(args, normalizedSecurityLevel)
+		countArgs = append(countArgs, normalizedSecurityLevel)
 	}
 
 	// Add search term filter if provided
@@ -276,6 +309,7 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]Audi
 		var logEntry AuditLog
 		var timestamp string
 
+		var securityLevelStr string
 		err := rows.Scan(
 			&logEntry.ID,
 			&logEntry.DeviceID,
@@ -285,9 +319,20 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]Audi
 			&logEntry.Key,
 			&logEntry.Message,
 			&logEntry.RawLog,
+			&securityLevelStr,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("error scanning audit log row: %w", err)
+		}
+
+		// Convert string to SecurityLevel type
+		switch securityLevelStr {
+		case string(HighSecurity):
+			logEntry.SecurityLevel = HighSecurity
+		case string(MediumSecurity):
+			logEntry.SecurityLevel = MediumSecurity
+		default:
+			logEntry.SecurityLevel = LowSecurity
 		}
 
 		// Parse the timestamp using the helper function
@@ -296,6 +341,34 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm string) ([]Audi
 	}
 
 	return logs, totalCount, nil
+}
+
+// SecurityLevelFromString converts a string security level to the SecurityLevel type
+func SecurityLevelFromString(level string) SecurityLevel {
+	switch strings.ToLower(level) {
+	case "high":
+		return HighSecurity
+	case "medium":
+		return MediumSecurity
+	default:
+		return LowSecurity
+	}
+}
+
+// InsertAuditLog inserts a new audit log entry with the provided security level
+func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, securityLevel string) (int64, error) {
+	// Insert the log with the provided security level
+	result, err := db.Exec(`
+		INSERT INTO audit_logs 
+		(device_id, event_time, type, key, message, raw_log, security_level) 
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, deviceID, eventTime, logType, key, message, rawLog, securityLevel)
+
+	if err != nil {
+		return 0, fmt.Errorf("error inserting audit log: %w", err)
+	}
+
+	return result.LastInsertId()
 }
 
 // DeleteOldAuditLogs deletes audit logs older than the specified number of days
