@@ -101,28 +101,20 @@ crontab -l 2>/dev/null | grep -v "$MONITORING_SCRIPT" | cat - "$CRON_FILE" | cro
 # Clean up
 rm -f "$CRON_FILE"
 
-echo "✅ Cron jobs set up successfully!"
+echo "Cron jobs set up successfully!"
 
 # Verify the cron jobs were installed
 echo ""
-echo "📋 Installed cron jobs:"
-crontab -l 2>/dev/null | grep "$MONITORING_SCRIPT" || echo "⚠️  No monitoring cron jobs found!"
+echo "Installed cron jobs:"
+crontab -l 2>/dev/null | grep "$MONITORING_SCRIPT" || echo "No monitoring cron jobs found!"
 
 # Show summary
 DEVICE_COUNT=$(echo "$DEVICES" | wc -l)
 echo ""
-echo "📊 Summary:"
+echo "Summary:"
 echo "  • $DEVICE_COUNT devices configured for monitoring"
 echo "  • Monitoring runs every 5 minutes"
 echo "  • Database: $DB_PATH"
-
-echo ""
-echo "🔍 To test the setup:"
-echo "  ./test_cron_monitoring.sh"
-echo ""
-echo "📝 To monitor status:"
-echo "  Check database: ./check_audit_logs.sh"
-echo "  System logs: journalctl -f | grep monitoring"
 
 # Display current cron jobs
 echo -e "\nCurrent cron jobs:"

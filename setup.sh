@@ -2,13 +2,13 @@
 
 set -e
 
-echo "🚀 Starting Agent< Setup"
+echo "Starting Agent< Setup"
 echo "===================================="
 echo "This script will install all required dependencies and set up the AgentLess web application."
 
 # Function to handle errors
 handle_error() {
-  echo "❌ Error: $1"
+  echo "Error: $1"
   exit 1
 }
 
@@ -24,14 +24,14 @@ LOG_DIR="$APP_DIR/logs"
 SCRIPT_DIR="$APP_DIR/scripts"
 
 # Create necessary directories
-echo "📁 Creating required directories..."
+echo "Creating required directories..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOG_DIR"
 mkdir -p "$APP_DIR/tmp"
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-  echo "⚠️  Warning: Running as root. Consider running as a regular user with sudo privileges."
+  echo "Warning: Running as root. Consider running as a regular user with sudo privileges."
 fi
 
 # Detect OS
@@ -41,14 +41,14 @@ if [ -f /etc/os-release ]; then
   OS_VERSION=$VERSION_ID
   OS_ID=$ID
 else
-  echo "❌ Error: Cannot detect operating system"
+  echo "Error: Cannot detect operating system"
   exit 1
 fi
 
-echo "🖥️  Detected OS: $OS_NAME $OS_VERSION"
+echo "Detected OS: $OS_NAME $OS_VERSION"
 
 # Install dependencies based on OS
-echo "📦 Installing system dependencies..."
+echo "Installing system dependencies..."
 
 case $OS_ID in
   ubuntu|debian)
@@ -85,7 +85,7 @@ case $OS_ID in
       jq
     ;;
   *)
-    echo "❌ Unsupported OS: $OS_ID"
+    echo "Unsupported OS: $OS_ID"
     echo "Please install the following packages manually:"
     echo "- Go (1.24 or later)"
     echo "- SQLCipher"
@@ -100,31 +100,31 @@ esac
 
 # Check if Go is installed
 if ! command -v go &> /dev/null; then
-  echo "❌ Error: Go is not installed or not in PATH"
+  echo "Error: Go is not installed or not in PATH"
   echo "Please install Go 1.24 or later"
   exit 1
 fi
 
 # Check Go version
 GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-echo "🔍 Detected Go version: $GO_VERSION"
+echo "Detected Go version: $GO_VERSION"
 
 # Compare versions (simple check)
 if [[ "$GO_VERSION" < "1.24" ]]; then
-  echo "⚠️  Warning: Go version $GO_VERSION is older than the recommended version (1.24)"
+  echo "Warning: Go version $GO_VERSION is older than the recommended version (1.24)"
   echo "Some features may not work correctly"
 fi
 
 # Check if SQLCipher is installed
 if ! command -v sqlcipher &> /dev/null; then
-  echo "❌ Error: SQLCipher is not installed or not in PATH"
+  echo "Error: SQLCipher is not installed or not in PATH"
   echo "Please install SQLCipher"
   exit 1
 fi
 
 # Set up Go environment if needed
 if [ -z "$GOPATH" ]; then
-  echo "🔧 Setting up Go environment..."
+  echo "Setting up Go environment..."
   export GOPATH="$HOME/go"
   mkdir -p "$GOPATH"
   
@@ -137,7 +137,7 @@ fi
 
 # Create .env file if it doesn't exist
 if [ ! -f "$APP_DIR/.env" ]; then
-  echo "📝 Creating default .env file..."
+  echo "Creating default .env file..."
   
   # Generate a secure random key for session
   SESSION_KEY=$(openssl rand -hex 32)
@@ -154,13 +154,13 @@ SESSION_SECRET=$SESSION_KEY
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
 EOF
-  echo "✅ Created .env file with secure random keys"
-  echo "⚠️  Please change the default admin password in the .env file"
+  echo "Created .env file with secure random keys"
+  echo "Please change the default admin password in the .env file"
 fi
 
 # Initialize the database directory
 if [ ! -f "$DATA_DIR/site.db" ]; then
-  echo "🗄️  Initializing database directory..."
+  echo "Initializing database directory..."
   mkdir -p "$DATA_DIR"
     touch "$DATA_DIR/site.db"
   
@@ -170,29 +170,29 @@ if [ ! -f "$DATA_DIR/site.db" ]; then
 fi
 
 # Make scripts executable
-echo "🔧 Setting script permissions..."
+echo "Setting script permissions..."
 chmod +x "$SCRIPT_DIR"/*.sh
 
 # Install Go dependencies
-echo "📚 Installing Go dependencies..."
+echo "Installing Go dependencies..."
 cd "$APP_DIR"
 go mod download
 if [ $? -ne 0 ]; then
-  echo "❌ Error downloading Go dependencies"
+  echo "Error downloading Go dependencies"
   exit 1
 fi
 
 # Build the application
-echo "🔨 Building the application..."
+echo "Building the application..."
 go build -o agentless
 if [ $? -ne 0 ]; then
-  echo "❌ Error building the application"
+  echo "Error building the application"
     exit 1
 fi
 
 # Set up SSH keys for monitoring if they don't exist
 if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then
-  echo "🔑 Generating SSH keys for monitoring..."
+  echo "Generating SSH keys for monitoring..."
   ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/ids_monitoring_key" -N "" -C "ids_monitoring"
   chmod 600 "$HOME/.ssh/ids_monitoring_key"
   chmod 644 "$HOME/.ssh/ids_monitoring_key.pub"
@@ -200,25 +200,25 @@ fi
 
 # Check if audit is installed and configured
 if command -v auditctl &> /dev/null; then
-  echo "✅ Audit system is installed"
+  echo "Audit system is installed"
 else
-  echo "⚠️  Warning: Audit system (auditd) is not installed or not in PATH"
+  echo "Warning: Audit system (auditd) is not installed or not in PATH"
   echo "Some monitoring features may not work correctly"
 fi
 
 # Create a systemd service file for the application
 if [ -d "/etc/systemd/system" ]; then
-  echo "📄 Creating systemd service file..."
+  echo "Creating systemd service file..."
   
   # Check if service is masked and unmask it if needed
   if systemctl is-enabled agentless.service 2>&1 | grep -q "masked"; then
-    echo "🔄 Unmasking existing service..."
+    echo "Unmasking existing service..."
     sudo systemctl unmask agentless.service
   fi
   
   # Remove old service if it exists
   if [ -f "/etc/systemd/system/agentless.service" ]; then
-    echo "🔄 Removing existing service file..."
+    echo "Removing existing service file..."
     sudo rm -f "/etc/systemd/system/agentless.service"
   fi
   
@@ -244,24 +244,24 @@ Environment=GOPATH=$GOPATH
 WantedBy=multi-user.target
 EOF"
 
-  echo "🔄 Reloading systemd..."
+  echo "Reloading systemd..."
   sudo systemctl daemon-reload
   
-  echo "✅ Systemd service created"
+  echo "Systemd service created"
   echo "To start the service: sudo systemctl start agentless"
   echo "To enable on boot: sudo systemctl enable agentless"
 fi
 
 echo ""
-echo "✅ Setup completed successfully!"
+echo "Setup completed successfully!"
 echo ""
-echo "📋 Next steps:"
+echo "Next steps:"
 echo "  1. Update the .env file with secure credentials"
 echo "  2. Start the application directly: ./agentless"
 echo "  3. Or use systemd: sudo systemctl start agentless"
 echo "  4. Access the web interface at: http://localhost:8080"
 echo ""
-echo "🚀 Would you like to start the application now? (y/n)"
+echo "Would you like to start the application now? (y/n)"
 read -r start_now
 
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
@@ -278,15 +278,15 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
     # Check if application started successfully
     sleep 2
     if ps -p $APP_PID > /dev/null; then
-      echo "✅ Application started! Access at http://localhost:8080"
+      echo "Application started! Access at http://localhost:8080"
       echo "  - Logs are available at: $LOG_DIR/app.log"
       echo "  - Process ID: $APP_PID"
       echo "  - To stop: kill $APP_PID or pkill -f agentless"
     else
-      echo "❌ Application failed to start. Check logs at: $LOG_DIR/app.log"
+      echo "Application failed to start. Check logs at: $LOG_DIR/app.log"
     fi
   else
-    echo "❌ Application binary not found. Build may have failed."
+    echo "Application binary not found. Build may have failed."
   fi
 fi
 echo ""
