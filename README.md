@@ -33,6 +33,10 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+## Adding custom rules
+If you wish to add custom audit rules, all you have to do is to edit the enlist.sh script, which is responsible for rule creation on the target system.
+You can find a guide for audit rules [here](https://www.redhat.com/en/blog/configure-linux-auditing-auditd).
+
 
 ## Hardening
 Make sure to at least somewhat harden your host VM.
