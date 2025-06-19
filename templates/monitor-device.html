@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "content"}}
-<div class="container">
+<div class="container" style="width: 150%; margin-left: -25%;">
     <h2>Device Monitoring: {{.Device.Name}}</h2>
     
     {{if .Error}}
@@ -109,7 +109,7 @@
                             <td>{{$log.Type}}</td>
                             <td>{{$log.Key}}</td>
                             <td><div class="log-message">{{$log.Message}}</div></td>
-                            <td><pre class="raw-log">{{$log.RawLog}}</pre></td>
+                            <td><pre style="min-width: 500px;" class="raw-log">{{$log.RawLog}}</pre></td>
                         </tr>
                         {{else}}
                         <tr>
@@ -181,7 +181,7 @@
             </ol>
             <div class="alert alert-info mt-3">
                 <h4>Important!</h4>
-                <p>If this is the first device you're setting up, you must run the cron monitoring script to start automatically monitoring your devices (may require sudo):</p>
+                <p>Each time you add a new device, you must run the cron monitoring script to start automatically monitoring your devices (may require sudo):</p>
                 <pre class="code-block">./scripts/setup-monitoring-cron.sh</pre>
                 <p>This will set up a cron job on your server that runs the monitoring script automatically.</p>
             </div>

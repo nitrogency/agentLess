@@ -52,6 +52,7 @@ type AuditLog struct {
 	Message       string
 	RawLog        string
 	SecurityLevel SecurityLevel
+	AuditID       string
 }
 
 // InitAuditLogTable initializes the audit_logs table
@@ -67,6 +68,7 @@ func InitAuditLogTable() error {
 			message TEXT,
 			raw_log TEXT,
 			security_level TEXT DEFAULT 'low',
+			audit_id TEXT,
 			FOREIGN KEY (device_id) REFERENCES devices(id)
 		)
 	`)
@@ -75,18 +77,28 @@ func InitAuditLogTable() error {
 		return err
 	}
 
-	// Create index on device_id and timestamp
+	// Add audit_id column if it doesn't exist (for existing databases)
 	_, err = db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_audit_logs_device_time ON audit_logs(device_id, timestamp)
+		ALTER TABLE audit_logs ADD COLUMN audit_id TEXT
 	`)
+	// Ignore error if column already exists
+	
+	// Create index on audit_id for faster duplicate checking
+	_, err = db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_audit_id ON audit_logs(audit_id)
+	`)
+	
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
 }
 
 // GetAllAuditLogs returns all audit logs
 func GetAllAuditLogs() ([]AuditLog, error) {
 	rows, err := db.Query(`
-		SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
+		SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level, audit_id
 		FROM audit_logs
 		ORDER BY timestamp DESC
 	`)
@@ -99,6 +111,7 @@ func GetAllAuditLogs() ([]AuditLog, error) {
 	for rows.Next() {
 		var log AuditLog
 		var timestamp string
+		var securityLevelStr string
 
 		err := rows.Scan(
 			&log.ID,
@@ -109,13 +122,19 @@ func GetAllAuditLogs() ([]AuditLog, error) {
 			&log.Key,
 			&log.Message,
 			&log.RawLog,
+			&securityLevelStr,
+			&log.AuditID,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		// Parse the timestamp using the helper function
+		// Parse timestamp
 		log.Timestamp = parseTimestamp(timestamp)
+		
+		// Convert security level string to SecurityLevel type
+		log.SecurityLevel = SecurityLevel(securityLevelStr)
+
 		logs = append(logs, log)
 	}
 
@@ -135,7 +154,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	if searchTerm != "" {
 		// If search term is provided, filter by it
 		query = `
-			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
+			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level, audit_id
 			FROM audit_logs
 			WHERE device_id = ? AND (
 				type LIKE ? OR 
@@ -162,7 +181,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 	} else {
 		// If no search term, get all logs for the device
 		query = `
-			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level
+			SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level, audit_id
 			FROM audit_logs
 			WHERE device_id = ?
 			ORDER BY timestamp DESC
@@ -216,6 +235,7 @@ func GetAuditLogsByDeviceID(deviceID int64, page, pageSize int, searchTerm strin
 			&log.Message,
 			&log.RawLog,
 			&securityLevelStr,
+			&log.AuditID,
 		)
 		if err != nil {
 			return nil, 0, err
@@ -245,7 +265,7 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel 
 	offset := (page - 1) * pageSize
 
 	// Build the query parts
-	selectClause := "SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level FROM audit_logs"
+	selectClause := "SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level, audit_id FROM audit_logs"
 	countSelectClause := "SELECT COUNT(*) FROM audit_logs"
 	whereClauses := []string{}
 	args := []interface{}{}
@@ -320,6 +340,7 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel 
 			&logEntry.Message,
 			&logEntry.RawLog,
 			&securityLevelStr,
+			&logEntry.AuditID,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("error scanning audit log row: %w", err)
@@ -356,13 +377,13 @@ func SecurityLevelFromString(level string) SecurityLevel {
 }
 
 // InsertAuditLog inserts a new audit log entry with the provided security level
-func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, securityLevel string) (int64, error) {
+func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, securityLevel, auditID string) (int64, error) {
 	// Insert the log with the provided security level
 	result, err := db.Exec(`
 		INSERT INTO audit_logs 
-		(device_id, event_time, type, key, message, raw_log, security_level) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, deviceID, eventTime, logType, key, message, rawLog, securityLevel)
+		(device_id, event_time, type, key, message, raw_log, security_level, audit_id) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, deviceID, eventTime, logType, key, message, rawLog, securityLevel, auditID)
 
 	if err != nil {
 		return 0, fmt.Errorf("error inserting audit log: %w", err)

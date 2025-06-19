@@ -211,6 +211,13 @@ if ! id $REMOTE_USER &>/dev/null; then
     fi
 fi
 
+# Add the monitoring user to the adm group for audit log access
+if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+    echo "\$SUDO_PASSWORD" | sudo -S usermod -a -G adm $REMOTE_USER
+else
+    sudo usermod -a -G adm $REMOTE_USER
+fi
+
 # Set up the .ssh directory
 sudo mkdir -p /home/$REMOTE_USER/.ssh
 echo "\$SSH_PUB_KEY" | sudo tee /home/$REMOTE_USER/.ssh/authorized_keys > /dev/null
@@ -307,13 +314,6 @@ if command -v auditctl >/dev/null 2>&1; then
     AUDITD_INSTALLED=true
     echo "✅ Confirmed auditctl is available"
     
-    # Temporarily disable audit logging during setup
-    echo "Temporarily disabling audit logging during setup..."
-    if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
-        echo "\$SUDO_PASSWORD" | sudo -S auditctl -e 0 || echo "Warning: Could not disable audit logging"
-    else
-        sudo auditctl -e 0 || echo "Warning: Could not disable audit logging"
-    fi
     # Check if auditd service is running
     if ! sudo systemctl status auditd >/dev/null 2>&1; then
         echo "Starting auditd service..."
@@ -353,11 +353,32 @@ if command -v auditctl >/dev/null 2>&1; then
 ## Set failure mode to syslog
 -f 1
 
-# Exclude noisy CWD messages
+# Exclude noisy and irrelevant message types
 -a always,exclude -F msgtype=CWD
+-a always,exclude -F msgtype=EOE
+-a always,exclude -F msgtype=PROCTITLE -F exe=/usr/lib/systemd/systemd
+-a always,exclude -F msgtype=SYSCALL -F exe=/usr/lib/systemd/systemd
+
+# Exclude common system processes that generate noise
+-a never,exit -F exe=/usr/lib/systemd/systemd
+-a never,exit -F exe=/usr/lib/systemd/systemd-resolved
+-a never,exit -F exe=/usr/lib/systemd/systemd-networkd
+-a never,exit -F exe=/usr/lib/systemd/systemd-timesyncd
+-a never,exit -F exe=/usr/lib/systemd/systemd-logind
+
+# Exclude snap and package manager noise
+-a never,exit -F exe=/usr/bin/snap
+-a never,exit -F exe=/usr/lib/snapd/snapd
+
+# Exclude normal user processes that aren't security relevant
+-a never,exit -F exe=/bin/ls
+-a never,exit -F exe=/usr/bin/find
+-a never,exit -F exe=/bin/grep
+-a never,exit -F exe=/usr/bin/awk
+-a never,exit -F exe=/bin/sed
 
 # Audit self-monitoring rules
--w /var/log/audit/ -k audit_logs
+-w /var/log/audit/ -p wa -k audit_logs
 -w /etc/audit/ -p wa -k audit_tools
 -w /sbin/auditctl -p x -k audit_tools
 -w /sbin/auditd -p x -k audit_tools
@@ -371,12 +392,8 @@ if command -v auditctl >/dev/null 2>&1; then
 -w /etc/ld.so.conf.d -p wa -k lib_path_settings
 
 # Kernel module operations
--a always,exit -F arch=b32 -S init_module -k kernel_module
--a always,exit -F arch=b32 -S finit_module -k kernel_module
--a always,exit -F arch=b32 -S delete_module -k kernel_module
--a always,exit -F arch=b64 -S init_module -k kernel_module
--a always,exit -F arch=b64 -S finit_module -k kernel_module
--a always,exit -F arch=b64 -S delete_module -k kernel_module
+-a always,exit -F arch=b32 -S init_module -S finit_module -S delete_module -k kernel_module
+-a always,exit -F arch=b64 -S init_module -S finit_module -S delete_module -k kernel_module
 
 # Systemd monitoring
 -w /bin/systemctl -p x -k systemd_monitoring
@@ -405,7 +422,7 @@ if command -v auditctl >/dev/null 2>&1; then
 -w /etc/cron.monthly/ -p wa -k cron_events
 -w /etc/cron.weekly/ -p wa -k cron_events
 -w /etc/crontab -p wa -k cron_events
--w /var/spool/cron/ -k cron_events
+-w /var/spool/cron/ -p wa -k cron_events
 
 # Network and security tools
 -w /usr/bin/wget -p x -k suspicious
@@ -417,7 +434,7 @@ if command -v auditctl >/dev/null 2>&1; then
 # User and privilege monitoring
 -w /etc/passwd -p wa -k user_list
 -w /etc/group -p wa -k user_group
--w /etc/shadow -k user_pass
+-w /etc/shadow -p wa -k user_pass
 -w /etc/sudoers -p rw -k sudoers_change
 -w /etc/sudoers.d/ -p rw -k sudoers_change
 -w /usr/bin/sudo -p x -k privilege_esc
@@ -425,6 +442,152 @@ if command -v auditctl >/dev/null 2>&1; then
 # File deletion monitoring
 -a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
 -a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
+
+# System call monitoring for network environment changes
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k net_environment_exe
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k net_environment_exe
+
+# Time-related events monitoring
+-a exit,always -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time_change
+-a exit,always -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time_change
+
+# Mount operations monitoring
+-a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount_operations
+-a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount_operations
+
+# Session and user profile monitoring
+-w /var/run/utmp -p wa -k session_info
+-w /var/log/btmp -p wa -k session_info
+-w /var/log/wtmp -p wa -k session_info
+-w /etc/profile.d/ -p wa -k user_profiles
+-w /etc/profile -p wa -k user_profiles
+-w /etc/shells -p wa -k login_shells
+
+# External media, SELinux and permission modification monitoring
+-w /media/ -p rwxa -k external_media
+-w /etc/selinux/ -p wa -k MAC_policy
+-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod
+-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -k perm_mod
+-a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod
+-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k perm_mod
+-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -k perm_mod
+-a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod
+-w /bin/chmod -p x -k perm_mod
+-w /bin/chown -p x -k perm_mod
+-w /usr/bin/xattr -p x -k perm_mod
+
+# Login configuration and privilege escalation monitoring
+-w /etc/login.defs -p wa -k login
+-w /bin/su -p x -k privilege_esc
+
+# Root command execution monitoring
+-a always,exit -F arch=b32 -F euid=0 -S execve -k root_commands
+-a always,exit -F arch=b64 -F euid=0 -S execve -k root_commands
+
+# User and group management monitoring
+-w /etc/gshadow -p wa -k group_accounts
+-w /etc/security/opasswd -p wa -k passwd_history
+-w /usr/bin/passwd -p x -k passwd_change
+-w /usr/bin/gpasswd -p x -k user_add
+-w /usr/sbin/groupadd -p x -k group_add
+-w /usr/sbin/addgroup -p x -k user_add
+-w /usr/sbin/groupmod -p x -k group_modification
+-w /usr/sbin/adduser -p x -k user_add
+-w /usr/sbin/useradd -p x -k user_add
+-w /usr/sbin/userdel -p x -k user_del
+-w /usr/sbin/deluser -p x -k user_del
+-w /usr/sbin/usermod -p x -k user_modification
+-w /usr/sbin/groupdel -p x -k group_del
+-w /usr/sbin/delgroup -p x -k group_del
+
+# Network configuration monitoring
+-w /etc/hosts -p wa -k network_config
+-w /etc/hostname -p wa -k network_config
+-w /etc/resolv.conf -p wa -k network_config
+-w /etc/network/ -p wa -k network_config
+-w /etc/netplan/ -p wa -k network_config
+
+# SSH configuration monitoring
+-w /etc/ssh/sshd_config -p wa -k ssh_config
+-w /etc/ssh/ssh_config -p wa -k ssh_config
+-w /root/.ssh/ -p wa -k ssh_keys
+
+# Package management monitoring
+-w /usr/bin/apt -p x -k package_management
+-w /usr/bin/apt-get -p x -k package_management
+-w /usr/bin/dpkg -p x -k package_management
+-w /usr/bin/snap -p x -k package_management
+-w /usr/bin/apt-add-repository -p x -k software_mgmt
+
+# Service management monitoring
+-w /etc/init.d/ -p wa -k service_management
+-w /lib/systemd/ -p wa -k service_management
+
+# Log file monitoring
+-w /var/log/auth.log -p wa -k auth_logs
+-w /var/log/syslog -p wa -k system_logs
+-w /var/log/kern.log -p wa -k kernel_logs
+
+# Reconnaissance monitoring
+-w /usr/bin/whoami -p x -k reconnaissance
+-w /usr/sbin/ifconfig -p x -k reconnaissance
+-w /usr/bin/id -p x -k reconnaissance
+-w /bin/hostname -p x -k reconnaissance
+-w /bin/uname -p x -k reconnaissance
+-w /etc/issue -p r -k reconnaissance
+-w /proc/version -p r -k reconnaissance
+-w /proc/sys/kernel/domainname -p r -k reconnaissance
+-w /proc/swaps -p r -k reconnaissance
+-w /proc/partitions -p r -k reconnaissance
+-w /proc/cpuinfo -p r -k reconnaissance
+-w /proc/self/mounts -p r -k reconnaissance
+
+# Suspicious activity monitoring (expanded)
+-w /usr/bin/base64 -p x -k suspicious
+-w /etc/alternatives/nc -p x -k suspicious
+-w /bin/netcat -p x -k suspicious
+-w /etc/alternatives/netcat -p x -k suspicious
+-w /usr/bin/scp -p x -k suspicious
+-w /usr/bin/sftp -p x -k suspicious
+-w /usr/bin/ftp -p x -k suspicious
+-w /etc/alternatives/ftp -p x -k suspicious
+-w /usr/bin/dmesg -p x -k suspicious
+-w /usr/bin/ps -p x -k suspicious
+-w /usr/bin/pstree -p x -k suspicious
+-w /usr/bin/top -p x -k suspicious
+-w /usr/bin/htop -p x -k suspicious
+-w /usr/bin/kill -p x -k suspicious
+-w /usr/bin/killall -p x -k suspicious
+-w /usr/bin/last -p x -k suspicious
+-w /usr/bin/lsof -p x -k suspicious
+-w /usr/bin/kmod -p x -k suspicious
+-w /usr/sbin/arp -p x -k suspicious
+-w /bin/bash -p x -k suspicious
+-w /etc/alternatives/arptables -p x -k suspicious
+-w /usr/sbin/arptables -p x -k suspicious
+
+# Unsuccessful write attempt monitoring
+-a always,exit -F dir=/etc -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+-a always,exit -F dir=/var -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+-a always,exit -F dir=/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+-a always,exit -F dir=/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+-a always,exit -F dir=/usr/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+-a always,exit -F dir=/usr/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
+
+# Enhanced file deletion and renaming monitoring
+-a always,exit -F arch=b32 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b32 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b32 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b32 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b32 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b64 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b64 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b64 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b64 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files
+-a always,exit -F arch=b64 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files
+
+# Make the configuration immutable (optional - uncomment if desired)
+# -e 2
 AUDIT_EOF
 
     # Restart audit services to apply new rules
@@ -443,170 +606,16 @@ AUDIT_EOF
     echo "Verifying audit rules are loaded..."
     sudo auditctl -l || echo "⚠️ Warning: Could not verify audit rules"
     
-    # Force reload of audit rules
-    echo "Forcing reload of audit rules..."
-    sudo auditctl -R /etc/audit/rules.d/audit.rules 2>/dev/null || echo "⚠️ Warning: Could not reload audit rules"
+    # Force reload of audit rules from the configuration file
+    echo "Forcing reload of audit rules from configuration file..."
+    sudo auditctl -R /etc/audit/rules.d/audit.rules || echo "❌ Error: Failed to reload audit rules from /etc/audit/rules.d/audit.rules. Please check output above for details."
 else
     echo "❌ Skipping audit rules setup as auditctl command is not available."
     AUDITD_INSTALLED=false
 fi
 
-echo "Audit rules configured successfully"
-
-# Add audit rules for system calls
-echo "Adding audit rules for system calls..."
-sudo auditctl -a always,exit -F arch=b32 -S sethostname -S setdomainname -k net_environment_exe 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S sethostname -S setdomainname -k net_environment_exe 2>/dev/null || true
-
-# Add audit rules for time-related events
-echo "Adding audit rules for time-related events..."
-sudo auditctl -a exit,always -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time_change 2>/dev/null || true
-sudo auditctl -a exit,always -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time_change 2>/dev/null || true
-
-# Add audit rules for mount operations
-echo "Adding audit rules for mount operations..."
-sudo auditctl -a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount_operations 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount_operations 2>/dev/null || true
-
-# Add audit rules for session and user profile monitoring
-echo "Adding audit rules for session and user profile monitoring..."
-sudo auditctl -w /var/run/utmp -p wa -k session_info 2>/dev/null || true
-sudo auditctl -w /var/log/btmp -p wa -k session_info 2>/dev/null || true
-sudo auditctl -w /var/log/wtmp -p wa -k session_info 2>/dev/null || true
-sudo auditctl -w /etc/profile.d/ -p wa -k user_profiles 2>/dev/null || true
-sudo auditctl -w /etc/profile -p wa -k user_profiles 2>/dev/null || true
-sudo auditctl -w /etc/shells -p wa -k login_shells 2>/dev/null || true
-
-# Add audit rules for external media, SELinux and permission modification monitoring
-echo "Adding audit rules for external media, SELinux and permission modification monitoring..."
-sudo auditctl -w /media/ -p rwxa -k external_media 2>/dev/null || true
-sudo auditctl -w /etc/selinux/ -p wa -k MAC_policy 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -k perm_mod 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k perm_mod 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -k perm_mod 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod 2>/dev/null || true
-sudo auditctl -w /bin/chmod -p x -k perm_mod 2>/dev/null || true
-sudo auditctl -w /bin/chown -p x -k perm_mod 2>/dev/null || true
-sudo auditctl -w /usr/bin/xattr -p x -k perm_mod 2>/dev/null || true
-
-# Add audit rules for login configuration and privilege escalation monitoring
-echo "Adding audit rules for login configuration and privilege escalation monitoring..."
-sudo auditctl -w /etc/login.defs -p wa -k login 2>/dev/null || true
-sudo auditctl -w /bin/su -p x -k privilege_esc 2>/dev/null || true
-sudo auditctl -w /usr/bin/sudo -p x -k privilege_esc 2>/dev/null || true
-
-# Add audit rules for root command execution monitoring
-echo "Adding audit rules for root command execution monitoring..."
-sudo auditctl -a always,exit -F arch=b32 -F euid=0 -S execve -k root_commands 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -F euid=0 -S execve -k root_commands 2>/dev/null || true
-
-# Add audit rules for user and group management monitoring
-echo "Adding audit rules for user and group management monitoring..."
-sudo auditctl -w /etc/group -p wa -k user_group 2>/dev/null || true
-sudo auditctl -w /etc/passwd -p wa -k user_list 2>/dev/null || true
-sudo auditctl -w /etc/gshadow -k group_accounts 2>/dev/null || true
-sudo auditctl -w /etc/shadow -k user_pass 2>/dev/null || true
-sudo auditctl -w /etc/security/opasswd -k passwd_history 2>/dev/null || true
-sudo auditctl -w /usr/bin/passwd -p x -k passwd_change 2>/dev/null || true
-sudo auditctl -w /usr/bin/gpasswd -p x -k user_add 2>/dev/null || true
-sudo auditctl -w /usr/sbin/groupadd -p x -k group_add 2>/dev/null || true
-sudo auditctl -w /usr/sbin/addgroup -p x -k user_add 2>/dev/null || true
-sudo auditctl -w /usr/sbin/groupmod -p x -k group_modification 2>/dev/null || true
-sudo auditctl -w /usr/sbin/adduser -p x -k user_add 2>/dev/null || true
-sudo auditctl -w /usr/sbin/useradd -p x -k user_add 2>/dev/null || true
-sudo auditctl -w /usr/sbin/userdel -p x -k user_del 2>/dev/null || true
-sudo auditctl -w /usr/sbin/deluser -p x -k user_del 2>/dev/null || true
-sudo auditctl -w /usr/sbin/usermod -p x -k user_modification 2>/dev/null || true
-sudo auditctl -w /etc/sudoers -p rw -k sudoers_change 2>/dev/null || true
-sudo auditctl -w /etc/sudoers.d/ -p rw -k sudoers_change 2>/dev/null || true
-
-# Add audit rules for software management monitoring
-echo "Adding audit rules for software management monitoring..."
-sudo auditctl -w /usr/bin/apt -p x -k software_mgmt 2>/dev/null || true
-sudo auditctl -w /usr/bin/apt-add-repository -p x -k software_mgmt 2>/dev/null || true
-sudo auditctl -w /usr/bin/apt-get -p x -k software_mgmt 2>/dev/null || true
-
-# Add audit rules for reconnaissance monitoring
-echo "Adding audit rules for reconnaissance monitoring..."
-sudo auditctl -w /usr/bin/whoami -p x -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /usr/sbin/ifconfig -p x -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /usr/bin/id -p x -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /bin/hostname -p x -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /bin/uname -p x -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /etc/issue -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /etc/hostname -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/version -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/sys/kernel/domainname -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/swaps -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/partitions -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/cpuinfo -p r -k reconnaissance 2>/dev/null || true
-sudo auditctl -w /proc/self/mounts -p r -k reconnaissance 2>/dev/null || true
-
-# Add audit rules for suspicious activity monitoring
-echo "Adding audit rules for suspicious activity monitoring..."
-sudo auditctl -w /usr/bin/wget -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/curl -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/base64 -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/nc -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /bin/nc -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /etc/alternatives/nc -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /bin/netcat -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /etc/alternatives/netcat -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/ssh -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/scp -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/sftp -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/ftp -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /etc/alternatives/ftp -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/dmesg -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/ps -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/pstree -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/top -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/htop -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/kill -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/killall -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/last -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/lsof -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/bin/kmod -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/sbin/arp -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /bin/bash -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /etc/alternatives/arptables -p x -k suspicious 2>/dev/null || true
-sudo auditctl -w /usr/sbin/arptables -p x -k suspicious 2>/dev/null || true
-
-# Add audit rules for unsuccessful write attempt monitoring
-echo "Adding audit rules for unsuccessful write attempt monitoring..."
-sudo auditctl -a always,exit -F dir=/etc -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-sudo auditctl -a always,exit -F dir=/var -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-sudo auditctl -a always,exit -F dir=/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-sudo auditctl -a always,exit -F dir=/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-sudo auditctl -a always,exit -F dir=/usr/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-sudo auditctl -a always,exit -F dir=/usr/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write 2>/dev/null || true
-
-# Add audit rules for file deletion and renaming monitoring
-echo "Adding audit rules for file deletion and renaming monitoring..."
-sudo auditctl -a always,exit -F arch=b32 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b32 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-sudo auditctl -a always,exit -F arch=b64 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files 2>/dev/null || true
-
-# Verify that audit rules are correctly configured
-echo "Audit rules verification: OK"
-
-# Restart auditd to apply changes
-sudo systemctl restart auditd
-echo "Audit rules configured successfully"
-
-# Verify the authorized_keys file
-echo "Verifying SSH key setup:"
-sudo ls -la /home/$REMOTE_USER/.ssh/
-sudo cat /home/$REMOTE_USER/.ssh/authorized_keys
+echo "✅ All audit rules configured as persistent in /etc/audit/rules.d/audit.rules"
+echo "✅ Rules will automatically load on system boot and service restart"
 
 # Re-enable audit logging after setup is complete
 echo "Re-enabling audit logging..."
@@ -664,53 +673,8 @@ EOF
         echo "Debug information from SSH connection attempt:"
         cat /tmp/ssh_debug.log
         echo ""
-        echo "Trying to fix common issues..."
-        
-        # Try to fix common issues
-        ssh -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -t -p "$SERVER_PORT" "$LOGIN_USER@$TARGET_IP" "
-            sudo chmod 700 /home/$REMOTE_USER/.ssh
-            sudo chmod 600 /home/$REMOTE_USER/.ssh/authorized_keys
-            sudo chown -R $REMOTE_USER:$REMOTE_GROUP /home/$REMOTE_USER/.ssh
-            
-            # Check if sshd_config allows PubkeyAuthentication
-            echo \"Checking SSH server configuration...\"
-            sudo grep -E 'PubkeyAuthentication|PasswordAuthentication|AuthorizedKeysFile' /etc/ssh/sshd_config
-            
-            # Ensure SSH server allows key authentication
-            echo \"Ensuring SSH server allows key authentication...\"
-            sudo sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            sudo sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            
-            # Restart SSH service to apply changes
-            echo \"Restarting SSH service...\"
-            if sudo systemctl restart ssh 2>/dev/null; then
-                echo \"SSH service restarted successfully.\"
-            elif sudo systemctl restart sshd 2>/dev/null; then
-                echo \"SSHD service restarted successfully.\"
-            else
-                echo \"⚠️ Warning: Could not restart SSH service. This is expected on some systems like Ubuntu 25.04 that use socket activation.\"
-                echo \"SSH changes will be applied on next connection.\"
-            fi
-            
-            # Try copying the key directly
-            echo \"Copying the key directly...\"
-            sudo bash -c 'echo \"$SSH_PUB_KEY\" > /home/$REMOTE_USER/.ssh/authorized_keys'
-            sudo chmod 600 /home/$REMOTE_USER/.ssh/authorized_keys
-            sudo chown $REMOTE_USER:$REMOTE_GROUP /home/$REMOTE_USER/.ssh/authorized_keys
-        "
-        
-        # Try again with verbose output
-        echo "Trying connection again with verbose output..."
-        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$MONITORING_SSH_KEY_PATH" -p "$SERVER_PORT" -v "$REMOTE_USER@$TARGET_IP" "echo 'SSH connection successful!'; exit" 2>&1 | tee /tmp/ssh_debug.log; then
-            echo "✅ Fixed the issue! Monitoring user setup successful!"
-        else
-            echo "❌ Still unable to connect with the monitoring user."
-            echo "Debug information from second SSH connection attempt:"
-            cat /tmp/ssh_debug.log
-            echo ""
-            echo "Please check the SSH configuration manually."
-            exit 1
-        fi
+        echo "Please check the SSH configuration manually."
+        exit 1
     fi
     
     # Re-enable audit logging is handled in the script

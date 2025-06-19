@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -12,14 +11,14 @@ import (
 
 // User represents a user in the system
 type User struct {
-	ID                int64     `json:"id"`
-	Username          string    `json:"username"`
-	IsAdmin           bool      `json:"is_admin"`
-	CanAddDevices     bool      `json:"can_add_devices"`
-	CanModifyDevices  bool      `json:"can_modify_devices"`
-	CanAddUsers       bool      `json:"can_add_users"`
-	CanModifyUsers    bool      `json:"can_modify_users"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID               int64     `json:"id"`
+	Username         string    `json:"username"`
+	IsAdmin          bool      `json:"is_admin"`
+	CanAddDevices    bool      `json:"can_add_devices"`
+	CanModifyDevices bool      `json:"can_modify_devices"`
+	CanAddUsers      bool      `json:"can_add_users"`
+	CanModifyUsers   bool      `json:"can_modify_users"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // InitUserTable creates the users table if it doesn't exist
@@ -39,43 +38,7 @@ func InitUserTable() error {
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	`)
 
-	// Add new permission columns if they don't exist (for backward compatibility)
-	_, err = db.Exec(`
-		PRAGMA table_info(users);
-	`)
 	if err != nil {
-		return err
-	}
-
-	// Add can_add_devices column if it doesn't exist
-	_, err = db.Exec(`
-		ALTER TABLE users ADD COLUMN can_add_devices INTEGER NOT NULL DEFAULT 0;
-	`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return err
-	}
-
-	// Add can_modify_devices column if it doesn't exist
-	_, err = db.Exec(`
-		ALTER TABLE users ADD COLUMN can_modify_devices INTEGER NOT NULL DEFAULT 0;
-	`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return err
-	}
-	
-	// Add can_add_users column if it doesn't exist
-	_, err = db.Exec(`
-		ALTER TABLE users ADD COLUMN can_add_users INTEGER NOT NULL DEFAULT 0;
-	`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return err
-	}
-	
-	// Add can_modify_users column if it doesn't exist
-	_, err = db.Exec(`
-		ALTER TABLE users ADD COLUMN can_modify_users INTEGER NOT NULL DEFAULT 0;
-	`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return err
 	}
 

@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "content"}}
-<div class="container">
+<div class="container" style="width: 150%; margin-left: -25%;">
     <h2>System Audit Logs</h2>
 
     {{if .Error}}
@@ -92,7 +92,7 @@
                         <td>{{.Key}}</td>
                         <td><span class="security-badge security-{{.SecurityLevel}}">{{.SecurityLevel}}</span></td>
                         <td><div class="log-message">{{.Message}}</div></td>
-                        <td><pre class="raw-log">{{.RawLog}}</pre></td>
+                        <td><pre style="min-width: 500px;" class="raw-log">{{.RawLog}}</pre></td>
                     </tr>
                     {{else}}
                     <tr>
