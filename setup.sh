@@ -1,13 +1,21 @@
 #!/bin/bash
-#
-# Agent< Web App Setup Script
-# This script installs all required dependencies for the Agent< web application
-#
 
 set -e
 
 echo "🚀 Starting Agent< Setup"
 echo "===================================="
+echo "This script will install all required dependencies and set up the AgentLess web application."
+
+# Function to handle errors
+handle_error() {
+  echo "❌ Error: $1"
+  exit 1
+}
+
+# Function to check if command exists
+command_exists() {
+  command -v "$1" &> /dev/null
+}
 
 # Configuration
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -130,24 +138,31 @@ fi
 # Create .env file if it doesn't exist
 if [ ! -f "$APP_DIR/.env" ]; then
   echo "📝 Creating default .env file..."
+  
+  # Generate a secure random key for session
+  SESSION_KEY=$(openssl rand -hex 32)
+  
+  # Generate a secure random key for database encryption
+  DB_KEY=$(openssl rand -hex 32)
+  
   cat > "$APP_DIR/.env" << EOF
 # AgentLess Web App Configuration
 PORT=8080
 DB_PATH=data/site.db
-DB_ENCRYPTION_KEY=default-dev-encryption-key-do-not-use-in-production
-SESSION_SECRET=$(openssl rand -hex 32)
+DB_ENCRYPTION_KEY=$DB_KEY
+SESSION_SECRET=$SESSION_KEY
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
 EOF
-  echo "⚠️  Created default .env file with insecure credentials"
-  echo "⚠️  Please change the default admin password and encryption key"
+  echo "✅ Created .env file with secure random keys"
+  echo "⚠️  Please change the default admin password in the .env file"
 fi
 
 # Initialize the database directory
 if [ ! -f "$DATA_DIR/site.db" ]; then
   echo "🗄️  Initializing database directory..."
   mkdir -p "$DATA_DIR"
-  touch "$DATA_DIR/site.db"
+    touch "$DATA_DIR/site.db"
   
   # Set appropriate permissions
   chmod 700 "$DATA_DIR"
@@ -172,7 +187,7 @@ echo "🔨 Building the application..."
 go build -o agentless
 if [ $? -ne 0 ]; then
   echo "❌ Error building the application"
-  exit 1
+    exit 1
 fi
 
 # Set up SSH keys for monitoring if they don't exist
@@ -194,9 +209,23 @@ fi
 # Create a systemd service file for the application
 if [ -d "/etc/systemd/system" ]; then
   echo "📄 Creating systemd service file..."
+  
+  # Check if service is masked and unmask it if needed
+  if systemctl is-enabled agentless.service 2>&1 | grep -q "masked"; then
+    echo "🔄 Unmasking existing service..."
+    sudo systemctl unmask agentless.service
+  fi
+  
+  # Remove old service if it exists
+  if [ -f "/etc/systemd/system/agentless.service" ]; then
+    echo "🔄 Removing existing service file..."
+    sudo rm -f "/etc/systemd/system/agentless.service"
+  fi
+  
+  # Create new service file
   sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
 [Unit]
-Description=Agent< Web Application
+Description=AgentLess Web Application
 After=network.target
 
 [Service]
@@ -206,8 +235,8 @@ WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/agentless
 Restart=on-failure
 RestartSec=5
-StandardOutput=journal
-StandardError=journal
+StandardOutput=journal+console
+StandardError=journal+console
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=GOPATH=$GOPATH
 
@@ -223,21 +252,43 @@ EOF"
   echo "To enable on boot: sudo systemctl enable agentless"
 fi
 
-# Setup monitoring cron job
-echo "⏱️  Setting up monitoring cron job..."
-"$SCRIPT_DIR/setup-monitoring-cron.sh" || {
-  echo "⚠️  Warning: Failed to set up monitoring cron job"
-  echo "You can set it up manually later using: $SCRIPT_DIR/setup-monitoring-cron.sh"
-}
-
 echo ""
 echo "✅ Setup completed successfully!"
 echo ""
 echo "📋 Next steps:"
 echo "  1. Update the .env file with secure credentials"
-echo "  2. Start the application: ./agentless"
+echo "  2. Start the application directly: ./agentless"
 echo "  3. Or use systemd: sudo systemctl start agentless"
 echo "  4. Access the web interface at: http://localhost:8080"
+echo ""
+echo "🚀 Would you like to start the application now? (y/n)"
+read -r start_now
+
+if [[ "$start_now" =~ ^[Yy]$ ]]; then
+  # Make sure logs directory exists
+  mkdir -p "$LOG_DIR"
+  
+  # Check if the application was built successfully
+  if [ -f "$APP_DIR/agentless" ]; then
+    echo "Starting application directly..."
+    # Run in background
+    nohup "$APP_DIR/agentless" > "$LOG_DIR/app.log" 2>&1 &
+    APP_PID=$!
+    
+    # Check if application started successfully
+    sleep 2
+    if ps -p $APP_PID > /dev/null; then
+      echo "✅ Application started! Access at http://localhost:8080"
+      echo "  - Logs are available at: $LOG_DIR/app.log"
+      echo "  - Process ID: $APP_PID"
+      echo "  - To stop: kill $APP_PID or pkill -f agentless"
+    else
+      echo "❌ Application failed to start. Check logs at: $LOG_DIR/app.log"
+    fi
+  else
+    echo "❌ Application binary not found. Build may have failed."
+  fi
+fi
 echo ""
 echo "For monitoring setup:"
 echo "  - Add devices through the web interface"
