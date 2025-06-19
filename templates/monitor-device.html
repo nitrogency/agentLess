@@ -171,7 +171,7 @@
             <p>To set up this device for monitoring, follow these steps:</p>
             <ol>
                 <li>Copy the server's public key to the client device:
-                    <pre class="code-block">ssh-copy-id -i ~/.ssh/id_rsa.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
+                    <pre class="code-block">ssh-copy-id -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
                 <li>Run the enlist.sh script from your terminal:
