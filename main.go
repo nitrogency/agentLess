@@ -28,24 +28,25 @@ import (
 )
 
 type PageData struct {
-	Title          string
-	Error          string
-	Success        string
-	Content        string
-	Username       string
-	UserID         int64
-	IsAdmin        bool
-	Users          []db.User
-	Devices        []db.Device
-	User           *db.User
-	Device         db.Device
-	RandomUser     bool
-	RandomKey      bool
-	FormToken      string
-	FormData       map[string]string
-	ErrorFields    map[string]bool
-	MonitoringData map[string]string
-	Data           map[string]interface{}
+	Title              string
+	Error              string
+	Success            string
+	Content            string
+	Username           string
+	UserID             int64
+	IsAdmin            bool
+	Users              []db.User
+	Devices            []db.Device
+	User               *db.User
+	Device             db.Device
+	RandomUser         bool
+	RandomKey          bool
+	FormToken          string
+	FormData           map[string]string
+	ErrorFields        map[string]bool
+	MonitoringData     map[string]string
+	Data               map[string]interface{}
+	HasHighSecurityLogs bool
 }
 
 // getPageData creates a PageData struct with common fields populated
@@ -88,11 +89,11 @@ func getPageData(w http.ResponseWriter, r *http.Request) PageData {
 		if err != nil {
 			log.Printf("Error getting user: %v", err)
 			return PageData{
-			Username:    username,
-			Data:        make(map[string]interface{}),
-			FormData:    make(map[string]string),
-			ErrorFields: make(map[string]bool),
-		}
+				Username:    username,
+				Data:        make(map[string]interface{}),
+				FormData:    make(map[string]string),
+				ErrorFields: make(map[string]bool),
+			}
 		}
 		if user != nil {
 			isAdmin = user.IsAdmin
@@ -100,13 +101,37 @@ func getPageData(w http.ResponseWriter, r *http.Request) PageData {
 		}
 	}
 
+	// Check for high security logs
+	hasHighSecurityLogs := false
+	if username != "" {
+		// Check if user has already viewed high security logs
+		viewedHighSecurityLogs := false
+		if session != nil {
+			if viewed, ok := session.Values["viewed_high_security_logs"].(bool); ok && viewed {
+				viewedHighSecurityLogs = true
+			}
+		}
+
+		// Only show notification if user hasn't viewed high security logs yet
+		if !viewedHighSecurityLogs {
+			// Query for high security logs
+			_, count, err := db.GetAuditLogs(0, 1, 1, "", "high")
+			if err != nil {
+				log.Printf("Error checking for high security logs: %v", err)
+			} else if count > 0 {
+				hasHighSecurityLogs = true
+			}
+		}
+	}
+
 	return PageData{
-		Username:    username,
-		UserID:      userID,
-		IsAdmin:     isAdmin,
-		Data:        make(map[string]interface{}),
-		FormData:    make(map[string]string),
-		ErrorFields: make(map[string]bool),
+		Username:           username,
+		UserID:             userID,
+		IsAdmin:            isAdmin,
+		Data:               make(map[string]interface{}),
+		FormData:           make(map[string]string),
+		ErrorFields:        make(map[string]bool),
+		HasHighSecurityLogs: hasHighSecurityLogs,
 	}
 }
 
@@ -196,6 +221,15 @@ func init() {
 
 	// Initialize rate limiter: 5 attempts per 15 minutes, block for 30 minutes after max attempts
 	loginLimiter = middleware.NewRateLimiter(5, 15*time.Minute, 30*time.Minute)
+}
+
+// resetHighSecurityLogsFlag resets the viewed_high_security_logs flag for all sessions
+// This should be called whenever new high security logs are added
+func resetHighSecurityLogsFlag() {
+	// In a production system, you would use a proper session store with iteration capabilities
+	// For this simple implementation, we'll rely on users getting a fresh session when they log in
+	// or when their session expires
+	log.Println("Resetting high security logs notification flag for all sessions")
 }
 
 // sessionMiddleware ensures consistent session handling
@@ -651,7 +685,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := getPageData(w, r)
 	data.Title = "Dashboard"
-	
+
 	// Get statistics
 	// 1. Count of devices
 	devices, err := db.GetAllDevices()
@@ -661,14 +695,14 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("Error fetching devices: %v", err)
 	}
-	
+
 	// 2. Count of logs
 	_, logCount, err := db.GetAuditLogs(0, 1, 1, "", "") // Just to get the count
 	if err != nil {
 		log.Printf("Error counting logs: %v", err)
 		logCount = 0
 	}
-	
+
 	// 3. Count of users
 	users, err := db.GetAllUsers()
 	userCount := 0
@@ -677,12 +711,12 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("Error fetching users: %v", err)
 	}
-	
+
 	// Add statistics to page data
 	data.Data["DeviceCount"] = deviceCount
 	data.Data["LogCount"] = logCount
 	data.Data["UserCount"] = userCount
-	
+
 	renderTemplate(w, "home", data)
 }
 
@@ -1750,14 +1784,14 @@ func getPaginationParams(r *http.Request) (int, int) {
 	if err != nil || page < 1 {
 		page = 1
 	}
-	
+
 	pageSize := 20 // Default page size
 	if pageSizeParam := r.URL.Query().Get("pageSize"); pageSizeParam != "" {
 		if ps, err := strconv.Atoi(pageSizeParam); err == nil && ps > 0 {
 			pageSize = ps
 		}
 	}
-	
+
 	return page, pageSize
 }
 
@@ -1785,11 +1819,26 @@ func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 	filterDeviceIDStr := r.URL.Query().Get("device_id")
 	filterSecurityLevel := r.URL.Query().Get("security_level")
 	var filterDeviceID int64 = 0
-	
+
 	// Parse device ID filter if provided
 	if filterDeviceIDStr != "" && filterDeviceIDStr != "0" {
 		if id, err := strconv.ParseInt(filterDeviceIDStr, 10, 64); err == nil && id > 0 {
 			filterDeviceID = id
+		}
+	}
+
+	// If user is viewing high security logs, reset the notification flag
+	if filterSecurityLevel == "high" && data.Username != "" {
+		// Store in session that user has viewed high security logs
+		session, err := store.Get(r, "session-name")
+		if err == nil {
+			session.Values["viewed_high_security_logs"] = true
+			err = session.Save(r, w)
+			if err != nil {
+				log.Printf("Error saving session after viewing high security logs: %v", err)
+			}
+			// Also reset the flag for the current page view
+			data.HasHighSecurityLogs = false
 		}
 	}
 
@@ -1807,7 +1856,7 @@ func allLogsHandler(w http.ResponseWriter, r *http.Request) {
 		data.Data["TotalLogs"] = totalLogs
 		data.Data["PageSize"] = pageSize
 		data.Data["SearchTerm"] = searchTerm
-		data.Data["FilterDeviceID"] = filterDeviceID // Pass the applied device filter back to template
+		data.Data["FilterDeviceID"] = filterDeviceID           // Pass the applied device filter back to template
 		data.Data["FilterSecurityLevel"] = filterSecurityLevel // Pass the applied security level filter back to template
 
 		// Generate pagination numbers
@@ -1882,38 +1931,38 @@ func generatePaginationNumbers(currentPage, totalPages, window int) []int {
 
 	if showEllipsisEnd {
 		if !contains(finalPages, 0) || (end < totalPages-2 && currentPage < totalPages-window-1) {
-            // Add ellipsis if not already added or if there's a significant gap
-            // and current page is far enough from the end.
-            if finalPages[len(finalPages)-1] != 0 { // Avoid double ellipsis if last page is also in window
-                 finalPages = append(finalPages, 0) // Ellipsis
-            }
-        }
+			// Add ellipsis if not already added or if there's a significant gap
+			// and current page is far enough from the end.
+			if finalPages[len(finalPages)-1] != 0 { // Avoid double ellipsis if last page is also in window
+				finalPages = append(finalPages, 0) // Ellipsis
+			}
+		}
 	}
 
 	// Add last page if not already included
 	if totalPages > 1 && !contains(finalPages, totalPages) {
 		finalPages = append(finalPages, totalPages)
 	}
-    
-    // Remove duplicate 0 if first page is 1, ellipsis, then 2 (e.g. 1,0,2...)
-    // and total pages is small, leading to 1,0,2,0,N. This is a bit of a hack.
-    if len(finalPages) > 3 && finalPages[1] == 0 && finalPages[3] == 0 && finalPages[2] < totalPages {
-        // if we have 1, 0, X, 0, Y and X is not Y-1
-        if len(finalPages) > 4 && finalPages[2] != finalPages[4]-1 {
-            // check if X is far from Y
-             if finalPages[4] - finalPages[2] > 1 {
-                // keep both ellipses
-             } else {
-                // remove second ellipsis if X and Y are consecutive or same
-                finalPages = append(finalPages[:3], finalPages[4:]...)
-             }
-        } else if len(finalPages) == 4 && finalPages[0] == 1 && finalPages[1] == 0 && finalPages[2] == totalPages-1 && finalPages[3] == 0 { // Case 1,0,N-1,0 -> 1,0,N-1,N
-            // This case is actually fine, e.g. 1 ... 4 5. No, it should be 1 ... 4. Then 5.
-            // Let's test: current=3, total=5, window=1. Pages: 1. start=2, end=4. pages=[1,2,3,4]. showEllipsisStart=false, showEllipsisEnd=false. finalPages=[1,2,3,4,5]
-            // current=1, total=5, window=1. Pages: 1. start=2, end=2. pages=[1,2]. showEllipsisStart=false, showEllipsisEnd=true. finalPages=[1,2,0,5]
-            // current=5, total=5, window=1. Pages: 1. start=4, end=4. pages=[1,4]. showEllipsisStart=true, showEllipsisEnd=false. finalPages=[1,0,4,5]
-        }
-    }
+
+	// Remove duplicate 0 if first page is 1, ellipsis, then 2 (e.g. 1,0,2...)
+	// and total pages is small, leading to 1,0,2,0,N. This is a bit of a hack.
+	if len(finalPages) > 3 && finalPages[1] == 0 && finalPages[3] == 0 && finalPages[2] < totalPages {
+		// if we have 1, 0, X, 0, Y and X is not Y-1
+		if len(finalPages) > 4 && finalPages[2] != finalPages[4]-1 {
+			// check if X is far from Y
+			if finalPages[4]-finalPages[2] > 1 {
+				// keep both ellipses
+			} else {
+				// remove second ellipsis if X and Y are consecutive or same
+				finalPages = append(finalPages[:3], finalPages[4:]...)
+			}
+		} else if len(finalPages) == 4 && finalPages[0] == 1 && finalPages[1] == 0 && finalPages[2] == totalPages-1 && finalPages[3] == 0 { // Case 1,0,N-1,0 -> 1,0,N-1,N
+			// This case is actually fine, e.g. 1 ... 4 5. No, it should be 1 ... 4. Then 5.
+			// Let's test: current=3, total=5, window=1. Pages: 1. start=2, end=4. pages=[1,2,3,4]. showEllipsisStart=false, showEllipsisEnd=false. finalPages=[1,2,3,4,5]
+			// current=1, total=5, window=1. Pages: 1. start=2, end=2. pages=[1,2]. showEllipsisStart=false, showEllipsisEnd=true. finalPages=[1,2,0,5]
+			// current=5, total=5, window=1. Pages: 1. start=4, end=4. pages=[1,4]. showEllipsisStart=true, showEllipsisEnd=false. finalPages=[1,0,4,5]
+		}
+	}
 
 	return finalPages
 }

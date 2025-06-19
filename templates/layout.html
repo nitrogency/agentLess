@@ -7,6 +7,28 @@
     <title>{{.Title}} - agent<</title>
     <link rel="stylesheet" href="/static/css/style.css">
     {{block "page_resources" .}}{{end}}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if there are any high security logs on page load
+            {{if .HasHighSecurityLogs}}
+                document.getElementById('notification-indicator').classList.add('active');
+            {{end}}
+            
+            // Add click handler to the bell icon
+            var notificationBell = document.getElementById('notification-bell');
+            if (notificationBell) {
+                notificationBell.addEventListener('click', function() {
+                    // When clicked, remove the active class (red indicator)
+                    var indicator = document.getElementById('notification-indicator');
+                    if (indicator) {
+                        indicator.classList.remove('active');
+                    }
+                    // Redirect to logs page with high security filter
+                    window.location.href = '/logs?security_level=high';
+                });
+            }
+        });
+    </script>
 </head>
 <body>
     {{if .Username}}
@@ -21,6 +43,10 @@
         </div>
         <div class="nav-right">
             <a href="/users/edit" class="username">{{.Username}}</a>
+            <div class="notification-bell" id="notification-bell" title="Notifications">
+                <i class="bell-icon">🔔</i>
+                <span class="notification-indicator" id="notification-indicator"></span>
+            </div>
             <form method="POST" action="/login" style="display: inline;">
                 <input type="hidden" name="action" value="logout">
                 <button type="submit" class="btn btn-secondary">Logout</button>
