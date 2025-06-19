@@ -225,14 +225,14 @@ if [ -d "/etc/systemd/system" ]; then
   # Create new service file
   sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
 [Unit]
-Description=AgentLess Web Application
+Description=Agent< Web Application
 After=network.target
 
 [Service]
 Type=simple
 User=$(whoami)
 WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/agentless
+ExecStart=/bin/bash -c 'set -a; source $APP_DIR/.env; set +a; $APP_DIR/agentless'
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal+console
