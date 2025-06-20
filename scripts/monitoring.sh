@@ -1,8 +1,5 @@
 #!/bin/bash
 #
-# IDS Monitoring Script - Simplified Version
-# This script connects to a remote device, retrieves audit logs, and stores them in the database
-#
 
 set -e
 

@@ -9,11 +9,6 @@
     {{block "page_resources" .}}{{end}}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if there are any high security logs on page load
-            {{if .HasHighSecurityLogs}}
-                document.getElementById('notification-indicator').classList.add('active');
-            {{end}}
-            
             // Add click handler to the bell icon
             var notificationBell = document.getElementById('notification-bell');
             if (notificationBell) {
