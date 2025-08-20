@@ -152,13 +152,6 @@ func setupRoutes(router *gin.Engine) {
 		admin.POST("/users/edit/:id", handlers.EditUserHandler)
 	}
 
-	// API routes
-	api := router.Group("/api")
-	api.Use(middleware.RequireAuth())
-	{
-		api.Any("/devices/*path", handlers.ApiDeviceHandler)
-	}
-
 	// 404 handler
 	router.NoRoute(handlers.NotFoundHandler)
 }
