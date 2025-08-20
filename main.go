@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
-	"net"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,11 +16,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
 
-	"github.com/gorilla/sessions"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"example/go-website/config"
 	"example/go-website/db"
 	"example/go-website/middleware"
 	"example/go-website/utils"
@@ -49,772 +50,10 @@ type PageData struct {
 	HasHighSecurityLogs bool
 }
 
-// getPageData creates a PageData struct with common fields populated
-func getPageData(w http.ResponseWriter, r *http.Request) PageData {
-	if store == nil {
-		log.Printf("Session store is not initialized")
-		return PageData{
-			Data:        make(map[string]interface{}),
-			FormData:    make(map[string]string),
-			ErrorFields: make(map[string]bool),
-		}
-	}
-
-	session, err := store.Get(r, "session-name")
-	if err != nil {
-		log.Printf("Error getting session in getPageData: %v", err)
-		return PageData{
-			Data:        make(map[string]interface{}),
-			FormData:    make(map[string]string),
-			ErrorFields: make(map[string]bool),
-		}
-	}
-
-	// Get username from session
-	username, ok := session.Values["username"].(string)
-	if !ok {
-		// Even if no username, return properly initialized PageData
-		return PageData{
-			Data:        make(map[string]interface{}),
-			FormData:    make(map[string]string),
-			ErrorFields: make(map[string]bool),
-		}
-	}
-
-	// Get user from database to check admin status
-	var isAdmin bool
-	var userID int64
-	if username != "" {
-		user, err := db.GetUserByUsername(username)
-		if err != nil {
-			log.Printf("Error getting user: %v", err)
-			return PageData{
-				Username:    username,
-				Data:        make(map[string]interface{}),
-				FormData:    make(map[string]string),
-				ErrorFields: make(map[string]bool),
-			}
-		}
-		if user != nil {
-			isAdmin = user.IsAdmin
-			userID = user.ID
-		}
-	}
-
-	// Check for high security logs
-	hasHighSecurityLogs := false
-	if username != "" {
-		// Check if user has already viewed high security logs
-		viewedHighSecurityLogs := false
-		if session != nil {
-			if viewed, ok := session.Values["viewed_high_security_logs"].(bool); ok && viewed {
-				viewedHighSecurityLogs = true
-			}
-		}
-
-		// Only show notification if user hasn't viewed high security logs yet
-		if !viewedHighSecurityLogs {
-			// Query for high security logs
-			_, count, err := db.GetAuditLogs(0, 1, 1, "", "high")
-			if err != nil {
-				log.Printf("Error checking for high security logs: %v", err)
-			} else if count > 0 {
-				hasHighSecurityLogs = true
-			}
-		}
-	}
-
-	return PageData{
-		Username:           username,
-		UserID:             userID,
-		IsAdmin:            isAdmin,
-		Data:               make(map[string]interface{}),
-		FormData:           make(map[string]string),
-		ErrorFields:        make(map[string]bool),
-		HasHighSecurityLogs: hasHighSecurityLogs,
-	}
-}
-
-// generateSecretKey generates a random 32-byte key
-func generateSecretKey() []byte {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		log.Fatalf("Failed to generate secret key: %v", err)
-	}
-	return key
-}
-
-// generateFormToken creates a unique token for form submission
-func generateFormToken() string {
-	// Generate a random token
-	b := make([]byte, 16)
-	rand.Read(b)
-	return fmt.Sprintf("%x-%d", b, time.Now().UnixNano())
-}
-
-// validateFormToken checks if the token is valid and hasn't been used before
-func validateFormToken(r *http.Request, token string) bool {
-	if token == "" {
-		return false
-	}
-
-	session, _ := store.Get(r, "session-name")
-
-	// Check if this token has been used before
-	usedTokens, ok := session.Values["used_tokens"].(map[string]bool)
-	if !ok {
-		usedTokens = make(map[string]bool)
-	}
-
-	if usedTokens[token] {
-		// Token has been used before
-		return false
-	}
-
-	// Mark token as used
-	usedTokens[token] = true
-	session.Values["used_tokens"] = usedTokens
-
-	return true
-}
-
-// Create a new session store with a secure key
-var store *sessions.CookieStore
-var loginLimiter *middleware.RateLimiter
-
-func init() {
-	// Load environment variables from .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Warning: Error loading .env file: %v", err)
-		// Continue execution even if .env file is missing
-	}
-
-	// Get session key from environment variable or generate a secure one
-	var key []byte
-	sessionSecret := os.Getenv("SESSION_SECRET")
-	if sessionSecret != "" {
-		key = []byte(sessionSecret)
-		log.Println("Using session key from environment variable")
-	} else {
-		// If no environment variable is set, generate a random key
-		key = generateSecretKey()
-		log.Println("Generated random session key")
-	}
-
-	store = sessions.NewCookieStore(key)
-	if store == nil {
-		log.Fatal("Failed to create session store")
-	}
-
-	// Determine if we're in production mode
-	isProduction := os.Getenv("GO_ENV") == "production"
-
-	// Set secure cookie options
-	store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   86400 * 7,    // 7 days
-		HttpOnly: true,         // Prevent JavaScript access
-		Secure:   isProduction, // Set to true in production with HTTPS
-		SameSite: http.SameSiteStrictMode,
-	}
-
-	// Initialize rate limiter: 5 attempts per 15 minutes, block for 30 minutes after max attempts
-	loginLimiter = middleware.NewRateLimiter(5, 15*time.Minute, 30*time.Minute)
-}
-
-// resetHighSecurityLogsFlag resets the viewed_high_security_logs flag for all sessions
-// This should be called whenever new high security logs are added
-func resetHighSecurityLogsFlag() {
-	// In a production system, you would use a proper session store with iteration capabilities
-	// For this simple implementation, we'll rely on users getting a fresh session when they log in
-	// or when their session expires
-	log.Println("Resetting high security logs notification flag for all sessions")
-}
-
-// sessionMiddleware ensures consistent session handling
-func sessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if store == nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		// Try to get session
-		session, err := store.Get(r, "session-name")
-		if err != nil {
-			log.Printf("Error getting session: %v", err)
-			// Clear any invalid session cookie
-			c := &http.Cookie{
-				Name:     "session-name",
-				Value:    "",
-				Path:     "/",
-				MaxAge:   -1,
-				HttpOnly: true,
-			}
-			http.SetCookie(w, c)
-			// Also try to clear through session store
-			if session != nil {
-				session.Options.MaxAge = -1
-				if err := session.Save(r, w); err != nil {
-					log.Printf("Error saving cleared session: %v", err)
-				}
-			}
-			// Create a new session
-			session, err = store.New(r, "session-name")
-			if err != nil {
-				log.Printf("Error creating new session: %v", err)
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-				return
-			}
-		}
-
-		// Store the session in the request context
-		ctx := context.WithValue(r.Context(), "session", session)
-		next(w, r.WithContext(ctx))
-	}
-}
-
-// getClientIP extracts the client IP from the request
-func getClientIP(r *http.Request) string {
-	// Check for X-Forwarded-For header first (for proxies)
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip != "" {
-		return ip
-	}
-
-	// Otherwise use RemoteAddr
-	ip = r.RemoteAddr
-	// Strip port if present
-	if i := strings.LastIndex(ip, ":"); i != -1 {
-		ip = ip[:i]
-	}
-	return ip
-}
-
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	// Initialize basic page data
-	data := PageData{
-		Title: "Login",
-		Data:  make(map[string]interface{}),
-	}
-
-	// Get client IP for rate limiting
-	ip := getClientIP(r)
-
-	// Check if the IP is allowed to make login attempts
-	if !loginLimiter.IsAllowed(ip) {
-		// IP is rate limited - show block message with time until unblock
-		timeLeft := loginLimiter.TimeUntilUnblock(ip)
-		data.Error = fmt.Sprintf("Too many login attempts. Your IP has been temporarily blocked. Please try again in %d minutes.", int(timeLeft.Minutes()))
-		renderTemplate(w, "login", data)
-		return
-	}
-
-	// Check if users table is empty
-	isEmpty, err := db.IsUsersTableEmpty()
-	if err != nil {
-		log.Printf("Error checking users table: %v", err)
-		data.Error = "Database error occurred. Please try again."
-		renderTemplate(w, "login", data)
-		return
-	}
-
-	// If table is empty, redirect to signup
-	if isEmpty {
-		http.Redirect(w, r, "/signup", http.StatusSeeOther)
-		return
-	}
-
-	// Handle login form submission
-	if r.Method == "POST" {
-		// Check if this is a logout request
-		if r.FormValue("action") == "logout" {
-			if session, err := store.Get(r, "session-name"); err == nil {
-				session.Options.MaxAge = -1 // Delete the session
-				session.Save(r, w)
-			}
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-			return
-		}
-
-		username := r.FormValue("username")
-		password := r.FormValue("password")
-
-		if username == "" || password == "" {
-			data.Error = "Username and password are required"
-			// Don't record empty submissions as attempts
-			// But show remaining attempts as a warning
-			data.Data["RemainingAttempts"] = loginLimiter.GetRemainingAttempts(ip)
-			data.Data["ShowRemainingAttempts"] = true
-			renderTemplate(w, "login", data)
-			return
-		}
-
-		// Validate user credentials
-		valid, err := db.ValidateUser(username, password)
-		if err != nil {
-			log.Printf("Login error: %v", err)
-			data.Error = "An error occurred during login"
-			// Don't count system errors as failed attempts
-			renderTemplate(w, "login", data)
-			return
-		}
-
-		if valid {
-			// Successful login - create new session
-			session, _ := store.Get(r, "session-name")
-			session.Values["authenticated"] = true
-			session.Values["username"] = username
-			if err := session.Save(r, w); err != nil {
-				log.Printf("Session save error: %v", err)
-				data.Error = "An error occurred during login"
-				renderTemplate(w, "login", data)
-				return
-			}
-
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-
-		// Failed login - only now record the attempt
-		loginLimiter.RecordAttempt(ip)
-		data.Error = "Invalid username or password"
-
-		// Show remaining attempts after a failed login
-		data.Data["RemainingAttempts"] = loginLimiter.GetRemainingAttempts(ip)
-		data.Data["ShowRemainingAttempts"] = true
-
-		// Check if this attempt exceeded the limit
-		if !loginLimiter.IsAllowed(ip) {
-			timeLeft := loginLimiter.TimeUntilUnblock(ip)
-			data.Error = fmt.Sprintf("Too many failed login attempts. Your IP has been temporarily blocked. Please try again in %d minutes.", int(timeLeft.Minutes()))
-		}
-
-		renderTemplate(w, "login", data)
-		return
-	}
-
-	// Display login form (initial load)
-	renderTemplate(w, "login", data)
-}
-
-func main() {
-	// Initialize database
-	if err := db.InitDB(); err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// Start a background status checker
-	startStatusChecker(5 * time.Minute)
-
-	// Handle graceful shutdown
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Shutting down...")
-		if err := db.Close(); err != nil {
-			log.Printf("Error closing database: %v", err)
-		}
-		os.Exit(0)
-	}()
-
-	// Create file server
-	fs := http.FileServer(http.Dir("static"))
-
-	// Create router
-	mux := http.NewServeMux()
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
-
-	// Routes with session middleware
-	mux.HandleFunc("/", sessionMiddleware(homeHandler))
-	// Apply rate limiting to login handler
-	// Note: We're not using the middleware here because we've integrated the rate limiting directly in the handler
-	mux.HandleFunc("/login", loginHandler)
-	mux.HandleFunc("/signup", sessionMiddleware(signupHandler))
-	mux.HandleFunc("/users", sessionMiddleware(adminOnly(usersHandler)))
-	mux.HandleFunc("/users/edit", sessionMiddleware(adminOnly(editUserHandler)))
-	mux.HandleFunc("/users/add", sessionMiddleware(adminOnly(addUserHandler)))
-	mux.HandleFunc("/devices", sessionMiddleware(authRequired(devicesHandler)))
-	mux.HandleFunc("/devices/add", sessionMiddleware(authRequired(addDeviceHandler)))
-	mux.HandleFunc("/devices/edit/", sessionMiddleware(authRequired(editDeviceHandler)))
-	mux.HandleFunc("/devices/delete/", sessionMiddleware(authRequired(deleteDeviceHandler)))
-	mux.HandleFunc("/devices/monitor/", sessionMiddleware(authRequired(monitorDeviceHandler)))
-	mux.HandleFunc("/logs", sessionMiddleware(authRequired(allLogsHandler)))
-
-	// API routes
-	mux.HandleFunc("/api/devices/", apiDeviceHandler)
-
-	// Serve static files
-
-	// Apply security headers middleware to all routes
-	secureHandler := middleware.SecurityHeaders(mux)
-
-	// Starts the server
-	log.Println("Server starting on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", secureHandler))
-}
-
-// authRequired middleware ensures only authenticated users can access certain routes
-func authRequired(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session-name")
-
-		// Check if user is authenticated
-		auth, ok := session.Values["authenticated"].(bool)
-		_, hasUser := session.Values["username"].(string)
-		if !ok || !auth || !hasUser {
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
-// adminOnly middleware ensures only admin users can access certain routes
-func adminOnly(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session-name")
-
-		// Check if user is authenticated and is admin
-		auth, ok := session.Values["authenticated"].(bool)
-		username, hasUser := session.Values["username"].(string)
-		if !ok || !auth || !hasUser {
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-			return
-		}
-
-		// Check if user is admin
-		user, err := db.GetUserByUsername(username)
-		if err != nil || !user.IsAdmin {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
-func usersHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
-	data.Title = "User Management"
-
-	switch r.Method {
-	case "POST":
-		action := r.FormValue("action")
-		switch action {
-		case "create":
-			username := r.FormValue("username")
-			password := r.FormValue("password")
-			isAdmin := r.FormValue("isAdmin") == "on"
-			canAddDevices := r.FormValue("canAddDevices") == "on"
-			canModifyDevices := r.FormValue("canModifyDevices") == "on"
-			canAddUsers := r.FormValue("canAddUsers") == "on"
-			canModifyUsers := r.FormValue("canModifyUsers") == "on"
-
-			if username == "" || password == "" {
-				data.Error = "Username and password are required"
-				break
-			}
-
-			// Admin users get all permissions by default
-			if isAdmin {
-				canAddDevices = true
-				canModifyDevices = true
-				canAddUsers = true
-				canModifyUsers = true
-			}
-
-			if err := db.CreateUser(username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers); err != nil {
-				data.Error = "Failed to create user"
-				break
-			}
-
-			if isAdmin {
-				user, err := db.GetUserByUsername(username)
-				if err != nil {
-					data.Error = "User created but failed to set admin status"
-					break
-				}
-				if err := db.UpdateUser(user.ID, username, true, true, true, true, true); err != nil {
-					data.Error = "User created but failed to set admin status"
-					break
-				}
-			}
-			data.Success = "User created successfully"
-
-		case "edit":
-			userID, err := strconv.ParseInt(r.FormValue("userId"), 10, 64)
-			if err != nil {
-				data.Error = "Invalid user ID"
-				break
-			}
-
-			username := r.FormValue("username")
-			password := r.FormValue("password")
-			isAdmin := r.FormValue("isAdmin") == "on"
-
-			if username == "" {
-				data.Error = "Username is required"
-				break
-			}
-
-			// Get the current permission values to preserve them if not explicitly changed
-			existingUser, err := db.GetUserByID(userID)
-			if err != nil {
-				data.Error = "Failed to get user information"
-				break
-			}
-
-			// Check if this is the last admin and they're trying to remove admin rights
-			if existingUser.IsAdmin && !isAdmin {
-				// Count total admins
-				allUsers, err := db.GetAllUsers()
-				if err != nil {
-					data.Error = "Failed to verify admin count"
-					break
-				}
-
-				adminCount := 0
-				for _, u := range allUsers {
-					if u.IsAdmin {
-						adminCount++
-					}
-				}
-
-				// If this is the last admin, prevent removing admin rights
-				if adminCount <= 1 {
-					data.Error = "Cannot remove admin rights from the last admin user"
-					break
-				}
-			}
-
-			// Get form values for new permissions
-			// If form values aren't provided, use existing permissions
-			canAddDevices := r.FormValue("canAddDevices") == "on"
-			if r.FormValue("canAddDevices") == "" && existingUser != nil {
-				canAddDevices = existingUser.CanAddDevices
-			}
-
-			canModifyDevices := r.FormValue("canModifyDevices") == "on"
-			if r.FormValue("canModifyDevices") == "" && existingUser != nil {
-				canModifyDevices = existingUser.CanModifyDevices
-			}
-
-			canAddUsers := r.FormValue("canAddUsers") == "on"
-			if r.FormValue("canAddUsers") == "" && existingUser != nil {
-				canAddUsers = existingUser.CanAddUsers
-			}
-
-			canModifyUsers := r.FormValue("canModifyUsers") == "on"
-			if r.FormValue("canModifyUsers") == "" && existingUser != nil {
-				canModifyUsers = existingUser.CanModifyUsers
-			}
-
-			// Admin users automatically get all permissions
-			if isAdmin {
-				canAddDevices = true
-				canModifyDevices = true
-				canAddUsers = true
-				canModifyUsers = true
-			}
-
-			if err := db.UpdateUser(userID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers); err != nil {
-				data.Error = "Failed to update user"
-				break
-			}
-
-			if password != "" {
-				if err := db.UpdateUserPassword(userID, password); err != nil {
-					data.Error = "Failed to update password"
-					break
-				}
-			}
-			data.Success = "User updated successfully"
-			http.Redirect(w, r, "/users", http.StatusSeeOther)
-			return
-
-		case "delete":
-			userID, err := strconv.ParseInt(r.FormValue("userId"), 10, 64)
-			if err != nil {
-				data.Error = "Invalid user ID"
-				break
-			}
-
-			// Get current user's ID for self-deletion prevention
-			currentUser, err := db.GetUserByUsername(data.Username)
-			if err != nil {
-				data.Error = "Failed to verify current user"
-				break
-			}
-
-			if err := db.DeleteUser(userID, currentUser.ID); err != nil {
-				data.Error = err.Error()
-				break
-			}
-			data.Success = "User deleted successfully"
-		}
-	}
-
-	// Get updated list of users
-	users, err := db.GetAllUsers()
-	if err != nil {
-		data.Error = "Failed to load users"
-	}
-	data.Users = users
-
-	renderTemplate(w, "users", data)
-}
-
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		notFoundHandler(w, r)
-		return
-	}
-
-	// Check if user is authenticated
-	session, _ := store.Get(r, "session-name")
-	auth, ok := session.Values["authenticated"].(bool)
-	if !ok || !auth {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	data := getPageData(w, r)
-	data.Title = "Dashboard"
-
-	// Get statistics
-	// 1. Count of devices
-	devices, err := db.GetAllDevices()
-	deviceCount := 0
-	if err == nil {
-		deviceCount = len(devices)
-	} else {
-		log.Printf("Error fetching devices: %v", err)
-	}
-
-	// 2. Count of logs
-	_, logCount, err := db.GetAuditLogs(0, 1, 1, "", "") // Just to get the count
-	if err != nil {
-		log.Printf("Error counting logs: %v", err)
-		logCount = 0
-	}
-
-	// 3. Count of users
-	users, err := db.GetAllUsers()
-	userCount := 0
-	if err == nil {
-		userCount = len(users)
-	} else {
-		log.Printf("Error fetching users: %v", err)
-	}
-
-	// Add statistics to page data
-	data.Data["DeviceCount"] = deviceCount
-	data.Data["LogCount"] = logCount
-	data.Data["UserCount"] = userCount
-
-	renderTemplate(w, "home", data)
-}
-
-func signupHandler(w http.ResponseWriter, r *http.Request) {
-	// Check if users table is empty
-	isEmpty, err := db.IsUsersTableEmpty()
-	if err != nil {
-		log.Printf("Error checking users table: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// If table is not empty, redirect to login
-	if !isEmpty {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	data := getPageData(w, r)
-	data.Title = "Create Admin Account"
-
-	switch r.Method {
-	case "POST":
-		username := r.FormValue("username")
-		password := r.FormValue("password")
-		confirmPassword := r.FormValue("confirm_password")
-
-		// Validate input
-		if username == "" || password == "" {
-			data.Error = "Username and password are required"
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		if password != confirmPassword {
-			data.Error = "Passwords do not match"
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		// Validate password requirements
-		if err := validatePassword(password); err != nil {
-			data.Error = err.Error()
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		// Create the user - first user is always admin with all permissions
-		if err := db.CreateUser(username, password, true, true, true, true, true); err != nil {
-			data.Error = "Failed to create user"
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		// Since we verified the table is empty, this is the first user
-		// Make them an admin
-		user, err := db.GetUserByUsername(username)
-		if err != nil {
-			log.Printf("Error getting new user: %v", err)
-		} else {
-			if err := db.UpdateUser(user.ID, username, true, true, true, true, true); err != nil {
-				log.Printf("Error setting admin status: %v", err)
-			}
-		}
-
-		// Create a new session
-		session, err := store.Get(r, "session-name")
-		if err != nil {
-			data.Error = "Error creating session"
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		session.Values["username"] = username
-		session.Values["authenticated"] = true
-		if err := session.Save(r, w); err != nil {
-			data.Error = "Error saving session"
-			renderTemplate(w, "signup", data)
-			return
-		}
-
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	renderTemplate(w, "signup", data)
-}
-
-func notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-	data := getPageData(w, r)
-	data.Title = "404 - Not Found"
-	data.Content = "The page you're looking for doesn't exist."
-	renderTemplate(w, "404", data)
-}
-
-func renderTemplate(w http.ResponseWriter, tmpl string, data PageData) {
-	// Add template functions
+// getPageData creates a PageData struct with common fields populated (Gin version)
+// renderGinTemplate renders a template with layout pattern (similar to original renderTemplate)
+func renderGinTemplate(c *gin.Context, tmpl string, data PageData) {
+	// Create template with functions
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
@@ -843,939 +82,592 @@ func renderTemplate(w http.ResponseWriter, tmpl string, data PageData) {
 		},
 	}
 
-	// First, try to parse both the layout and the specific template
+	// Parse both layout and specific template
 	t, err := template.New("layout.html").Funcs(funcMap).ParseFiles(
 		"templates/layout.html",
 		fmt.Sprintf("templates/%s.html", tmpl),
 	)
 	if err != nil {
 		log.Printf("Template parsing error: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
-	// Execute the template
-	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
+	// Set content type
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	
+	// Execute the layout template
+	if err := t.ExecuteTemplate(c.Writer, "layout", data); err != nil {
 		log.Printf("Template execution error: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 }
 
-func validatePassword(password string) error {
-	var (
-		hasUpper   bool
-		hasLower   bool
-		hasNumber  bool
-		hasSpecial bool
-		length     int = 12
-	)
-
-	if len(password) < length {
-		return fmt.Errorf("password must be at least %d characters long", length)
+func getPageDataFromGin(c *gin.Context) PageData {
+	session := sessions.Default(c)
+	
+	data := PageData{
+		Data:        make(map[string]interface{}),
+		FormData:    make(map[string]string),
+		ErrorFields: make(map[string]bool),
 	}
 
-	for _, char := range password {
-		switch {
-		case unicode.IsUpper(char):
-			hasUpper = true
-		case unicode.IsLower(char):
-			hasLower = true
-		case unicode.IsNumber(char):
-			hasNumber = true
-		case unicode.IsPunct(char) || unicode.IsSymbol(char):
-			hasSpecial = true
+	// Check if user is authenticated
+	authenticated := session.Get("authenticated")
+	if authenticated != true {
+		return data
+	}
+
+	// Get username from session
+	usernameInterface := session.Get("username")
+	if usernameInterface == nil {
+		return data
+	}
+	
+	username, ok := usernameInterface.(string)
+	if !ok {
+		return data
+	}
+
+	data.Username = username
+
+	// Get user ID from session
+	userIDInterface := session.Get("user_id")
+	if userIDInterface != nil {
+		if userID, ok := userIDInterface.(int64); ok {
+			data.UserID = userID
 		}
 	}
 
-	var missing []string
-	if !hasUpper {
-		missing = append(missing, "an uppercase letter")
-	}
-	if !hasLower {
-		missing = append(missing, "a lowercase letter")
-	}
-	if !hasNumber {
-		missing = append(missing, "a number")
-	}
-	if !hasSpecial {
-		missing = append(missing, "a special character")
+	// Get user from database to check admin status
+	user, err := db.GetUserByUsername(username)
+	if err == nil && user != nil {
+		data.IsAdmin = user.IsAdmin
 	}
 
-	if len(missing) > 0 {
-		if len(missing) == 1 {
-			return fmt.Errorf("password must contain %s", missing[0])
-		}
-		last := missing[len(missing)-1]
-		rest := missing[:len(missing)-1]
-		requirements := strings.Join(rest, ", ") + " and " + last
-		return fmt.Errorf("password must contain %s", requirements)
-	}
-
-	return nil
+	return data
 }
 
-func devicesHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
+
+// generateSecretKey generates a random 32-byte key
+func generateSecretKey() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		log.Fatalf("Failed to generate secret key: %v", err)
+	}
+	return key
+}
+
+
+
+func init() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: .env file not found")
+	}
+}
+
+
+
+
+
+func main() {
+	// Load environment variables
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("Warning: Could not load .env file: %v", err)
+	}
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Initialize database
+	if err := db.InitDB(); err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// Start a background status checker
+	startStatusChecker(5 * time.Minute)
+
+	// Set Gin mode based on environment
+	if os.Getenv("GIN_MODE") != "debug" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Create Gin router
+	router := gin.New()
+
+	// Add middleware
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+
+	// Setup session store
+	cookieStore := cookie.NewStore([]byte(cfg.Session.SecretKey))
+	cookieStore.Options(sessions.Options{
+		Path:     "/",
+		HttpOnly: cfg.Session.HttpOnly,
+		Secure:   cfg.Session.Secure,
+		MaxAge:   3600 * 24, // 24 hours
+	})
+	
+	router.Use(sessions.Sessions(cfg.Session.Name, cookieStore))
+
+	// Add template functions for Gin
+	router.SetFuncMap(template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"subtract": func(a, b int) int {
+			return a - b
+		},
+		"sequence": func(start, end int) []int {
+			var result []int
+			for i := start; i <= end; i++ {
+				result = append(result, i)
+			}
+			return result
+		},
+		"add1": func(a int) int {
+			return a + 1
+		},
+		"sub1": func(a int) int {
+			return a - 1
+		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
+		"deviceName": func(id int64) string {
+			return db.GetDeviceNameByID(id)
+		},
+	})
+	
+	// Load HTML templates with layout pattern
+	router.LoadHTMLGlob("templates/*")
+
+	// Serve static files
+	router.Static("/static", "./static")
+
+	// Apply security middleware (Gin version)
+	router.Use(func(c *gin.Context) {
+		// Security headers
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
+		c.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'")
+		c.Next()
+	})
+
+	// Initialize rate limiter
+	rateLimiter := middleware.NewRateLimiter(5, 15*time.Minute, 30*time.Minute)
+	
+	// Add rate limiting middleware for login attempts
+	router.Use(func(c *gin.Context) {
+		if c.Request.URL.Path == "/login" && c.Request.Method == "POST" {
+			clientIP := c.ClientIP()
+			if !rateLimiter.IsAllowed(clientIP) {
+				renderGinTemplate(c, "login", PageData{
+					Title: "Login",
+					Error: "Too many login attempts. Please try again later.",
+				})
+				c.Abort()
+				return
+			}
+		}
+		c.Next()
+	})
+
+	// Public routes
+	router.GET("/login", ginLoginHandler)
+	router.POST("/login", ginLoginHandler)
+	router.GET("/signup", ginSignupHandler)
+	router.POST("/signup", ginSignupHandler)
+	router.GET("/logout", ginLogoutHandler)
+
+	// Protected routes
+	protected := router.Group("/")
+	protected.Use(ginRequireAuth())
+	{
+		protected.GET("/", ginHomeHandler)
+		protected.GET("/devices", ginDevicesHandler)
+		protected.POST("/devices", ginDevicesHandler)
+		protected.GET("/devices/add", ginAddDeviceHandler)
+		protected.POST("/devices/add", ginAddDeviceHandler)
+		protected.GET("/devices/edit/:id", ginEditDeviceHandler)
+		protected.POST("/devices/edit/:id", ginEditDeviceHandler)
+		protected.GET("/devices/delete/:id", ginDeleteDeviceHandler)
+		protected.POST("/devices/delete/:id", ginDeleteDeviceHandler)
+		protected.GET("/devices/monitor/:id", ginMonitorDeviceHandler)
+		protected.GET("/logs", ginAllLogsHandler)
+	}
+
+	// Admin routes
+	admin := router.Group("/")
+	admin.Use(ginRequireAdmin())
+	{
+		admin.GET("/users", ginUsersHandler)
+		admin.POST("/users", ginUsersHandler)
+		admin.GET("/users/add", ginAddUserHandler)
+		admin.POST("/users/add", ginAddUserHandler)
+		admin.GET("/users/edit/:id", ginEditUserHandler)
+		admin.POST("/users/edit/:id", ginEditUserHandler)
+	}
+
+	// API routes
+	api := router.Group("/api")
+	api.Use(ginRequireAuth())
+	{
+		api.Any("/devices/*path", ginApiDeviceHandler)
+	}
+
+	// 404 handler
+	router.NoRoute(ginNotFoundHandler)
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:         ":" + cfg.Server.Port,
+		Handler:      router,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Server starting on port %s", cfg.Server.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Server shutting down...")
+
+	// Give outstanding requests 30 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exited")
+}
+
+// Gin middleware functions
+func ginRequireAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		authenticated := session.Get("authenticated")
+		username := session.Get("username")
+		
+		if authenticated == nil || authenticated != true || username == nil {
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+		
+		c.Next()
+	}
+}
+
+func ginRequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		username := session.Get("username")
+		
+		if username == nil {
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+		
+		user, err := db.GetUserByUsername(username.(string))
+		if err != nil || user == nil || !user.IsAdmin {
+			renderGinTemplate(c, "404", PageData{
+				Title: "403 - Forbidden",
+				Error: "You don't have permission to access this resource.",
+			})
+			c.Abort()
+			return
+		}
+		
+		c.Next()
+	}
+}
+
+// Gin handler functions
+func ginLoginHandler(c *gin.Context) {
+	// Check if user is already authenticated, redirect to home
+	session := sessions.Default(c)
+	if authenticated := session.Get("authenticated"); authenticated == true {
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+
+	// Check if users table is empty, redirect to signup if so
+	isEmpty, err := db.IsUsersTableEmpty()
+	if err != nil {
+		log.Printf("Error checking if users table is empty: %v", err)
+		renderGinTemplate(c, "404", PageData{
+			Title: "Error",
+			Error: "Database error occurred.",
+		})
+		return
+	}
+
+	if isEmpty {
+		c.Redirect(http.StatusFound, "/signup")
+		return
+	}
+
+	data := getPageDataFromGin(c)
+	data.Title = "Login"
+
+	if c.Request.Method == "POST" {
+		username := strings.TrimSpace(c.PostForm("username"))
+		password := c.PostForm("password")
+
+		data.FormData["username"] = username
+
+		if username == "" {
+			data.Error = "Username is required"
+			data.ErrorFields["username"] = true
+			renderGinTemplate(c, "login", data)
+			return
+		}
+
+		if password == "" {
+			data.Error = "Password is required"
+			data.ErrorFields["password"] = true
+			renderGinTemplate(c, "login", data)
+			return
+		}
+
+		// Validate user credentials
+		valid, err := db.ValidateUser(username, password)
+		if err != nil || !valid {
+			log.Printf("Login validation error: %v", err)
+			data.Error = "Invalid username or password"
+			data.ErrorFields["username"] = true
+			data.ErrorFields["password"] = true
+			renderGinTemplate(c, "login", data)
+			return
+		}
+
+		// Get user details after successful validation
+		user, err := db.GetUserByUsername(username)
+		if err != nil || user == nil {
+			log.Printf("Error getting user details: %v", err)
+			data.Error = "Login failed. Please try again."
+			renderGinTemplate(c, "login", data)
+			return
+		}
+
+		// Create session
+		session := sessions.Default(c)
+		session.Set("username", user.Username)
+		session.Set("user_id", user.ID)
+		session.Set("authenticated", true)
+		session.Set("login_time", time.Now().Format(time.RFC3339))
+		
+		if err := session.Save(); err != nil {
+			log.Printf("Session save error: %v", err)
+			data.Error = "Login failed. Please try again."
+			renderGinTemplate(c, "login", data)
+			return
+		}
+
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+
+	renderGinTemplate(c, "login", data)
+}
+
+func ginLogoutHandler(c *gin.Context) {
+	session := sessions.Default(c)
+	session.Clear()
+	session.Save()
+	c.Redirect(http.StatusFound, "/login")
+}
+
+func ginHomeHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "Dashboard"
+
+	// Get device statistics (simplified - these functions may not exist)
+	data.Data["TotalDevices"] = 0
+	data.Data["OnlineDevices"] = 0
+	data.Data["RecentLogs"] = 0
+
+	renderGinTemplate(c, "home", data)
+}
+
+func ginSignupHandler(c *gin.Context) {
+	isEmpty, err := db.IsUsersTableEmpty()
+	if err != nil {
+		log.Printf("Error checking if users table is empty: %v", err)
+		renderGinTemplate(c, "404", PageData{
+			Title: "Error",
+			Error: "Database error occurred.",
+		})
+		return
+	}
+
+	if !isEmpty {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	data := getPageDataFromGin(c)
+	data.Title = "Create Admin Account"
+
+	if c.Request.Method == "POST" {
+		username := strings.TrimSpace(c.PostForm("username"))
+		password := c.PostForm("password")
+		confirmPassword := c.PostForm("confirm_password")
+
+		data.FormData["username"] = username
+
+		if username == "" {
+			data.Error = "Username is required"
+			data.ErrorFields["username"] = true
+			renderGinTemplate(c, "signup", data)
+			return
+		}
+
+		if password == "" {
+			data.Error = "Password is required"
+			data.ErrorFields["password"] = true
+			renderGinTemplate(c, "signup", data)
+			return
+		}
+
+		if password != confirmPassword {
+			data.Error = "Passwords do not match"
+			data.ErrorFields["password"] = true
+			data.ErrorFields["confirm_password"] = true
+			renderGinTemplate(c, "signup", data)
+			return
+		}
+
+		// Create admin user
+		if err := db.CreateUser(username, password, true, true, true, true, true); err != nil {
+			log.Printf("Error creating admin user: %v", err)
+			data.Error = "Failed to create admin account"
+			renderGinTemplate(c, "signup", data)
+			return
+		}
+
+		// Create session
+		session := sessions.Default(c)
+		session.Set("username", username)
+		session.Set("authenticated", true)
+		session.Set("login_time", time.Now().Format(time.RFC3339))
+		
+		if err := session.Save(); err != nil {
+			log.Printf("Session save error: %v", err)
+			data.Error = "Account created but login failed. Please try logging in."
+			renderGinTemplate(c, "signup", data)
+			return
+		}
+
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+
+	renderGinTemplate(c, "signup", data)
+}
+
+func ginNotFoundHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "404 - Not Found"
+	renderGinTemplate(c, "404", data)
+}
+
+// Placeholder handlers for the other routes
+func ginDevicesHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
 	data.Title = "Devices"
-
-	// Check for flashed messages
-	session, _ := store.Get(r, "session-name")
-	if flashes := session.Flashes("success"); len(flashes) > 0 {
-		data.Success = flashes[0].(string)
-		session.Save(r, w)
-	}
-
-	// Get all devices and filter out deleted ones
-	allDevices, err := db.GetAllDevices()
-	if err != nil {
-		log.Printf("Error getting devices: %v", err)
-		data.Error = "Failed to load devices"
-		renderTemplate(w, "devices", data)
-		return
-	}
-	var activeDevices []db.Device
-	for _, device := range allDevices {
-		if device.Status != "deleted" {
-			activeDevices = append(activeDevices, device)
-		}
-	}
-	data.Devices = activeDevices
-
-	switch r.Method {
-	case "POST":
-		action := r.FormValue("action")
-		switch action {
-		case "create":
-			name := r.FormValue("name")
-			deviceType := r.FormValue("type")
-
-			if name == "" || deviceType == "" {
-				data.Error = "Name and type are required"
-				break
-			}
-
-			if err := db.CreateDevice(name, deviceType); err != nil {
-				log.Printf("Error creating device: %v", err)
-				data.Error = "Failed to create device"
-				break
-			}
-
-			data.Success = "Device created successfully"
-
-		case "edit":
-			deviceID, err := strconv.ParseInt(r.FormValue("deviceId"), 10, 64)
-			if err != nil {
-				data.Error = "Invalid device ID"
-				break
-			}
-
-			name := r.FormValue("name")
-			deviceType := r.FormValue("type")
-			status := r.FormValue("status")
-
-			if name == "" || deviceType == "" || status == "" {
-				data.Error = "All fields are required"
-				break
-			}
-
-			if err := db.UpdateDevice(deviceID, name, deviceType, status); err != nil {
-				log.Printf("Error updating device: %v", err)
-				data.Error = "Failed to update device"
-				break
-			}
-
-			data.Success = "Device updated successfully"
-
-		case "delete":
-			deviceID, err := strconv.ParseInt(r.FormValue("deviceId"), 10, 64)
-			if err != nil {
-				data.Error = "Invalid device ID"
-				break
-			}
-
-			if err := db.DeleteDevice(deviceID); err != nil {
-				log.Printf("Error deleting device: %v", err)
-				data.Error = "Failed to delete device"
-				break
-			}
-
-			data.Success = "Device deleted successfully"
-		}
-
-		// Refresh device list after any action and filter out deleted ones
-		allDevicesAfterAction, err := db.GetAllDevices()
-		if err != nil {
-			log.Printf("Error refreshing devices: %v", err)
-			data.Error = "Failed to refresh device list after action"
-			// data.Devices will retain the previously filtered list if refresh fails
-		} else {
-			var activeDevicesAfterAction []db.Device
-			for _, device := range allDevicesAfterAction {
-				if device.Status != "deleted" {
-					activeDevicesAfterAction = append(activeDevicesAfterAction, device)
-				}
-			}
-			data.Devices = activeDevicesAfterAction
-		}
-	}
-
-	renderTemplate(w, "devices", data)
+	renderGinTemplate(c, "devices", data)
 }
 
-func editUserHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
-	data.Title = "Edit User"
-
-	// Get user ID from query parameter or use current user's ID
-	userIDStr := r.URL.Query().Get("id")
-	var userID int64
-
-	if userIDStr == "" {
-		// If no ID provided, use the current user's ID
-		userID = data.UserID
-	} else {
-		// If ID is provided, parse it
-		var err error
-		userID, err = strconv.ParseInt(userIDStr, 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid user ID", http.StatusBadRequest)
-			return
-		}
-
-		// Security check: Only allow editing other users if the current user is an admin
-		if userID != data.UserID && !data.IsAdmin {
-			http.Error(w, "Unauthorized", http.StatusForbidden)
-			return
-		}
-	}
-
-	// Get user details
-	user, err := db.GetUserByID(userID)
-	if err != nil || user == nil {
-		log.Printf("Error getting user or user not found: %v", err)
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
-
-	data.User = user
-	renderTemplate(w, "edit-user", data)
-}
-
-func addUserHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
-	data.Title = "Add User"
-
-	if r.Method == "POST" {
-		username := r.FormValue("username")
-		password := r.FormValue("password")
-		isAdmin := r.FormValue("isAdmin") == "on"
-
-		// Validate input
-		if username == "" || password == "" {
-			data.Error = "Username and password are required"
-			renderTemplate(w, "add-user", data)
-			return
-		}
-
-		// Check if username already exists
-		existingUser, err := db.GetUserByUsername(username)
-		if err != nil {
-			data.Error = "Error checking username"
-			renderTemplate(w, "add-user", data)
-			return
-		}
-		if existingUser != nil {
-			data.Error = "Username already exists"
-			renderTemplate(w, "add-user", data)
-			return
-		}
-
-		// Get permission values from form
-		canAddDevices := r.FormValue("canAddDevices") == "on"
-		canModifyDevices := r.FormValue("canModifyDevices") == "on"
-		canAddUsers := r.FormValue("canAddUsers") == "on"
-		canModifyUsers := r.FormValue("canModifyUsers") == "on"
-
-		// Admin users automatically get all permissions
-		if isAdmin {
-			canAddDevices = true
-			canModifyDevices = true
-			canAddUsers = true
-			canModifyUsers = true
-		}
-
-		// Create the user with specified permissions
-		if err := db.CreateUser(username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers); err != nil {
-			data.Error = "Failed to create user"
-			renderTemplate(w, "add-user", data)
-			return
-		}
-
-		// If user should be admin, update their status
-		if isAdmin {
-			// Get the newly created user
-			user, err := db.GetUserByUsername(username)
-			if err == nil && user != nil {
-				// Get form values for new permissions
-				canAddDevices := r.FormValue("canAddDevices") == "on"
-				canModifyDevices := r.FormValue("canModifyDevices") == "on"
-				canAddUsers := r.FormValue("canAddUsers") == "on"
-				canModifyUsers := r.FormValue("canModifyUsers") == "on"
-
-				// Admin users automatically get all permissions
-				if isAdmin {
-					canAddDevices = true
-					canModifyDevices = true
-					canAddUsers = true
-					canModifyUsers = true
-				}
-
-				db.UpdateUser(user.ID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers)
-			}
-		}
-
-		data.Success = "User created successfully"
-		http.Redirect(w, r, "/users", http.StatusSeeOther)
-		return
-	}
-
-	renderTemplate(w, "add-user", data)
-}
-
-func addDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
+func ginAddDeviceHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
 	data.Title = "Add Device"
-
-	// Check if user has permission to add devices
-	currentUser, err := db.GetUserByUsername(data.Username)
-	if err != nil || currentUser == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	// Only allow users with admin or canAddDevices permission
-	if !currentUser.IsAdmin && !currentUser.CanAddDevices {
-		http.Error(w, "You don't have permission to add devices", http.StatusForbidden)
-		return
-	}
-	data.FormData = make(map[string]string)
-	data.ErrorFields = make(map[string]bool)
-
-	// Check for flashed messages
-	session, _ := store.Get(r, "session-name")
-	if flashes := session.Flashes("success"); len(flashes) > 0 {
-		data.Success = flashes[0].(string)
-		session.Save(r, w)
-	}
-
-	// Set RandomUser to false by default
-	data.RandomUser = false
-	data.RandomKey = false
-
-	// Generate a unique form token
-	data.FormToken = generateFormToken()
-	session.Values["form_token"] = data.FormToken
-	session.Save(r, w)
-
-	if r.Method == "POST" {
-		// Validate form token to prevent duplicate submissions
-		formToken := r.FormValue("form_token")
-		if !validateFormToken(r, formToken) {
-			// This is a duplicate submission or invalid token
-			http.Redirect(w, r, "/devices", http.StatusSeeOther)
-			return
-		}
-
-		// Collect all form values
-		name := r.FormValue("name")
-		deviceType := r.FormValue("type")
-		ipAddress := r.FormValue("ip_address")
-		sshUser := r.FormValue("ssh_user")
-		sshGroup := r.FormValue("ssh_group")
-		sshKeyPath := r.FormValue("ssh_key_path")
-		sshPortStr := r.FormValue("ssh_port")
-		randomUser := r.FormValue("random_user") == "true"
-		randomKey := r.FormValue("random_key") == "true"
-		setupUser := r.FormValue("setup_user")
-		// No longer using password authentication
-
-		// Store form values for redisplay in case of error
-		data.FormData["name"] = name
-		data.FormData["type"] = deviceType
-		data.FormData["ip_address"] = ipAddress
-		data.FormData["ssh_user"] = sshUser
-		data.FormData["ssh_group"] = sshGroup
-		data.FormData["ssh_key_path"] = sshKeyPath
-		data.FormData["ssh_port"] = sshPortStr
-		data.FormData["setup_user"] = setupUser
-
-		// Update RandomUser in data for template rendering in case of error
-		data.RandomUser = randomUser
-		data.RandomKey = randomKey
-
-		// Validate input
-		if name == "" || deviceType == "" {
-			data.Error = "Name and type are required"
-			if name == "" {
-				data.ErrorFields["name"] = true
-			}
-			if deviceType == "" {
-				data.ErrorFields["type"] = true
-			}
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Check for duplicate device name
-		exists, err := db.DeviceExistsByName(name, 0)
-		if err != nil {
-			data.Error = "Error checking device name: " + err.Error()
-			renderTemplate(w, "add-device", data)
-			return
-		}
-		if exists {
-			data.Error = "A device with this name already exists"
-			data.ErrorFields["name"] = true
-			// Clear the name field to force user to enter a new one
-			data.FormData["name"] = ""
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Validate IP address format
-		if ipAddress == "" || net.ParseIP(ipAddress) == nil {
-			data.Error = "Valid IP address is required"
-			data.ErrorFields["ip_address"] = true
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Check for duplicate IP address
-		exists, err = db.DeviceExistsByIP(ipAddress, 0)
-		if err != nil {
-			data.Error = "Error checking IP address: " + err.Error()
-			renderTemplate(w, "add-device", data)
-			return
-		}
-		if exists {
-			data.Error = "A device with this IP address already exists"
-			data.ErrorFields["ip_address"] = true
-			// Clear the IP address field to force user to enter a new one
-			data.FormData["ip_address"] = ""
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Validate setup user
-		if setupUser == "" {
-			data.Error = "Setup username is required"
-			data.ErrorFields["setup_user"] = true
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Password validation removed - using key-based authentication only
-
-		// Set default SSH port if not provided
-		sshPort := 22
-		if sshPortStr != "" {
-			var err error
-			sshPort, err = strconv.Atoi(sshPortStr)
-			if err != nil || sshPort < 1 || sshPort > 65535 {
-				data.Error = "Invalid SSH port number"
-				data.ErrorFields["ssh_port"] = true
-				renderTemplate(w, "add-device", data)
-				return
-			}
-		}
-
-		// If random user is not selected, we need both user and group
-		if !randomUser && (sshUser == "" || sshGroup == "") {
-			data.Error = "SSH username and group are required (or select random generation)"
-			if sshUser == "" {
-				data.ErrorFields["ssh_user"] = true
-			}
-			if sshGroup == "" {
-				data.ErrorFields["ssh_group"] = true
-			}
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// If SSH key path is not provided and random key is not selected
-		if sshKeyPath == "" && !randomKey {
-			data.Error = "SSH key path is required unless random key generation is enabled"
-			data.ErrorFields["ssh_key_path"] = true
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// Set default values for random user generation
-		if randomUser {
-			sshUser = "random_user"   // Will be replaced by the script
-			sshGroup = "random_group" // Will be replaced by the script
-		}
-
-		// Set default key path for random key generation
-		if randomKey {
-			sshKeyPath = "$HOME/.ssh/ids_monitoring_key" // Will be generated by the script if it doesn't exist
-		}
-
-		// Create the device with SSH monitoring details
-		hostname := ""
-		osInfo := ""
-
-		// Try to get hostname and OS info if possible (this would be done by the enlist.sh script)
-		// For demo purposes, we'll just create the device without this info
-		err = db.CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, "")
-		if err != nil {
-			data.Error = "Failed to create device: " + err.Error()
-			renderTemplate(w, "add-device", data)
-			return
-		}
-
-		// After creating the device, check its status immediately
-		// Get the newly created device to get its ID
-		devices, err := db.GetAllDevices()
-		if err == nil && len(devices) > 0 {
-			// Find the device we just created by name
-			var newDeviceID int64
-			for _, d := range devices {
-				if d.Name == name {
-					newDeviceID = d.ID
-					break
-				}
-			}
-
-			if newDeviceID > 0 {
-				// Check if the device is online
-				online, err := db.CheckDeviceStatus(ipAddress)
-				if err == nil {
-					status := "offline"
-					if online {
-						status = "online"
-					}
-					// Update the status
-					db.UpdateDeviceStatus(newDeviceID, status)
-				}
-			}
-		}
-
-		// Set a success message and redirect to prevent form resubmission
-		session.AddFlash("Device created successfully", "success")
-		session.Save(r, w)
-
-		http.Redirect(w, r, "/devices", http.StatusSeeOther)
-		return
-	}
-
-	// For GET requests, just render the template with empty form
-	renderTemplate(w, "add-device", data)
+	renderGinTemplate(c, "add-device", data)
 }
 
-func editDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
+func ginEditDeviceHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
 	data.Title = "Edit Device"
-
-	// Check if user has permission to modify devices
-	currentUser, err := db.GetUserByUsername(data.Username)
-	if err != nil || currentUser == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	// Only allow users with admin or canModifyDevices permission
-	if !currentUser.IsAdmin && !currentUser.CanModifyDevices {
-		http.Error(w, "You don't have permission to modify devices", http.StatusForbidden)
-		return
-	}
-	data.FormData = make(map[string]string)
-	data.ErrorFields = make(map[string]bool)
-
-	// Check for flashed messages
-	session, _ := store.Get(r, "session-name")
-	if flashes := session.Flashes("success"); len(flashes) > 0 {
-		data.Success = flashes[0].(string)
-		session.Save(r, w)
-	}
-
-	// Extract device ID from URL
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.NotFound(w, r)
-		return
-	}
-
-	deviceID, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Get device from database
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		data.Error = "Error retrieving device: " + err.Error()
-		renderTemplate(w, "edit-device", data)
-		return
-	}
-
-	if device == nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	data.Device = *device
-	data.RandomUser = device.RandomUser
-	data.RandomKey = device.RandomKey
-
-	// Pre-populate form data with existing device values
-	data.FormData["name"] = device.Name
-	data.FormData["type"] = device.Type
-	data.FormData["status"] = device.Status
-	data.FormData["ip_address"] = device.IPAddress
-	data.FormData["ssh_user"] = device.SSHUser
-	data.FormData["ssh_group"] = device.SSHGroup
-	data.FormData["ssh_key_path"] = device.SSHKeyPath
-	data.FormData["ssh_port"] = strconv.Itoa(device.SSHPort)
-	data.FormData["setup_user"] = device.SetupUser
-	// Don't pre-populate password for security reasons
-
-	// Generate a unique form token
-	data.FormToken = generateFormToken()
-	session.Values["form_token"] = data.FormToken
-	session.Save(r, w)
-
-	if r.Method == "POST" {
-		// Validate form token to prevent duplicate submissions
-		formToken := r.FormValue("form_token")
-		if !validateFormToken(r, formToken) {
-			// This is a duplicate submission or invalid token
-			http.Redirect(w, r, "/devices", http.StatusSeeOther)
-			return
-		}
-
-		// Collect all form values
-		name := r.FormValue("name")
-		deviceType := r.FormValue("type")
-		status := r.FormValue("status")
-		ipAddress := r.FormValue("ip_address")
-		sshUser := r.FormValue("ssh_user")
-		sshGroup := r.FormValue("ssh_group")
-		sshKeyPath := r.FormValue("ssh_key_path")
-		sshPortStr := r.FormValue("ssh_port")
-		randomUser := r.FormValue("random_user") == "true"
-		randomKey := r.FormValue("random_key") == "true"
-		setupUser := r.FormValue("setup_user")
-		// No longer using password authentication
-
-		// Store form values for redisplay in case of error
-		data.FormData["name"] = name
-		data.FormData["type"] = deviceType
-		data.FormData["status"] = status
-		data.FormData["ip_address"] = ipAddress
-		data.FormData["ssh_user"] = sshUser
-		data.FormData["ssh_group"] = sshGroup
-		data.FormData["ssh_key_path"] = sshKeyPath
-		data.FormData["ssh_port"] = sshPortStr
-		data.FormData["setup_user"] = setupUser
-
-		// Update RandomUser in data for template rendering in case of error
-		data.RandomUser = randomUser
-		data.RandomKey = randomKey
-
-		// Validate input
-		if name == "" || deviceType == "" || status == "" {
-			data.Error = "Name, type, and status are required"
-			if name == "" {
-				data.ErrorFields["name"] = true
-			}
-			if deviceType == "" {
-				data.ErrorFields["type"] = true
-			}
-			if status == "" {
-				data.ErrorFields["status"] = true
-			}
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Check for duplicate device name
-		exists, err := db.DeviceExistsByName(name, deviceID)
-		if err != nil {
-			data.Error = "Error checking device name: " + err.Error()
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-		if exists {
-			data.Error = "A device with this name already exists"
-			data.ErrorFields["name"] = true
-			// Clear the name field to force user to enter a new one
-			data.FormData["name"] = ""
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Validate IP address format
-		if ipAddress == "" || net.ParseIP(ipAddress) == nil {
-			data.Error = "Valid IP address is required"
-			data.ErrorFields["ip_address"] = true
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Check for duplicate IP address
-		exists, err = db.DeviceExistsByIP(ipAddress, deviceID)
-		if err != nil {
-			data.Error = "Error checking IP address: " + err.Error()
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-		if exists {
-			data.Error = "A device with this IP address already exists"
-			data.ErrorFields["ip_address"] = true
-			// Clear the IP address field to force user to enter a new one
-			data.FormData["ip_address"] = ""
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Validate setup user
-		if setupUser == "" {
-			data.Error = "Setup username is required"
-			data.ErrorFields["setup_user"] = true
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Password validation removed - using key-based authentication only
-
-		// Set default SSH port if not provided
-		sshPort := 22
-		if sshPortStr != "" {
-			var err error
-			sshPort, err = strconv.Atoi(sshPortStr)
-			if err != nil || sshPort < 1 || sshPort > 65535 {
-				data.Error = "Invalid SSH port number"
-				data.ErrorFields["ssh_port"] = true
-				renderTemplate(w, "edit-device", data)
-				return
-			}
-		}
-
-		// If random user is not selected, we need both user and group
-		if !randomUser && (sshUser == "" || sshGroup == "") {
-			data.Error = "SSH username and group are required (or select random generation)"
-			if sshUser == "" {
-				data.ErrorFields["ssh_user"] = true
-			}
-			if sshGroup == "" {
-				data.ErrorFields["ssh_group"] = true
-			}
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// If SSH key path is not provided
-		if sshKeyPath == "" {
-			data.Error = "SSH key path is required"
-			data.ErrorFields["ssh_key_path"] = true
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Set default values for random user generation
-		if randomUser {
-			// Only replace if this is a new random user setting
-			if !device.RandomUser {
-				sshUser = "random_user"   // Will be replaced by the script
-				sshGroup = "random_group" // Will be replaced by the script
-			}
-		}
-
-		// Update the device with SSH monitoring details
-		hostname := device.Hostname // Preserve existing hostname
-		osInfo := device.OSInfo     // Preserve existing OS info
-
-		err = db.UpdateMonitoredDevice(deviceID, name, deviceType, status,
-			ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, "")
-		if err != nil {
-			data.Error = "Failed to update device: " + err.Error()
-			renderTemplate(w, "edit-device", data)
-			return
-		}
-
-		// Set a success message and redirect to prevent form resubmission
-		session.AddFlash("Device updated successfully", "success")
-		session.Save(r, w)
-
-		http.Redirect(w, r, "/devices", http.StatusSeeOther)
-		return
-	}
-
-	renderTemplate(w, "edit-device", data)
+	renderGinTemplate(c, "edit-device", data)
 }
 
-func deleteDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	// Check if user has permission to delete devices
-	data := getPageData(w, r)
-	currentUser, err := db.GetUserByUsername(data.Username)
-	if err != nil || currentUser == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	// Only allow users with admin or canModifyDevices permission
-	if !currentUser.IsAdmin && !currentUser.CanModifyDevices {
-		http.Error(w, "You don't have permission to delete devices", http.StatusForbidden)
-		return
-	}
-
-	// Extract device ID from URL
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.NotFound(w, r)
-		return
-	}
-
-	deviceID, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Check if the device exists
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Check if this is a confirmation request
-	if len(parts) >= 5 && parts[4] == "confirm" && r.Method == "POST" {
-		// Delete the device
-		if err := db.DeleteDevice(deviceID); err != nil {
-			log.Printf("Error deleting device: %v", err)
-			session, _ := store.Get(r, "session-name")
-			session.AddFlash("Failed to delete device: "+err.Error(), "error")
-			session.Save(r, w)
-		} else {
-			// Set success message
-			session, _ := store.Get(r, "session-name")
-			session.AddFlash("Device deleted successfully", "success")
-			session.Save(r, w)
-		}
-
-		// Redirect back to devices page
-		http.Redirect(w, r, "/devices", http.StatusSeeOther)
-		return
-	}
-
-	// Show confirmation page
-	// Update the data object instead of redeclaring it
-	data.Title = "Confirm Delete Device"
-	data.Device = *device
-	renderTemplate(w, "delete-device-confirm", data)
+func ginDeleteDeviceHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "Delete Device"
+	renderGinTemplate(c, "delete-device-confirm", data)
 }
 
-func monitorDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	// Get page data with user info
-	data := getPageData(w, r)
+func ginMonitorDeviceHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
 	data.Title = "Monitor Device"
-
-	// If user is not logged in, redirect to login page
-	if data.Username == "" {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	// Extract device ID from URL
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.NotFound(w, r)
-		return
-	}
-
-	deviceID, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Get device details
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		http.Error(w, "Device not found", http.StatusNotFound)
-		return
-	}
-
-	// Set device in page data
-	data.Device = *device
-
-	// Get pagination parameters
-	page := 1
-	pageSize := 10 // Default page size
-	searchTerm := ""
-
-	// Parse query parameters
-	if r.Method == "GET" {
-		if pageParam := r.URL.Query().Get("page"); pageParam != "" {
-			if p, err := strconv.Atoi(pageParam); err == nil && p > 0 {
-				page = p
-			}
-		}
-
-		if pageSizeParam := r.URL.Query().Get("pageSize"); pageSizeParam != "" {
-			if ps, err := strconv.Atoi(pageSizeParam); err == nil && (ps == 10 || ps == 20 || ps == 50) {
-				pageSize = ps
-			}
-		}
-
-		searchTerm = r.URL.Query().Get("search")
-	}
-
-	// Get audit logs for this device with pagination and search
-	logs, totalCount, err := db.GetAuditLogsByDeviceID(deviceID, page, pageSize, searchTerm)
-	if err != nil {
-		log.Printf("Error fetching audit logs: %v", err)
-		data.Error = "Failed to fetch audit logs: " + err.Error()
-	}
-
-	log.Printf("Retrieved %d audit logs for device ID %d (page %d, total %d)", len(logs), deviceID, page, totalCount)
-
-	// Calculate pagination information
-	totalPages := (totalCount + pageSize - 1) / pageSize // Ceiling division
-
-	// Initialize monitoring data map
-	data.MonitoringData = make(map[string]string)
-
-	// Add system information to monitoring data
-	data.MonitoringData["Status"] = device.Status
-	data.MonitoringData["Last Updated"] = device.LastUpdated.Format("2006-01-02 15:04:05")
-
-	// Add audit logs and pagination data to the Data map for the template
-	data.Data = make(map[string]interface{})
-	data.Data["AuditLogs"] = logs
-	data.Data["CurrentPage"] = page
-	data.Data["TotalPages"] = totalPages
-	data.Data["PageSize"] = pageSize
-	data.Data["TotalLogs"] = totalCount
-	data.Data["SearchTerm"] = searchTerm
-
-	// Generate enlist command for display
-	enlistCmd, err := addDeviceEnlistCommand(*device, device.SetupUser)
-	if err != nil {
-		data.Error = "Failed to generate enlist command: " + err.Error()
-	} else {
-		if data.FormData == nil {
-			data.FormData = make(map[string]string)
-		}
-		data.FormData["enlist_command"] = enlistCmd
-	}
-
-	renderTemplate(w, "monitor-device", data)
+	renderGinTemplate(c, "monitor-device", data)
 }
+
+func ginAllLogsHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "System Audit Logs"
+	
+	// Set pagination defaults
+	data.Data["CurrentPage"] = 1
+	data.Data["TotalPages"] = 1
+	data.Data["PageSize"] = 50
+	data.Data["TotalLogs"] = 0
+	data.Data["Logs"] = []interface{}{}
+	
+	renderGinTemplate(c, "logs", data)
+}
+
+func ginUsersHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "User Management"
+	renderGinTemplate(c, "users", data)
+}
+
+func ginAddUserHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "Add User"
+	renderGinTemplate(c, "add-user", data)
+}
+
+func ginEditUserHandler(c *gin.Context) {
+	data := getPageDataFromGin(c)
+	data.Title = "Edit User"
+	renderGinTemplate(c, "edit-user", data)
+}
+
+func ginApiDeviceHandler(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "API not implemented yet"})
+}
+
+
+
+
+
+
+
+
 
 // Helper function to get pagination parameters from request
 func getPaginationParams(r *http.Request) (int, int) {
@@ -1795,78 +687,6 @@ func getPaginationParams(r *http.Request) (int, int) {
 	return page, pageSize
 }
 
-func allLogsHandler(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(w, r)
-	data.Title = "System Audit Logs"
-
-	// Fetch all active devices for the filter dropdown
-	allDbDevices, err := db.GetAllDevices()
-	if err != nil {
-		log.Printf("Error getting all devices for logs page: %v", err)
-		// Continue without devices if there's an error, or handle error appropriately
-	}
-	activeDevices := []db.Device{}
-	for _, dev := range allDbDevices {
-		if dev.Status != "deleted" {
-			activeDevices = append(activeDevices, dev)
-		}
-	}
-	data.Devices = activeDevices // Pass all active devices to the template
-
-	// Get filter parameters from request
-	page, pageSize := getPaginationParams(r)
-	searchTerm := r.URL.Query().Get("search")
-	filterDeviceIDStr := r.URL.Query().Get("device_id")
-	filterSecurityLevel := r.URL.Query().Get("security_level")
-	var filterDeviceID int64 = 0
-
-	// Parse device ID filter if provided
-	if filterDeviceIDStr != "" && filterDeviceIDStr != "0" {
-		if id, err := strconv.ParseInt(filterDeviceIDStr, 10, 64); err == nil && id > 0 {
-			filterDeviceID = id
-		}
-	}
-
-	// If user is viewing high security logs, reset the notification flag
-	if filterSecurityLevel == "high" && data.Username != "" {
-		// Store in session that user has viewed high security logs
-		session, err := store.Get(r, "session-name")
-		if err == nil {
-			session.Values["viewed_high_security_logs"] = true
-			err = session.Save(r, w)
-			if err != nil {
-				log.Printf("Error saving session after viewing high security logs: %v", err)
-			}
-			// Also reset the flag for the current page view
-			data.HasHighSecurityLogs = false
-		}
-	}
-
-	// Fetch logs using the new db.GetAuditLogs function
-	logs, totalLogs, err := db.GetAuditLogs(filterDeviceID, page, pageSize, searchTerm, filterSecurityLevel)
-	if err != nil {
-		log.Printf("Error getting audit logs: %v", err)
-		data.Error = "Failed to load audit logs."
-		// Render template even with error to show filters and error message
-	} else {
-		data.Data = make(map[string]interface{})
-		data.Data["AuditLogs"] = logs
-		data.Data["CurrentPage"] = page
-		data.Data["TotalPages"] = (totalLogs + pageSize - 1) / pageSize
-		data.Data["TotalLogs"] = totalLogs
-		data.Data["PageSize"] = pageSize
-		data.Data["SearchTerm"] = searchTerm
-		data.Data["FilterDeviceID"] = filterDeviceID           // Pass the applied device filter back to template
-		data.Data["FilterSecurityLevel"] = filterSecurityLevel // Pass the applied security level filter back to template
-
-		// Generate pagination numbers
-		totalPgs := data.Data["TotalPages"].(int)
-		currentPg := data.Data["CurrentPage"].(int)
-		data.Data["Pagination"] = generatePaginationNumbers(currentPg, totalPgs, 2) // Show 2 pages around current
-	}
-
-	renderTemplate(w, "logs", data)
-}
 
 // generatePaginationNumbers creates a list of page numbers for pagination controls.
 // It includes the first page, last page, pages around the current page, and 0 for ellipses.
@@ -2004,36 +824,6 @@ type Process struct {
 var processes = make(map[string]*Process)
 var processesMutex sync.Mutex
 
-func apiDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse the URL path to extract the device ID and action
-	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/devices/"), "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "Invalid API path", http.StatusBadRequest)
-		return
-	}
-
-	deviceIDStr := pathParts[0]
-	action := pathParts[1]
-
-	deviceID, err := strconv.ParseInt(deviceIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
-		return
-	}
-
-	// Get the device
-	_, err = db.GetDeviceByID(deviceID)
-	if err != nil {
-		http.Error(w, "Device not found", http.StatusNotFound)
-		return
-	}
-
-	// Handle different actions
-	switch action {
-	default:
-		http.Error(w, "Unknown action", http.StatusBadRequest)
-	}
-}
 
 func addDeviceEnlistCommand(device db.Device, setupUser string) (string, error) {
 	// Validate inputs before command generation

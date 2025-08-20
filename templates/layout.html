@@ -42,10 +42,7 @@
                 <i class="bell-icon">🔔</i>
                 <span class="notification-indicator" id="notification-indicator"></span>
             </div>
-            <form method="POST" action="/login" style="display: inline;">
-                <input type="hidden" name="action" value="logout">
-                <button type="submit" class="btn btn-secondary">Logout</button>
-            </form>
+            <a href="/logout" class="btn btn-secondary">Logout</a>
         </div>
     </nav>
     {{end}}
