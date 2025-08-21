@@ -1,30 +1,32 @@
 {{define "page_resources"}}
-<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="content">
-    <h1>Add New Device</h1>
-    
-    {{if .Error}}
-    <div class="error-message">{{.Error}}</div>
-    {{end}}
-    
-    {{if .Success}}
-    <div class="success-message">{{.Success}}</div>
-    {{end}}
+<div class="row">
+    <div class="col s12">
+        <h4 class="red-text text-darken-2">Add New Device</h4>
+        
+        {{if .Error}}
+        <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
+        {{end}}
+        
+        {{if .Success}}
+        <div class="card-panel green lighten-1 white-text">{{.Success}}</div>
+        {{end}}
 
-    <form method="POST" action="/devices/add" class="device-form">
+        <div class="card">
+            <div class="card-content">
+                <form method="POST" action="/devices/add">
         <input type="hidden" name="form_token" value="{{.FormToken}}">
         
-        <div class="form-group">
+        <div class="input-field">
+            <input type="text" class="{{if .ErrorFields.name}}invalid{{end}}" id="name" name="name" value="{{.FormData.name}}" required>
             <label for="name">Device Name</label>
-            <input type="text" class="form-control {{if .ErrorFields.name}}input-error{{end}}" id="name" name="name" value="{{.FormData.name}}" required placeholder="e.g. Server1">
+            <span class="helper-text">e.g. Server1</span>
         </div>
         
-        <div class="form-group">
-            <label for="type">Device Type</label>
-            <select id="type" name="type" class="form-control {{if .ErrorFields.type}}input-error{{end}}" required>
+        <div class="input-field">
+            <select id="type" name="type" class="{{if .ErrorFields.type}}invalid{{end}}" required>
                 <option value="" {{if eq .FormData.type ""}}selected{{end}}>Select Type</option>
                 <option value="server" {{if eq .FormData.type "server"}}selected{{end}} selected>Server</option>
                 <option value="workstation" {{if eq .FormData.type "workstation"}}selected{{end}}>Workstation</option>
@@ -38,72 +40,79 @@
                 <option value="display" {{if eq .FormData.type "display"}}selected{{end}}>Display</option>
                 <option value="other" {{if eq .FormData.type "other"}}selected{{end}}>Other</option>
             </select>
+            <label for="type">Device Type</label>
         </div>
         
-        <div class="form-group">
+        <div class="input-field">
+            <input type="text" class="{{if .ErrorFields.ip_address}}invalid{{end}}" id="ip_address" name="ip_address" value="{{.FormData.ip_address}}" required>
             <label for="ip_address">IP Address</label>
-            <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{.FormData.ip_address}}" placeholder="e.g. 192.168.1.100" required>
+            <span class="helper-text">e.g. 192.168.1.100</span>
         </div>
         
-        <fieldset>
-            <legend>Setup Authentication</legend>
-            <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
+        <div class="section">
+            <h5 class="grey-text text-darken-2">Setup Authentication</h5>
+            <p class="grey-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
             
-            <div class="form-group">
+            <div class="input-field">
+                <input type="text" class="{{if .ErrorFields.setup_user}}invalid{{end}}" id="setup_user" name="setup_user" value="{{.FormData.setup_user}}" required>
                 <label for="setup_user">Setup Username</label>
-                <input type="text" class="form-control {{if .ErrorFields.setup_user}}input-error{{end}}" id="setup_user" name="setup_user" value="{{.FormData.setup_user}}" placeholder="e.g. root" required>
+                <span class="helper-text">e.g. root</span>
             </div>
-        </fieldset>
-        
-        <fieldset>
-            <legend>Monitoring Configuration</legend>
-            <p class="help-text">These settings determine how the device will be monitored</p>
-            
-            <div class="form-group">
-                <label for="ssh_user">Monitoring Username</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <label for="ssh_group">Monitoring Group</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label>
-                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random Monitoring Username
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
-            </div>
-            
-            <div class="form-group">
-                <label for="ssh_key_path">SSH Key Path</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /home/user/.ssh/ids_key" {{if not .RandomKey}}required{{end}}>
-                <p class="help-text">This is the private SSH key that will be used for monitoring connections after the initial SSH connection.</p>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label>
-                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
-            </div>
-            
-            <div class="form-group">
-                <label for="ssh_port">SSH Port (default: 22)</label>
-                <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}22{{end}}" min="1" max="65535">
-            </div>
-        </fieldset>
-        
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Add Device</button>
-            <a href="/devices" class="btn btn-secondary">Cancel</a>
         </div>
-    </form>
+        
+        <div class="section">
+            <h5 class="grey-text text-darken-2">Monitoring Configuration</h5>
+            <p class="grey-text">These settings determine how the device will be monitored</p>
+            
+            <div class="input-field">
+                <input type="text" class="{{if .ErrorFields.ssh_user}}invalid{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" {{if not .RandomUser}}required{{end}}>
+                <label for="ssh_user">Monitoring Username</label>
+                <span class="helper-text">e.g. ids-monitor</span>
+            </div>
+            
+            <div class="input-field">
+                <input type="text" class="{{if .ErrorFields.ssh_group}}invalid{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" {{if not .RandomUser}}required{{end}}>
+                <label for="ssh_group">Monitoring Group</label>
+                <span class="helper-text">e.g. ids-monitor</span>
+            </div>
+            
+            <p>
+                <label>
+                    <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}} />
+                    <span>Generate Random Monitoring Username</span>
+                </label>
+            </p>
+            <p class="grey-text">When enabled, the system will generate random names from a wordlist for better security</p>
+            
+            <div class="input-field">
+                <input type="text" class="{{if .ErrorFields.ssh_key_path}}invalid{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" {{if not .RandomKey}}required{{end}}>
+                <label for="ssh_key_path">SSH Key Path</label>
+                <span class="helper-text">e.g. /home/user/.ssh/ids_key - Private SSH key for monitoring connections</span>
+            </div>
+            
+            <p>
+                <label>
+                    <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}} />
+                    <span>Generate Random SSH Key</span>
+                </label>
+            </p>
+            <p class="grey-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
+            
+            <div class="input-field">
+                <input type="number" class="{{if .ErrorFields.ssh_port}}invalid{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}22{{end}}" min="1" max="65535">
+                <label for="ssh_port">SSH Port</label>
+                <span class="helper-text">Default: 22</span>
+            </div>
+        </div>
+        
+        <div class="center-align" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary waves-effect waves-light">Add Device</button>
+            <a href="/devices" class="btn grey waves-effect waves-light">Cancel</a>
+        </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -132,6 +141,11 @@
                 // Clear and disable fields, update placeholders
                 sshUserInput.value = '';
                 sshGroupInput.value = '';
+                // Update label text for Materialize
+                const userLabel = document.querySelector('label[for="ssh_user"]');
+                const groupLabel = document.querySelector('label[for="ssh_group"]');
+                if (userLabel) userLabel.classList.add('active');
+                if (groupLabel) groupLabel.classList.add('active');
                 sshUserInput.placeholder = "Will be generated from wordlist";
                 sshGroupInput.placeholder = "Will be generated from wordlist";
                 sshUserInput.required = false;
@@ -160,6 +174,9 @@
                 
                 // Clear and disable field, update placeholder
                 sshKeyPathInput.value = '';
+                // Update label text for Materialize
+                const keyLabel = document.querySelector('label[for="ssh_key_path"]');
+                if (keyLabel) keyLabel.classList.add('active');
                 sshKeyPathInput.placeholder = "Will be generated automatically";
                 sshKeyPathInput.required = false;
                 sshKeyPathInput.disabled = true;
@@ -179,6 +196,10 @@
         // Add event listener for checkbox changes
         randomUserCheckbox.addEventListener('change', toggleSshFields);
         randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
+        
+        // Initialize Materialize select
+        var elems = document.querySelectorAll('select');
+        M.FormSelect.init(elems);
     });
 </script>
 {{end}}

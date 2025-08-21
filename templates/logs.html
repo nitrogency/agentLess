@@ -1,75 +1,68 @@
 {{define "page_resources"}}
-<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="container" style="width: 150%; margin-left: -25%;">
-    <h2>System Audit Logs</h2>
+<div class="row">
+    <div class="col s12">
+        <h4 class="red-text text-darken-2">System Audit Logs</h4>
 
-    {{if .Error}}
-    <div class="error-message">{{.Error}}</div>
-    {{end}}
-    {{if .Success}}
-    <div class="success-message">{{.Success}}</div>
-    {{end}}
+        {{if .Error}}
+        <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
+        {{end}}
+        {{if .Success}}
+        <div class="card-panel green lighten-1 white-text">{{.Success}}</div>
+        {{end}}
 
-    <div class="card">
-        <div class="card-header">
-            <h3>Filter Logs</h3>
-        </div>
-        <div class="card-body">
-            <form method="GET" action="/logs" class="mb-3">
-                <div class="row g-3 align-items-center">
-                    <div class="col-md-3" style="margin-left: 15px;">
-                        <label for="device_id_filter" class="form-label">Device</label>
-                        <select name="device_id" id="device_id_filter" class="form-select">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title">Filter Logs</span>
+                <form method="GET" action="/logs">
+                    <div class="row">
+                        <div class="input-field col s12 m3">
+                            <select name="device_id" id="device_id_filter">
                             <option value="0" {{if eq .Data.FilterDeviceID 0}}selected{{end}}>All Devices</option>
                             {{range .Devices}}
                                 <option value="{{.ID}}" {{if eq $.Data.FilterDeviceID .ID}}selected{{end}}>{{.Name}} ({{.IPAddress}})</option>
                             {{end}}
-                        </select>
-                    </div>
-                    <div class="col-md-3" style="margin-left: 15px;">
-                        <label for="security_level_filter" class="form-label">Security Level</label>
-                        <select name="security_level" id="security_level_filter" class="form-select">
+                            </select>
+                            <label for="device_id_filter">Device</label>
+                        </div>
+                        <div class="input-field col s12 m3">
+                            <select name="security_level" id="security_level_filter">
                             <option value="" {{if eq .Data.FilterSecurityLevel ""}}selected{{end}}>All Levels</option>
                             <option value="high" {{if eq .Data.FilterSecurityLevel "high"}}selected{{end}}>High</option>
                             <option value="medium" {{if eq .Data.FilterSecurityLevel "medium"}}selected{{end}}>Medium</option>
                             <option value="low" {{if eq .Data.FilterSecurityLevel "low"}}selected{{end}}>Low</option>
-                        </select>
+                            </select>
+                            <label for="security_level_filter">Security Level</label>
+                        </div>
+                        <div class="input-field col s12 m3">
+                            <input type="text" name="search" id="search_filter" placeholder="Search logs..." value="{{.Data.SearchTerm}}">
+                            <label for="search_filter">Search Term</label>
+                        </div>
+                        <div class="col s12 m3" style="margin-top: 20px;">
+                            <button class="btn blue waves-effect waves-light" type="submit">Filter</button>
+                            <a href="/logs?page=1&pageSize={{.Data.PageSize}}" class="btn grey waves-effect waves-light">Clear</a>
+                        </div>
                     </div>
-                    <div class="col-md-3" style="margin-left: 15px;">
-                        <label for="search_filter" class="form-label">Search Term</label>
-                        <input type="text" name="search" id="search_filter" class="form-control" placeholder="Search logs..." value="{{.Data.SearchTerm}}">
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end" style="margin-left: 15px; margin-top: 30px;">
-                        <button class="btn btn-primary me-2" type="submit">Filter</button>
-                        <a href="/logs?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card mt-4">
-        <div class="card-header">
-            <h3>Log Entries</h3>
-        </div>
-        <div class="card-body">
-            <!-- Page size controls -->
-            <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 15px;">
-                <div style="display: flex; align-items: center;">
-                    <div class="btn-group" role="group" style="margin-right: 15px;">
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
-                    </div>
-                    <span>Total: {{.Data.TotalLogs}} logs</span>
-                </div>
+                </form>
             </div>
+        </div>
 
-            <div style="padding: 0 15px;">
-            <table class="users-table" style="width: 100%;">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title">Log Entries</span>
+                <!-- Page size controls -->
+                <div class="right-align" style="margin-bottom: 15px;">
+                    <span style="margin-right: 15px;">Show:</span>
+                    <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn-small {{if eq .Data.PageSize 10}}blue{{else}}grey{{end}} waves-effect waves-light">10</a>
+                    <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn-small {{if eq .Data.PageSize 20}}blue{{else}}grey{{end}} waves-effect waves-light">20</a>
+                    <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn-small {{if eq .Data.PageSize 50}}blue{{else}}grey{{end}} waves-effect waves-light">50</a>
+                    <span style="margin-left: 15px;">Total: {{.Data.TotalLogs}} logs</span>
+                </div>
+
+                <div class="responsive-table">
+                    <table class="striped highlight">
                 <thead>
                     <tr>
                         <th>Event Time</th>
@@ -90,86 +83,66 @@
                         <td>{{deviceName .DeviceID}}</td>
                         <td>{{.Type}}</td>
                         <td>{{.Key}}</td>
-                        <td><span class="security-badge security-{{.SecurityLevel}}">{{.SecurityLevel}}</span></td>
-                        <td><div class="log-message">{{.Message}}</div></td>
-                        <td><pre style="min-width: 500px;" class="raw-log">{{.RawLog}}</pre></td>
+                        <td>
+                            {{if eq .SecurityLevel "high"}}
+                                <span class="badge red white-text">HIGH</span>
+                            {{else if eq .SecurityLevel "medium"}}
+                                <span class="badge orange white-text">MEDIUM</span>
+                            {{else}}
+                                <span class="badge green white-text">LOW</span>
+                            {{end}}
+                        </td>
+                        <td><div class="log-message" style="max-height: 60px; overflow-y: auto; font-size: 0.9em;">{{.Message}}</div></td>
+                        <td><pre class="grey darken-3 white-text" style="max-height: 100px; max-width: 300px; overflow: auto; padding: 5px; border-radius: 3px; font-size: 0.8em;">{{.RawLog}}</pre></td>
                     </tr>
                     {{else}}
                     <tr>
-                        <td colspan="8" class="text-center">No audit logs found.</td>
+                        <td colspan="8" class="center-align">No audit logs found.</td>
                     </tr>
                     {{end}}
                 </tbody>
-            </table>
-            </div>
-
-            <!-- Pagination controls -->
-            {{if gt .Data.TotalPages 1}}
-            <div class="pagination-container mt-3 text-center">
-                <div class="btn-group" role="group">
-                    <!-- Previous page button -->
-                    <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" 
-                       class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &laquo;
-                    </a>
-
-                    {{range .Data.Pagination}}
-                        {{if eq . 0}}
-                            <span class="btn btn-sm btn-outline-secondary disabled">...</span>
-                        {{else}}
-                            <a href="?page={{.}}&pageSize={{$.Data.PageSize}}{{if $.Data.SearchTerm}}&search={{$.Data.SearchTerm}}{{end}}{{if $.Data.FilterDeviceID}}&device_id={{$.Data.FilterDeviceID}}{{end}}{{if $.Data.FilterSecurityLevel}}&security_level={{$.Data.FilterSecurityLevel}}{{end}}" 
-                               class="btn btn-sm {{if eq $.Data.CurrentPage .}}btn-primary{{else}}btn-outline-primary{{end}}">{{.}}</a>
-                        {{end}}
-                    {{end}}
-                    
-                    <!-- Next page button -->
-                    <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" 
-                       class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &raquo;
-                    </a>
+                    </table>
                 </div>
+
+                <!-- Pagination controls -->
+                {{if gt .Data.TotalPages 1}}
+                <div class="center-align" style="margin-top: 20px;">
+                    <ul class="pagination">
+                        <!-- Previous page button -->
+                        <li class="{{if eq .Data.CurrentPage 1}}disabled{{else}}waves-effect{{end}}">
+                            <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}">
+                                <i class="material-icons">chevron_left</i>
+                            </a>
+                        </li>
+
+                        {{range .Data.Pagination}}
+                            {{if eq . 0}}
+                                <li class="disabled"><a href="#!">...</a></li>
+                            {{else}}
+                                <li class="{{if eq $.Data.CurrentPage .}}active blue{{else}}waves-effect{{end}}">
+                                    <a href="?page={{.}}&pageSize={{$.Data.PageSize}}{{if $.Data.SearchTerm}}&search={{$.Data.SearchTerm}}{{end}}{{if $.Data.FilterDeviceID}}&device_id={{$.Data.FilterDeviceID}}{{end}}{{if $.Data.FilterSecurityLevel}}&security_level={{$.Data.FilterSecurityLevel}}{{end}}">{{.}}</a>
+                                </li>
+                            {{end}}
+                        {{end}}
+                        
+                        <!-- Next page button -->
+                        <li class="{{if eq .Data.CurrentPage .Data.TotalPages}}disabled{{else}}waves-effect{{end}}">
+                            <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}">
+                                <i class="material-icons">chevron_right</i>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                {{end}}
             </div>
-            {{end}}
         </div>
     </div>
 </div>
 
-<style>
-.log-message {
-    max-height: 60px; /* Adjust as needed */
-    overflow-y: auto;
-    font-size: 0.9em;
-    white-space: pre-wrap; /* Allows wrapping long lines */
-    word-break: break-all; /* Breaks long words if necessary */
-}
-.raw-log {
-    max-height: 100px; /* Adjust as needed */
-    width: 300px;
-    overflow: auto;
-    background-color: #212529;
-    padding: 5px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.security-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-weight: bold;
-    text-transform: uppercase;
-    font-size: 0.8em;
-    color: white;
-}
-.security-high {
-    background-color: #dc3545; /* Red for high security/suspiciousness */
-}
-.security-medium {
-    background-color: #fd7e14; /* Orange for medium security/suspiciousness */
-}
-.security-low {
-    background-color: #28a745; /* Green for low security/suspiciousness */
-}
-</style>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var elems = document.querySelectorAll('select');
+        M.FormSelect.init(elems);
+    });
+</script>
 {{end}}

@@ -14,6 +14,17 @@ import (
 func UsersHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "User Management"
+
+	// Fetch all users from database
+	users, err := db.GetAllUsers()
+	if err != nil {
+		log.Printf("Error fetching users: %v", err)
+		data.Error = "Failed to load users"
+		data.Users = []db.User{} // Empty slice to prevent template errors
+	} else {
+		data.Users = users
+	}
+
 	templates.RenderGinTemplate(c, "users", data)
 }
 

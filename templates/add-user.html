@@ -1,110 +1,88 @@
 {{define "page_resources"}}
-<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="content">
-    <h1>Create New User</h1>
-    
-    {{if .Error}}
-    <div class="error-message">{{.Error}}</div>
-    {{end}}
-    
-    {{if .Success}}
-    <div class="success-message">{{.Success}}</div>
-    {{end}}
+<div class="row">
+    <div class="col s12">
+        <h4 class="red-text text-darken-2">Create New User</h4>
+        
+        {{if .Error}}
+        <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
+        {{end}}
+        
+        {{if .Success}}
+        <div class="card-panel green lighten-1 white-text">{{.Success}}</div>
+        {{end}}
 
-    <form method="POST" action="/users" class="user-form">
+        <div class="card">
+            <div class="card-content">
+                <form method="POST" action="/users">
         <input type="hidden" name="action" value="create">
         
-        <div class="form-group">
-            <label for="username">Username</label>
+        <div class="input-field">
             <input type="text" id="username" name="username" required>
+            <label for="username">Username</label>
         </div>
         
-        <div class="form-group">
-            <label for="password">Password</label>
+        <div class="input-field">
             <input type="password" id="password" name="password" required>
+            <label for="password">Password</label>
         </div>
         
-        <div class="form-group">
-            <label class="checkbox-label">
-                <input type="checkbox" name="isAdmin" id="isAdmin" onchange="updatePermissions()">
-                Is Admin (full access to all features)
+        <p>
+            <label>
+                <input type="checkbox" name="isAdmin" id="isAdmin" onchange="updatePermissions()" />
+                <span>Is Admin (full access to all features)</span>
             </label>
-        </div>
+        </p>
         
-        <div class="form-group">
-            <h4>Permissions</h4>
-            <p class="permission-note">Note: Admin users automatically have all permissions.</p>
+        <div class="section">
+            <h5 class="grey-text text-darken-2">Permissions</h5>
+            <p class="grey-text">Note: Admin users automatically have all permissions.</p>
             
-            <div class="permission-section">
-                <fieldset>
-                    <legend>Device Management</legend>
-                    <div class="permission-content">
-                        <p>These settings determine what device operations the user can perform</p>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canAddDevices" id="canAddDevices">
-                            Can Add Devices
+            <div class="card">
+                <div class="card-content">
+                    <span class="card-title">Device Management</span>
+                    <p class="grey-text">These settings determine what device operations the user can perform</p>
+                    
+                    <p>
+                        <label>
+                            <input type="checkbox" name="canAddDevices" id="canAddDevices" />
+                            <span>Can Add Devices</span>
                         </label>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canModifyDevices" id="canModifyDevices">
-                            Can Modify/Delete Devices
+                    </p>
+                    
+                    <p>
+                        <label>
+                            <input type="checkbox" name="canModifyDevices" id="canModifyDevices" />
+                            <span>Can Modify/Delete Devices</span>
                         </label>
-                    </div>
-                </fieldset>
+                    </p>
+                </div>
             </div>
             
-            <div class="permission-section">
-                <fieldset>
-                    <legend>User Management</legend>
-                    <div class="permission-content">
-                        <p>These settings determine what user operations the user can perform</p>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canAddUsers" id="canAddUsers">
-                            Can Add Users
+            <div class="card">
+                <div class="card-content">
+                    <span class="card-title">User Management</span>
+                    <p class="grey-text">These settings determine what user operations the user can perform</p>
+                    
+                    <p>
+                        <label>
+                            <input type="checkbox" name="canAddUsers" id="canAddUsers" />
+                            <span>Can Add Users</span>
                         </label>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canModifyUsers" id="canModifyUsers">
-                            Can Modify/Delete Users
+                    </p>
+                    
+                    <p>
+                        <label>
+                            <input type="checkbox" name="canModifyUsers" id="canModifyUsers" />
+                            <span>Can Modify/Delete Users</span>
                         </label>
-                    </div>
-                </fieldset>
+                    </p>
+                </div>
             </div>
         </div>
         
-        <style>
-            .permission-section {
-                margin-bottom: 20px;
-            }
-            
-            fieldset {
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                padding: 0;
-            }
-            
-            legend {
-                font-weight: bold;
-                padding: 0 10px;
-                margin-left: 10px;
-            }
-            
-            .permission-content {
-                padding: 15px;
-            }
-            
-            .permission-content p {
-                margin-top: 0;
-                color: #666;
-                font-size: 0.9em;
-                margin-bottom: 15px;
-            }
-        </style>
         
         <script>
             function updatePermissions() {
@@ -137,10 +115,13 @@
             document.addEventListener('DOMContentLoaded', updatePermissions);
         </script>
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Create User</button>
-            <a href="/users" class="btn btn-secondary">Cancel</a>
+        <div class="center-align" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary waves-effect waves-light">Create User</button>
+            <a href="/users" class="btn grey waves-effect waves-light">Cancel</a>
         </div>
-    </form>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 {{end}}
