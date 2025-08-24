@@ -205,6 +205,18 @@ func UpdateUserPassword(id int64, newPassword string) error {
 	return err
 }
 
+// UpdateUserWithPassword updates a user's information including password
+func UpdateUserWithPassword(id int64, username, newPassword string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("UPDATE users SET username = ?, password_hash = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ? WHERE id = ?",
+		username, string(hashedPassword), isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, id)
+	return err
+}
+
 // DeleteUser deletes a user by ID
 // currentUserID is the ID of the user performing the deletion
 func DeleteUser(id int64, currentUserID int64) error {

@@ -127,7 +127,10 @@ func setupRoutes(router *gin.Engine) {
 	protected := router.Group("/")
 	protected.Use(middleware.RequireAuth())
 	{
+		// Dashboard
 		protected.GET("/", handlers.HomeHandler)
+		
+		// Device management
 		protected.GET("/devices", handlers.DevicesHandler)
 		protected.POST("/devices", handlers.DevicesHandler)
 		protected.GET("/devices/add", handlers.AddDeviceHandler)
@@ -137,19 +140,29 @@ func setupRoutes(router *gin.Engine) {
 		protected.GET("/devices/delete/:id", handlers.DeleteDeviceHandler)
 		protected.POST("/devices/delete/:id", handlers.DeleteDeviceHandler)
 		protected.GET("/devices/monitor/:id", handlers.MonitorDeviceHandler)
+		protected.GET("/devices/logs/:id", handlers.DeviceLogsHandler)
+		
+		// Audit logs
 		protected.GET("/logs", handlers.AllLogsHandler)
+		protected.GET("/logs/export", handlers.AllLogsHandler) // CSV export
+		protected.GET("/logs/retention", handlers.LogRetentionHandler)
+		protected.POST("/logs/retention", handlers.LogRetentionHandler)
 	}
 
 	// Admin routes
 	admin := router.Group("/")
+	admin.Use(middleware.RequireAuth())
 	admin.Use(middleware.RequireAdmin())
 	{
+		// User management
 		admin.GET("/users", handlers.UsersHandler)
 		admin.POST("/users", handlers.UsersHandler)
 		admin.GET("/users/add", handlers.AddUserHandler)
 		admin.POST("/users/add", handlers.AddUserHandler)
 		admin.GET("/users/edit/:id", handlers.EditUserHandler)
 		admin.POST("/users/edit/:id", handlers.EditUserHandler)
+		admin.GET("/users/delete/:id", handlers.DeleteUserHandler)
+		admin.POST("/users/delete/:id", handlers.DeleteUserHandler)
 	}
 
 	// 404 handler

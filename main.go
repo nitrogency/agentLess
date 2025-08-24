@@ -70,6 +70,24 @@ func main() {
 
 // startDeviceMonitoring runs the device monitoring script in the background
 func startDeviceMonitoring() {
-	log.Println("Running device status check...")
-	// This is a placeholder - implement actual device monitoring logic
+	log.Println("Starting device monitoring service...")
+	
+	// Run initial device status check
+	go func() {
+		for {
+			log.Println("Running device status check...")
+			
+			// Update all device statuses
+			if err := db.UpdateAllDeviceStatuses(); err != nil {
+				log.Printf("Error updating device statuses: %v", err)
+			} else {
+				log.Println("Device status check completed")
+			}
+			
+			// Wait 5 minutes before next check
+			time.Sleep(5 * time.Minute)
+		}
+	}()
+	
+	log.Println("Device monitoring service started")
 }
