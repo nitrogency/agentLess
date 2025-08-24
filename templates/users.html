@@ -34,7 +34,7 @@
                 <td>{{.Username}}</td>
                 <td>{{if .IsAdmin}}Yes{{else}}No{{end}}</td>
                 <td>
-                    <a href="/users/edit?id={{.ID}}" class="btn btn-edit">Edit</a>
+                    <a href="/users/edit/{{.ID}}" class="btn btn-edit">Edit</a>
                 </td>
             </tr>
             {{end}}

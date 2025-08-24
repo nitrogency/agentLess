@@ -1,0 +1,26 @@
+.permission-section {
+    margin-bottom: 20px;
+}
+
+fieldset {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 0;
+}
+
+legend {
+    font-weight: bold;
+    padding: 0 10px;
+    margin-left: 10px;
+}
+
+.permission-content {
+    padding: 15px;
+}
+
+.permission-content p {
+    margin-top: 0;
+    color: #666;
+    font-size: 0.9em;
+    margin-bottom: 15px;
+}

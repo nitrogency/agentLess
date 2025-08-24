@@ -1,5 +1,6 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
+<script src="/static/js/device-form.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -86,7 +87,7 @@
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path:</label>
                 <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" {{if not .RandomKey}}required{{end}}>
-                <small class="form-text text-muted">Using system default SSH key. The public key must be manually copied to the target device.</small>
+                <p class="help-text">Using system default SSH key. The public key must be manually copied to the target device.</p>
             </div>
             
             <div class="form-group">
@@ -104,58 +105,11 @@
             </div>
         </fieldset>
         
-        <div class="form-actions">
+        <div class="form-actions mt-4">
             <button type="submit" class="btn btn-primary">Update Device</button>
             <a href="/devices" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const randomUserCheckbox = document.getElementById('random_user');
-        const sshUserField = document.getElementById('ssh_user');
-        const sshGroupField = document.getElementById('ssh_group');
-        const randomKeyCheckbox = document.getElementById('random_key');
-        const sshKeyPathField = document.getElementById('ssh_key_path');
-        
-        function toggleSshFields() {
-            if (randomUserCheckbox.checked) {
-                sshUserField.disabled = true;
-                sshGroupField.disabled = true;
-                sshUserField.required = false;
-                sshGroupField.required = false;
-                sshUserField.parentElement.classList.add('disabled');
-                sshGroupField.parentElement.classList.add('disabled');
-            } else {
-                sshUserField.disabled = false;
-                sshGroupField.disabled = false;
-                sshUserField.required = true;
-                sshGroupField.required = true;
-                sshUserField.parentElement.classList.remove('disabled');
-                sshGroupField.parentElement.classList.remove('disabled');
-            }
-        }
-        
-        function toggleSshKeyPathField() {
-            if (randomKeyCheckbox.checked) {
-                sshKeyPathField.disabled = true;
-                sshKeyPathField.required = false;
-                sshKeyPathField.parentElement.classList.add('disabled');
-            } else {
-                sshKeyPathField.disabled = false;
-                sshKeyPathField.required = true;
-                sshKeyPathField.parentElement.classList.remove('disabled');
-            }
-        }
-        
-        // Initial setup
-        toggleSshFields();
-        toggleSshKeyPathField();
-        
-        // Add event listener for checkbox changes
-        randomUserCheckbox.addEventListener('change', toggleSshFields);
-        randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
-    });
-</script>
 {{end}}

@@ -1,5 +1,7 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/user-form.css">
+<script src="/static/js/user-form.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -14,7 +16,7 @@
     <div class="success-message">{{.Success}}</div>
     {{end}}
 
-    <form method="POST" action="/users" class="user-form">
+    <form method="POST" action="/users/edit/{{.User.ID}}" class="user-form">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" name="userId" value="{{.User.ID}}">
         
@@ -30,7 +32,7 @@
         
         <div class="form-group">
             <label class="checkbox-label">
-                <input type="checkbox" name="isAdmin" id="isAdmin" {{if .User.IsAdmin}}checked{{end}} onchange="updatePermissions()">
+                <input type="checkbox" name="isAdmin" id="isAdmin" {{if .User.IsAdmin}}checked{{end}}>
                 Is Admin (full access to all features)
             </label>
         </div>
@@ -76,65 +78,6 @@
             </div>
         </div>
         
-        <style>
-            .permission-section {
-                margin-bottom: 20px;
-            }
-            
-            fieldset {
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                padding: 0;
-            }
-            
-            legend {
-                font-weight: bold;
-                padding: 0 10px;
-                margin-left: 10px;
-            }
-            
-            .permission-content {
-                padding: 15px;
-            }
-            
-            .permission-content p {
-                margin-top: 0;
-                color: #666;
-                font-size: 0.9em;
-                margin-bottom: 15px;
-            }
-        </style>
-        
-        <script>
-            function updatePermissions() {
-                const isAdmin = document.getElementById('isAdmin').checked;
-                const canAddDevices = document.getElementById('canAddDevices');
-                const canModifyDevices = document.getElementById('canModifyDevices');
-                const canAddUsers = document.getElementById('canAddUsers');
-                const canModifyUsers = document.getElementById('canModifyUsers');
-                
-                if (isAdmin) {
-                    // If admin is checked, check and disable other permissions
-                    canAddDevices.checked = true;
-                    canAddDevices.disabled = true;
-                    canModifyDevices.checked = true;
-                    canModifyDevices.disabled = true;
-                    canAddUsers.checked = true;
-                    canAddUsers.disabled = true;
-                    canModifyUsers.checked = true;
-                    canModifyUsers.disabled = true;
-                } else {
-                    // If admin is unchecked, enable other permissions
-                    canAddDevices.disabled = false;
-                    canModifyDevices.disabled = false;
-                    canAddUsers.disabled = false;
-                    canModifyUsers.disabled = false;
-                }
-            }
-            
-            // Run on page load to set initial state
-            document.addEventListener('DOMContentLoaded', updatePermissions);
-        </script>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Update User</button>
