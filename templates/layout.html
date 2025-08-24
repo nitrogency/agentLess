@@ -5,88 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - agent<</title>
-    <link rel="stylesheet" href="/static/css/materialize.min.css">
-    <!-- Material Icons - Local fallback -->
-    <link rel="stylesheet" href="/static/css/material-icons.css">
+    <link rel="stylesheet" href="/static/css/style.css">
     {{block "page_resources" .}}{{end}}
-    <style>
-        /* Custom theme colors for dark mode */
-        nav {
-            background-color: #2d2d2d !important;
-        }
-        body {
-            background-color: #1a1a1a;
-            color: #ffffff;
-        }
-        .card, .card-panel {
-            background-color: #2d2d2d;
-            color: #ffffff;
-        }
-        .btn-primary {
-            background-color: #b01c2e !important;
-        }
-        .btn-primary:hover {
-            background-color: #951828 !important;
-        }
-        .notification-bell {
-            position: relative;
-            cursor: pointer;
-            margin: 0 10px;
-            display: inline-block;
-        }
-        .notification-indicator {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: transparent;
-        }
-        .notification-indicator.active {
-            background-color: #ff4444;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { transform: scale(0.8); opacity: 0.8; }
-            50% { transform: scale(1.2); opacity: 1; }
-        }
-    </style>
-</head>
-<body>
-    {{if .Username}}
-    <nav>
-        <div class="nav-wrapper">
-            <a href="/" class="brand-logo left" style="margin-left: 20px;">agent<</a>
-            <ul id="nav-mobile" class="right hide-on-med-and-down">
-                <li><a href="/">Home</a></li>
-                <li><a href="/devices">Devices</a></li>
-                <li><a href="/logs">Logs</a></li>
-                {{if .IsAdmin}}
-                <li><a href="/users">User Management</a></li>
-                {{end}}
-                <li><a href="/users/edit/{{.UserID}}">{{.Username}}</a></li>
-                <li>
-                    <div class="notification-bell" id="notification-bell" title="Notifications">
-                        <i class="material-icons">notifications</i>
-                        <span class="notification-indicator" id="notification-indicator"></span>
-                    </div>
-                </li>
-                <li><a href="/logout" class="waves-effect waves-light btn grey">Logout</a></li>
-            </ul>
-        </div>
-    </nav>
-    {{end}}
-    <main class="container">
-        {{block "content" .}}{{end}}
-    </main>
-    
-    <script src="/static/js/materialize.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize Materialize components
-            M.AutoInit();
-            
             // Add click handler to the bell icon
             var notificationBell = document.getElementById('notification-bell');
             if (notificationBell) {
@@ -102,6 +24,31 @@
             }
         });
     </script>
+</head>
+<body>
+    {{if .Username}}
+    <nav>
+        <div class="nav-left">
+            <a href="/">Home</a>
+            <a href="/devices">Devices</a>
+            <a href="/logs">Logs</a>
+            {{if .IsAdmin}}
+            <a href="/users">User Management</a>
+            {{end}}
+        </div>
+        <div class="nav-right">
+            <a href="/users/edit/{{.UserID}}" class="username">{{.Username}}</a>
+            <div class="notification-bell" id="notification-bell" title="Notifications">
+                <i class="bell-icon">🔔</i>
+                <span class="notification-indicator" id="notification-indicator"></span>
+            </div>
+            <a href="/logout" class="btn btn-secondary">Logout</a>
+        </div>
+    </nav>
+    {{end}}
+    <main>
+        {{block "content" .}}{{end}}
+    </main>
 </body>
 </html>
 {{end}}

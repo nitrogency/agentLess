@@ -1,48 +1,44 @@
 {{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="row">
-    <div class="col s12">
-        <h4 class="red-text text-darken-2">User Management</h4>
-        
-        {{if .Error}}
-        <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
-        {{end}}
-        
-        {{if .Success}}
-        <div class="card-panel green lighten-1 white-text">{{.Success}}</div>
-        {{end}}
-
-        <div class="card">
-            <div class="card-content">
-                <div class="right-align" style="margin-bottom: 20px;">
-                    <a href="/users/add" class="btn btn-primary waves-effect waves-light">Create New User</a>
-                </div>
+<div class="users-container">
+    <h2>User Management</h2>
     
-                <table class="striped responsive-table">
-                <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Admin</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Users}}
-                <tr>
-                    <td>{{.ID}}</td>
-                    <td>{{.Username}}</td>
-                    <td>{{if .IsAdmin}}Yes{{else}}No{{end}}</td>
-                    <td>
-                        <a href="/users/edit/{{.ID}}" class="btn-small grey waves-effect waves-light">Edit</a>
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-        </div>
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
+
+    <div class="user-actions">
+        <a href="/users/add" class="btn btn-primary">Create New User</a>
     </div>
+
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Admin</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td>{{.Username}}</td>
+                <td>{{if .IsAdmin}}Yes{{else}}No{{end}}</td>
+                <td>
+                    <a href="/users/edit?id={{.ID}}" class="btn btn-edit">Edit</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
 </div>
 {{end}}

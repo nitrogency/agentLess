@@ -1,53 +1,48 @@
 {{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="row">
-    <div class="col s12">
-        <h4 class="red-text text-darken-2">Confirm Device Deletion</h4>
-        
-        {{if .Error}}
-        <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
-        {{end}}
-        
-        {{if .Success}}
-        <div class="card-panel green lighten-1 white-text">{{.Success}}</div>
-        {{end}}
+<div class="container">
+    <h2>Confirm Device Deletion</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    {{if .Success}}
+    <div class="success-message">{{.Success}}</div>
+    {{end}}
 
-        <div class="card">
-            <div class="card-content">
-                <span class="card-title">Are you sure you want to delete this device?</span>
-                <div class="row">
-                    <div class="col s12 m6">
-                        <p><strong>ID:</strong> {{.Device.ID}}</p>
-                        <p><strong>Name:</strong> {{.Device.Name}}</p>
-                        <p><strong>Type:</strong> {{.Device.Type}}</p>
-                        <p><strong>Status:</strong> 
-                            {{if eq .Device.Status "online"}}
-                                <span class="badge green white-text">ONLINE</span>
-                            {{else}}
-                                <span class="badge red white-text">OFFLINE</span>
-                            {{end}}
-                        </p>
-                    </div>
-                    <div class="col s12 m6">
-                        <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
-                        <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
-                        <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
-                        <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
-                    </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>Are you sure you want to delete this device?</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col">
+                    <p><strong>ID:</strong> {{.Device.ID}}</p>
+                    <p><strong>Name:</strong> {{.Device.Name}}</p>
+                    <p><strong>Type:</strong> {{.Device.Type}}</p>
+                    <p><strong>Status:</strong> <span class="status-{{.Device.Status}}">{{.Device.Status}}</span></p>
                 </div>
-                
-                <div class="card-panel red lighten-1 white-text" style="margin-top: 20px;">
-                    <p><strong>Warning:</strong> This action cannot be undone. All data associated with this device will be permanently deleted.</p>
+                <div class="col">
+                    <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
+                    <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
+                    <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
+                    <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
                 </div>
-                
-                <div style="margin-top: 20px;">
-                    <form method="POST" action="/devices/delete/{{.Device.ID}}/confirm">
-                        <button type="submit" class="btn red waves-effect waves-light">Yes, Delete Device</button>
-                        <a href="/devices" class="btn grey waves-effect waves-light">Cancel</a>
-                    </form>
-                </div>
+            </div>
+            
+            <div class="alert alert-danger mt-4">
+                <p><strong>Warning:</strong> This action cannot be undone. All data associated with this device will be permanently deleted.</p>
+            </div>
+            
+            <div class="actions mt-4">
+                <form method="POST" action="/devices/delete/{{.Device.ID}}/confirm">
+                    <button type="submit" class="btn btn-danger">Yes, Delete Device</button>
+                    <a href="/devices" class="btn btn-secondary">Cancel</a>
+                </form>
             </div>
         </div>
     </div>

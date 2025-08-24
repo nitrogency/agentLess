@@ -1,42 +1,37 @@
 {{define "page_resources"}}
+<link rel="stylesheet" href="/static/css/style.css">
 {{end}}
 
 {{define "content"}}
-<div class="row">
-    <div class="col s12 m6 offset-m3">
-        <div class="card">
-            <div class="card-content">
-                <span class="card-title red-text text-darken-2">Create Admin Account</span>
-                
-                {{if .Error}}
-                <div class="card-panel red lighten-1 white-text">{{.Error}}</div>
-                {{end}}
-                
-                <form method="POST" action="/signup">
-                    <div class="input-field">
-                        <input type="text" id="username" name="username" required>
-                        <label for="username">Username</label>
-                    </div>
-                    
-                    <div class="input-field">
-                        <input type="password" id="password" name="password" required>
-                        <label for="password">Password</label>
-                        <!-- Password requirements will be inserted here by JavaScript -->
-                    </div>
-                    
-                    <div class="input-field">
-                        <input type="password" id="confirm_password" name="confirm_password" required>
-                        <label for="confirm_password">Confirm Password</label>
-                        <span class="helper-text red-text">Note: Make sure you never lose this information. There is no way to recover it without reinstalling the application.</span>
-                    </div>
-        
-                    <div class="center-align" style="margin-top: 20px;">
-                        <button type="submit" class="btn red waves-effect waves-light">Create Account</button>
-                    </div>
-                </form>
-            </div>
+<div class="content">
+    <h2>Create Admin Account</h2>
+    
+    {{if .Error}}
+    <div class="error-message">{{.Error}}</div>
+    {{end}}
+    
+    <form method="POST" action="/signup" class="user-form">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
         </div>
-    </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <!-- Password requirements will be inserted here by JavaScript -->
+        </div>
+        
+        <div class="form-group">
+            <label for="confirm_password">Confirm Password:</label>
+            <input type="password" id="confirm_password" name="confirm_password" required>
+            <p class="help-text">Note: Make sure you never lose this information. There is no way to recover it without reinstalling the application.</p>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create Account</button>
+        </div>
+    </form>
 </div>
 
 <script src="/static/js/password-validation.js"></script>
