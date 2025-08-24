@@ -87,7 +87,7 @@ nav {
 
 .nav-left a:hover {
     background-color: #383838; /* softer hover to reduce red overuse */
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 /* Accessible focus for nav links */

@@ -22,6 +22,7 @@ func AllLogsHandler(c *gin.Context) {
 
 	// Get query parameters
 	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("pageSize", "50")
 	deviceIDStr := c.Query("device_id")
 	searchTerm := c.Query("search")
 	securityLevel := c.Query("security_level")
@@ -43,7 +44,17 @@ func AllLogsHandler(c *gin.Context) {
 		}
 	}
 
-	pageSize := 50
+	// Parse page size with sane defaults
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil {
+		pageSize = 50
+	}
+	switch pageSize {
+	case 10, 20, 50:
+		// allowed
+	default:
+		pageSize = 50
+	}
 
 	// Handle export requests
 	if exportFormat == "csv" {
@@ -66,6 +77,39 @@ func AllLogsHandler(c *gin.Context) {
 		totalPages = 1
 	}
 
+	// Build pagination slice for template (0 represents an ellipsis)
+	pagination := []int{}
+	if totalPages <= 9 {
+		for i := 1; i <= totalPages; i++ {
+			pagination = append(pagination, i)
+		}
+	} else {
+		// Always show first page
+		pagination = append(pagination, 1)
+		// Ellipsis before window
+		if page > 3 {
+			pagination = append(pagination, 0)
+		}
+		// Window around current page
+		start := page - 2
+		if start < 2 {
+			start = 2
+		}
+		end := page + 2
+		if end > totalPages-1 {
+			end = totalPages - 1
+		}
+		for i := start; i <= end; i++ {
+			pagination = append(pagination, i)
+		}
+		// Ellipsis after window
+		if page < totalPages-2 {
+			pagination = append(pagination, 0)
+		}
+		// Always show last page
+		pagination = append(pagination, totalPages)
+	}
+
 	// Get all devices for filter dropdown
 	devices, err := db.GetAllDevices()
 	if err != nil {
@@ -78,6 +122,8 @@ func AllLogsHandler(c *gin.Context) {
 
 	// Populate template data
 	data.Data["Logs"] = logs
+	// Back-compat for template using AuditLogs
+	data.Data["AuditLogs"] = logs
 	data.Data["CurrentPage"] = page
 	data.Data["TotalPages"] = totalPages
 	data.Data["PageSize"] = pageSize
@@ -85,8 +131,12 @@ func AllLogsHandler(c *gin.Context) {
 	data.Data["SearchTerm"] = searchTerm
 	data.Data["SecurityLevel"] = securityLevel
 	data.Data["DeviceID"] = deviceID
+	// Keys used by template filters
+	data.Data["FilterDeviceID"] = deviceID
+	data.Data["FilterSecurityLevel"] = securityLevel
 	data.Data["Devices"] = devices
 	data.Data["Stats"] = stats
+	data.Data["Pagination"] = pagination
 
 	templates.RenderGinTemplate(c, "logs", data)
 }
