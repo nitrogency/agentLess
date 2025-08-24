@@ -40,7 +40,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		Secure:   cfg.Session.Secure,
 		MaxAge:   3600 * 24, // 24 hours
 	})
-	
+
 	router.Use(sessions.Sessions(cfg.Session.Name, cookieStore))
 
 	// Add template functions for Gin
@@ -71,12 +71,14 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 			return db.GetDeviceNameByID(id)
 		},
 	})
-	
+
 	// Load HTML templates with layout pattern
 	router.LoadHTMLGlob("templates/*")
 
 	// Serve static files
 	router.Static("/static", "./static")
+	// Serve favicon
+	router.StaticFile("/favicon.ico", "./static/favicon.ico")
 
 	// Apply security middleware
 	router.Use(func(c *gin.Context) {
@@ -91,7 +93,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 	// Initialize rate limiter
 	rateLimiter := middleware.NewRateLimiter(5, 15*time.Minute, 30*time.Minute)
-	
+
 	// Add rate limiting middleware for login attempts
 	router.Use(func(c *gin.Context) {
 		if c.Request.URL.Path == "/login" && c.Request.Method == "POST" {
@@ -129,7 +131,7 @@ func setupRoutes(router *gin.Engine) {
 	{
 		// Dashboard
 		protected.GET("/", handlers.HomeHandler)
-		
+
 		// Device management
 		protected.GET("/devices", handlers.DevicesHandler)
 		protected.POST("/devices", handlers.DevicesHandler)
@@ -141,7 +143,7 @@ func setupRoutes(router *gin.Engine) {
 		protected.POST("/devices/delete/:id", handlers.DeleteDeviceHandler)
 		protected.GET("/devices/monitor/:id", handlers.MonitorDeviceHandler)
 		protected.GET("/devices/logs/:id", handlers.DeviceLogsHandler)
-		
+
 		// Audit logs
 		protected.GET("/logs", handlers.AllLogsHandler)
 		protected.GET("/logs/export", handlers.AllLogsHandler) // CSV export

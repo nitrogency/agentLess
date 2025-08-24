@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - agent<</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     {{block "page_resources" .}}{{end}}
     <script>
@@ -29,6 +32,7 @@
     {{if .Username}}
     <nav>
         <div class="nav-left">
+            <span class="brand" aria-label="Application name">agent&lt;</span>
             <a href="/">Home</a>
             <a href="/devices">Devices</a>
             <a href="/logs">Logs</a>
