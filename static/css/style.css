@@ -722,6 +722,18 @@ li {
 /* Input field error styling */
 /* duplicate .input-error removed; unified above */
 
+/* Notification dropdown styles were appended previously. Add flicker animation for bell. */
+@keyframes bell-flicker {
+  0%, 100% { filter: none; transform: none; }
+  25% { filter: drop-shadow(0 0 6px rgba(255, 80, 80, 0.9)); transform: rotate(-5deg); }
+  50% { filter: drop-shadow(0 0 8px rgba(255, 80, 80, 0.9)); transform: rotate(5deg); }
+  75% { filter: drop-shadow(0 0 6px rgba(255, 80, 80, 0.9)); transform: rotate(-3deg); }
+}
+
+.notification-bell.flicker .bell-icon {
+  animation: bell-flicker 1.2s ease-in-out infinite;
+}
+
 /* Notification Bell Styles */
 .notification-bell {
     position: relative;
@@ -815,3 +827,67 @@ select.form-control {
 @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
 }
+
+/* Notifications Dropdown */
+.notification-dropdown {
+    position: absolute;
+    top: 32px;
+    right: 0;
+    width: 320px;
+    background: var(--secondary-dark);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+}
+
+.notification-section {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.notification-category {
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+.notification-category:hover {
+    background: #383838;
+    color: var(--text-primary);
+}
+.notification-category .count {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #2a2a2a;
+    border: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.notification-recent {
+    max-height: 300px;
+    overflow-y: auto;
+}
+.notification-recent .empty {
+    padding: 12px;
+    color: var(--text-secondary);
+}
+
+.notification-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+}
+.notification-item:hover { background: rgba(176, 28, 46, 0.08); }
+.notification-item .item-title { font-weight: 600; margin-bottom: 4px; }
+.notification-item .item-title.high { color: #ff6b6b; }
+.notification-item .item-title.medium { color: #ffd166; }
+.notification-item .item-title.low { color: #6bdc7a; }
+.notification-item .item-message { color: var(--text-secondary); font-size: 0.92em; }
+
+.notification-actions { padding: 8px 12px; display: flex; justify-content: flex-end; }

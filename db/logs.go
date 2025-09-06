@@ -389,7 +389,30 @@ func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, se
 		return 0, fmt.Errorf("error inserting audit log: %w", err)
 	}
 
-	return result.LastInsertId()
+	insertedID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	// Build a minimal AuditLog to evaluate notification rules
+	logEntry := AuditLog{
+		ID:            insertedID,
+		DeviceID:      deviceID,
+		EventTime:     eventTime,
+		Type:          logType,
+		Key:           key,
+		Message:       message,
+		RawLog:        rawLog,
+		SecurityLevel: SecurityLevel(strings.ToLower(securityLevel)),
+		AuditID:       auditID,
+	}
+
+	// Best-effort: evaluate rules; do not fail the log insertion if notification creation fails
+	if err := evaluateRulesAndCreateNotifications(logEntry, insertedID); err != nil {
+		fmt.Printf("Warning: notification evaluation failed for log %d: %v\n", insertedID, err)
+	}
+
+	return insertedID, nil
 }
 
 // DeleteOldAuditLogs deletes audit logs older than the specified number of days

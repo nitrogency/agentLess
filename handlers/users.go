@@ -190,6 +190,9 @@ func EditUserHandler(c *gin.Context) {
 		canModifyDevices := c.PostForm("canModifyDevices") == "on"
 		canAddUsers := c.PostForm("canAddUsers") == "on"
 		canModifyUsers := c.PostForm("canModifyUsers") == "on"
+		flickerLow := c.PostForm("flickerLow") == "on"
+		flickerMedium := c.PostForm("flickerMedium") == "on"
+		flickerHigh := c.PostForm("flickerHigh") == "on"
 
 		// Store form data for repopulating on error
 		data.FormData["username"] = username
@@ -262,10 +265,10 @@ func EditUserHandler(c *gin.Context) {
 		// Update user
 		if password != "" {
 			// Update with new password
-			err = db.UpdateUserWithPassword(userID, username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers)
+			err = db.UpdateUserWithPassword(userID, username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh)
 		} else {
 			// Update without changing password
-			err = db.UpdateUser(userID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers)
+			err = db.UpdateUser(userID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh)
 		}
 
 		if err != nil {

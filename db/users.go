@@ -18,6 +18,9 @@ type User struct {
 	CanModifyDevices bool      `json:"can_modify_devices"`
 	CanAddUsers      bool      `json:"can_add_users"`
 	CanModifyUsers   bool      `json:"can_modify_users"`
+	FlickerLow       bool      `json:"flicker_low"`
+	FlickerMedium    bool      `json:"flicker_medium"`
+	FlickerHigh      bool      `json:"flicker_high"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
@@ -33,6 +36,9 @@ func InitUserTable() error {
 			can_modify_devices INTEGER NOT NULL DEFAULT 0,
 			can_add_users INTEGER NOT NULL DEFAULT 0,
 			can_modify_users INTEGER NOT NULL DEFAULT 0,
+			flicker_low INTEGER NOT NULL DEFAULT 0,
+			flicker_medium INTEGER NOT NULL DEFAULT 1,
+			flicker_high INTEGER NOT NULL DEFAULT 1,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -41,6 +47,12 @@ func InitUserTable() error {
 	if err != nil {
 		return err
 	}
+
+	// Attempt to add new columns for flicker preferences if upgrading from older schema
+	// These will fail harmlessly if the columns already exist
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_low INTEGER NOT NULL DEFAULT 0;")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_medium INTEGER NOT NULL DEFAULT 1;")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_high INTEGER NOT NULL DEFAULT 1;")
 
 	return nil
 }
@@ -88,7 +100,7 @@ func CreateUser(username, password string, isAdmin, canAddDevices, canModifyDevi
 
 	// Insert the new user
 	_, err = db.Exec(
-		"INSERT INTO users (username, password_hash, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO users (username, password_hash, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, 1)",
 		username, string(hash), isAdminInt, canAddDevicesInt, canModifyDevicesInt, canAddUsersInt, canModifyUsersInt,
 	)
 	return err
@@ -125,9 +137,9 @@ func ValidateUser(username, password string) (bool, error) {
 func GetUser(username string) (*User, error) {
 	user := &User{}
 	err := db.QueryRow(
-		"SELECT id, username, is_admin, can_add_devices, can_modify_devices, created_at FROM users WHERE username = ?",
+		"SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -142,8 +154,8 @@ func GetUser(username string) (*User, error) {
 // GetUserByID returns a user by their ID
 func GetUserByID(id int64) (*User, error) {
 	var user User
-	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, created_at FROM users WHERE id = ?", id).
-		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.CreatedAt)
+	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE id = ?", id).
+		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -156,8 +168,8 @@ func GetUserByID(id int64) (*User, error) {
 // GetUserByUsername returns a user by their username
 func GetUserByUsername(username string) (*User, error) {
 	var user User
-	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, created_at FROM users WHERE username = ?", username).
-		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.CreatedAt)
+	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE username = ?", username).
+		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -169,7 +181,7 @@ func GetUserByUsername(username string) (*User, error) {
 
 // GetAllUsers returns all users from the database
 func GetAllUsers() ([]User, error) {
-	rows, err := db.Query("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, created_at FROM users")
+	rows, err := db.Query("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +190,7 @@ func GetAllUsers() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, user)
@@ -187,9 +199,9 @@ func GetAllUsers() ([]User, error) {
 }
 
 // UpdateUser updates a user's information
-func UpdateUser(id int64, username string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool) error {
-	_, err := db.Exec("UPDATE users SET username = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ? WHERE id = ?",
-		username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, id)
+func UpdateUser(id int64, username string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool) error {
+	_, err := db.Exec("UPDATE users SET username = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ? WHERE id = ?",
+		username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, id)
 	return err
 }
 
@@ -206,14 +218,14 @@ func UpdateUserPassword(id int64, newPassword string) error {
 }
 
 // UpdateUserWithPassword updates a user's information including password
-func UpdateUserWithPassword(id int64, username, newPassword string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool) error {
+func UpdateUserWithPassword(id int64, username, newPassword string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Exec("UPDATE users SET username = ?, password_hash = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ? WHERE id = ?",
-		username, string(hashedPassword), isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, id)
+	_, err = db.Exec("UPDATE users SET username = ?, password_hash = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ? WHERE id = ?",
+		username, string(hashedPassword), isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, id)
 	return err
 }
 

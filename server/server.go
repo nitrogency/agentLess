@@ -149,6 +149,10 @@ func setupRoutes(router *gin.Engine) {
 		protected.GET("/logs/export", handlers.AllLogsHandler) // CSV export
 		protected.GET("/logs/retention", handlers.LogRetentionHandler)
 		protected.POST("/logs/retention", handlers.LogRetentionHandler)
+
+		// Notifications
+		protected.GET("/notifications/summary", handlers.NotificationsSummaryHandler)
+		protected.POST("/notifications/mark-seen", handlers.NotificationsMarkSeenHandler)
 	}
 
 	// Admin routes

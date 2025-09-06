@@ -10,23 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     {{block "page_resources" .}}{{end}}
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add click handler to the bell icon
-            var notificationBell = document.getElementById('notification-bell');
-            if (notificationBell) {
-                notificationBell.addEventListener('click', function() {
-                    // When clicked, remove the active class (red indicator)
-                    var indicator = document.getElementById('notification-indicator');
-                    if (indicator) {
-                        indicator.classList.remove('active');
-                    }
-                    // Redirect to logs page with high security filter
-                    window.location.href = '/logs?security_level=high';
-                });
-            }
-        });
-    </script>
+    <script src="/static/js/notifications.js" defer></script>
 </head>
 <body>
     {{if .Username}}
@@ -42,9 +26,20 @@
         </div>
         <div class="nav-right">
             <a href="/users/edit/{{.UserID}}" class="username">{{.Username}}</a>
-            <div class="notification-bell" id="notification-bell" title="Notifications">
+            <div class="notification-bell" id="notification-bell" title="Notifications" aria-haspopup="true" aria-expanded="false" data-flicker-high="{{.FlickerHigh}}" data-flicker-medium="{{.FlickerMedium}}" data-flicker-low="{{.FlickerLow}}">
                 <i class="bell-icon">🔔</i>
                 <span class="notification-indicator" id="notification-indicator"></span>
+                <div class="notification-dropdown hidden" id="notification-dropdown" role="menu" aria-label="Notifications">
+                    <div class="notification-section">
+                        <div class="notification-category" data-level="high">High <span class="count" id="notif-count-high">0</span></div>
+                        <div class="notification-category" data-level="medium">Medium <span class="count" id="notif-count-medium">0</span></div>
+                        <div class="notification-category" data-level="low">Low <span class="count" id="notif-count-low">0</span></div>
+                    </div>
+                    <div class="notification-recent" id="notification-recent"></div>
+                    <div class="notification-actions">
+                        <button class="btn btn-secondary" id="mark-all-seen" type="button">Mark all as seen</button>
+                    </div>
+                </div>
             </div>
             <a href="/logout" class="btn btn-secondary">Logout</a>
         </div>

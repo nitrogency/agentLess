@@ -107,6 +107,10 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 	user, err := db.GetUserByUsername(username)
 	if err == nil && user != nil {
 		data.IsAdmin = user.IsAdmin
+		// Populate flicker preferences
+		data.FlickerLow = user.FlickerLow
+		data.FlickerMedium = user.FlickerMedium
+		data.FlickerHigh = user.FlickerHigh
 	}
 
 	return data

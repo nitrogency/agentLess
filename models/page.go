@@ -23,4 +23,7 @@ type PageData struct {
 	MonitoringData      map[string]string
 	Data                map[string]interface{}
 	HasHighSecurityLogs bool
+	FlickerLow          bool
+	FlickerMedium       bool
+	FlickerHigh         bool
 }

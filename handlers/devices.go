@@ -412,9 +412,12 @@ func DeleteDeviceHandler(c *gin.Context) {
 		}
 	}
 
-	// Populate device data
-	data.Data["Device"] = device
-	templates.RenderGinTemplate(c, "delete-device-confirm", data)
+  // Populate device data
+  // For templates using top-level .Device
+  data.Device = *device
+  // Keep Data map for any legacy references
+  data.Data["Device"] = device
+  templates.RenderGinTemplate(c, "delete-device-confirm", data)
 }
 
 // MonitorDeviceHandler handles device monitoring interface
@@ -456,12 +459,24 @@ func MonitorDeviceHandler(c *gin.Context) {
 
 	// Get pagination parameters
 	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("pageSize", "50")
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
 		page = 1
 	}
 
-	pageSize := 50
+	// Parse page size with sane defaults
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil {
+		pageSize = 50
+	}
+	switch pageSize {
+	case 10, 20, 50:
+		// allowed
+	default:
+		pageSize = 50
+	}
+
 	searchTerm := c.Query("search")
 
 	// Get audit logs for this device
@@ -479,8 +494,13 @@ func MonitorDeviceHandler(c *gin.Context) {
 	}
 
 	// Populate data
+	// For templates using top-level .Device
+	data.Device = *device
+	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.Data["Logs"] = logs
+	// Back-compat for templates expecting .Data.AuditLogs
+	data.Data["AuditLogs"] = logs
 	data.Data["CurrentPage"] = page
 	data.Data["TotalPages"] = totalPages
 	data.Data["PageSize"] = pageSize
@@ -489,4 +509,3 @@ func MonitorDeviceHandler(c *gin.Context) {
 
 	templates.RenderGinTemplate(c, "monitor-device", data)
 }
-

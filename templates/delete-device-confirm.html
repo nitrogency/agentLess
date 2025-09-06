@@ -39,7 +39,8 @@
             </div>
             
             <div class="actions mt-4">
-                <form method="POST" action="/devices/delete/{{.Device.ID}}/confirm">
+                <form method="POST" action="/devices/delete/{{.Device.ID}}">
+                    <input type="hidden" name="confirm" value="yes">
                     <button type="submit" class="btn btn-danger">Yes, Delete Device</button>
                     <a href="/devices" class="btn btn-secondary">Cancel</a>
                 </form>

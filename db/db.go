@@ -88,6 +88,11 @@ func InitDB() error {
 		return err
 	}
 
+	// Initialize notifications and rules tables
+	if err := InitNotificationTables(); err != nil {
+		return err
+	}
+
 	return db.Ping()
 }
 

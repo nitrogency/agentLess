@@ -78,6 +78,29 @@
             </div>
         </div>
         
+        <div class="form-group">
+            <h4>Notification Preferences</h4>
+            <div class="permission-section">
+                <fieldset>
+                    <legend>Bell Flicker on Unseen</legend>
+                    <div class="permission-content">
+                        <p>Choose which severities cause the bell to flicker when there are unseen notifications.</p>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="flickerHigh" id="flickerHigh" {{if .User.FlickerHigh}}checked{{end}}>
+                            Flicker for High severity
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="flickerMedium" id="flickerMedium" {{if .User.FlickerMedium}}checked{{end}}>
+                            Flicker for Medium severity
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="flickerLow" id="flickerLow" {{if .User.FlickerLow}}checked{{end}}>
+                            Flicker for Low severity
+                        </label>
+                    </div>
+                </fieldset>
+            </div>
+        </div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Update User</button>
