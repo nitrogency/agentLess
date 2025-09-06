@@ -368,10 +368,59 @@ func UpdateAllDeviceStatuses() error {
 	return rows.Err()
 }
 
-// DeleteDevice deletes a device (soft delete by setting status to 'deleted')
+// DeleteDevice performs a HARD delete of a device and its related data.
+// This removes:
+//  - notifications for the device (and those tied to its logs)
+//  - notification_rules scoped to this device
+//  - audit_logs for the device
+//  - the device row itself
+// All operations are executed within a single transaction for consistency.
 func DeleteDevice(id int64) error {
-	_, err := db.Exec("UPDATE devices SET status = 'deleted' WHERE id = ?", id)
-	return err
+    tx, err := db.Begin()
+    if err != nil {
+        return err
+    }
+
+    // 1) Delete notifications referencing this device or its logs
+    //    We delete by device_id first, then by log_id just in case there
+    //    exist notifications tied to logs for this device.
+    if _, err := tx.Exec(`DELETE FROM notifications WHERE device_id = ?`, id); err != nil {
+        tx.Rollback()
+        return err
+    }
+    if _, err := tx.Exec(`DELETE FROM notifications WHERE log_id IN (SELECT id FROM audit_logs WHERE device_id = ?)`, id); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // 2) Delete notification rules scoped to this device
+    if _, err := tx.Exec(`DELETE FROM notification_rules WHERE device_id = ?`, id); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // 3) Delete audit logs for this device
+    if _, err := tx.Exec(`DELETE FROM audit_logs WHERE device_id = ?`, id); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // 4) Delete the device itself
+    if _, err := tx.Exec(`DELETE FROM devices WHERE id = ?`, id); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    if err := tx.Commit(); err != nil {
+        return err
+    }
+
+    // Remove from device name cache if present
+    deviceNameCache.Lock()
+    delete(deviceNameCache.names, id)
+    deviceNameCache.Unlock()
+
+    return nil
 }
 
 // DeviceExistsByName checks if a device with the given name already exists
