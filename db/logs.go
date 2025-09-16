@@ -82,12 +82,23 @@ func InitAuditLogTable() error {
 		ALTER TABLE audit_logs ADD COLUMN audit_id TEXT
 	`)
 	// Ignore error if column already exists
-	
+
 	// Create index on audit_id for faster duplicate checking
 	_, err = db.Exec(`
 		CREATE INDEX IF NOT EXISTS idx_audit_logs_audit_id ON audit_logs(audit_id)
 	`)
-	
+
+	if err != nil {
+		return err
+	}
+
+	// Enforce uniqueness of (device_id, audit_id) when audit_id is present
+	// This prevents duplicates regardless of ingestion path while allowing NULL audit_id rows.
+	_, err = db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS uq_audit_logs_device_audit
+		ON audit_logs(device_id, audit_id)
+		WHERE audit_id IS NOT NULL
+	`)
 	if err != nil {
 		return err
 	}
@@ -131,7 +142,7 @@ func GetAllAuditLogs() ([]AuditLog, error) {
 
 		// Parse timestamp
 		log.Timestamp = parseTimestamp(timestamp)
-		
+
 		// Convert security level string to SecurityLevel type
 		log.SecurityLevel = SecurityLevel(securityLevelStr)
 
@@ -366,61 +377,66 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel 
 
 // SecurityLevelFromString converts a string security level to the SecurityLevel type
 func SecurityLevelFromString(level string) SecurityLevel {
-	switch strings.ToLower(level) {
-	case "high":
-		return HighSecurity
-	case "medium":
-		return MediumSecurity
-	default:
-		return LowSecurity
-	}
+    switch strings.ToLower(level) {
+    case "high":
+        return HighSecurity
+    case "medium":
+        return MediumSecurity
+    default:
+        return LowSecurity
+    }
 }
 
 // InsertAuditLog inserts a new audit log entry with the provided security level
 func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, securityLevel, auditID string) (int64, error) {
-	// Insert the log with the provided security level
-	result, err := db.Exec(`
-		INSERT INTO audit_logs 
+    // Use INSERT OR IGNORE to atomically avoid duplicates based on the unique index
+    result, err := db.Exec(`
+		INSERT OR IGNORE INTO audit_logs 
 		(device_id, event_time, type, key, message, raw_log, security_level, audit_id) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, deviceID, eventTime, logType, key, message, rawLog, securityLevel, auditID)
 
-	if err != nil {
-		return 0, fmt.Errorf("error inserting audit log: %w", err)
-	}
+    if err != nil {
+        return 0, fmt.Errorf("error inserting audit log: %w", err)
+    }
 
-	insertedID, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
+    // If ignored due to duplicate, RowsAffected will be 0
+    if ra, _ := result.RowsAffected(); ra == 0 {
+        return 0, nil
+    }
 
-	// Build a minimal AuditLog to evaluate notification rules
-	logEntry := AuditLog{
-		ID:            insertedID,
-		DeviceID:      deviceID,
-		EventTime:     eventTime,
-		Type:          logType,
-		Key:           key,
-		Message:       message,
-		RawLog:        rawLog,
-		SecurityLevel: SecurityLevel(strings.ToLower(securityLevel)),
-		AuditID:       auditID,
-	}
+    insertedID, err := result.LastInsertId()
+    if err != nil {
+        return 0, err
+    }
 
-	// Best-effort: evaluate rules; do not fail the log insertion if notification creation fails
-	if err := evaluateRulesAndCreateNotifications(logEntry, insertedID); err != nil {
-		fmt.Printf("Warning: notification evaluation failed for log %d: %v\n", insertedID, err)
-	}
+    // Build a minimal AuditLog to evaluate notification rules
+    logEntry := AuditLog{
+        ID:            insertedID,
+        DeviceID:      deviceID,
+        EventTime:     eventTime,
+        Type:          logType,
+        Key:           key,
+        Message:       message,
+        RawLog:        rawLog,
+        SecurityLevel: SecurityLevel(strings.ToLower(securityLevel)),
+        AuditID:       auditID,
+    }
 
-	return insertedID, nil
+    // Best-effort: evaluate rules; do not fail the log insertion if notification creation fails
+    if err := evaluateRulesAndCreateNotifications(logEntry, insertedID); err != nil {
+        fmt.Printf("Warning: notification evaluation failed for log %d: %v\n", insertedID, err)
+    }
+
+    return insertedID, nil
 }
 
 // DeleteOldAuditLogs deletes audit logs older than the specified number of days
 func DeleteOldAuditLogs(retentionDays int) (int64, error) {
-	result, err := db.Exec(`
-		DELETE FROM audit_logs 
-		WHERE timestamp < datetime('now', '-? day')
-	`, retentionDays)
+    result, err := db.Exec(`
+        DELETE FROM audit_logs 
+        WHERE timestamp < datetime('now', '-? day')
+    `, retentionDays)
 
 	if err != nil {
 		return 0, err

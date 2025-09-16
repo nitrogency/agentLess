@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4"
 	"github.com/joho/godotenv"
+	_ "github.com/mutecomm/go-sqlcipher/v4"
 )
 
 var db *sql.DB
@@ -19,7 +19,7 @@ var db *sql.DB
 func getEncryptionKey() (string, error) {
 	// Try to load from .env file first (in case it wasn't loaded yet)
 	_ = godotenv.Load()
-	
+
 	// Get encryption key from environment
 	encKey := os.Getenv("DB_ENCRYPTION_KEY")
 	if encKey == "" {
@@ -27,11 +27,11 @@ func getEncryptionKey() (string, error) {
 		if os.Getenv("GO_ENV") == "production" {
 			return "", errors.New("DB_ENCRYPTION_KEY must be set in production environment")
 		}
-		
+
 		log.Println("Warning: Using default database encryption key. This is insecure for production.")
 		encKey = "default-dev-encryption-key-do-not-use-in-production"
 	}
-	
+
 	return encKey, nil
 }
 
@@ -50,7 +50,7 @@ func InitDB() error {
 	}
 
 	dbPath := filepath.Join(dbDir, "site.db")
-	
+
 	// Open encrypted database using SQLCipher
 	// The connection string includes the encryption key
 	connStr := fmt.Sprintf("%s?_pragma_key=%s", dbPath, encryptionKey)
@@ -68,7 +68,7 @@ func InitDB() error {
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`PRAGMA synchronous=NORMAL;`); err != nil {
+	if _, err := db.Exec(`PRAGMA synchronous=OFF;`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`PRAGMA foreign_keys=ON;`); err != nil {
