@@ -338,277 +338,43 @@ if command -v auditctl >/dev/null 2>&1; then
         }
     fi
     
-    # Create the audit rules file
-    sudo tee /etc/audit/rules.d/audit.rules > /dev/null << 'AUDIT_EOF'
-## First rule - delete all
--D
+    # Resolve UID_MIN and monitoring user's UID for scoped rules
+    UID_MIN=$(awk '/^\s*UID_MIN/{print $2}' /etc/login.defs 2>/dev/null || true)
+    [ -z "$UID_MIN" ] && UID_MIN=1000
+    MONITOR_UID=$(id -u $REMOTE_USER 2>/dev/null || echo 0)
 
-## Increase the buffers to survive stress events.
-## Make this bigger for busy systems
--b 8192
+    # The audit rules file should have been transferred as part of the setup
+    echo "Setting up audit rules from transferred file..."
+    
+    # Check if the audit rules file was transferred
+    if [ ! -f "/tmp/audit_default.rules" ]; then
+        echo "❌ Error: audit_default.rules file not found in /tmp/"
+        echo "The file should have been transferred before running this setup."
+        exit 1
+    fi
+    
+    # Copy the rules file to the audit directory
+    if ! sudo cp /tmp/audit_default.rules /etc/audit/rules.d/audit.rules; then
+        echo "❌ Error: Failed to copy audit rules file to /etc/audit/rules.d/"
+        exit 1
+    fi
+    
+    # Clean up the temporary file
+    rm -f /tmp/audit_default.rules
+    
+    echo "✅ Successfully installed audit rules to /etc/audit/rules.d/audit.rules"
 
-## This determine how long to wait in burst of events
---backlog_wait_time 60000
-
-## Set failure mode to syslog
--f 1
-
-# Exclude noisy and irrelevant message types
--a always,exclude -F msgtype=CWD
--a always,exclude -F msgtype=EOE
--a always,exclude -F msgtype=PROCTITLE -F exe=/usr/lib/systemd/systemd
--a always,exclude -F msgtype=SYSCALL -F exe=/usr/lib/systemd/systemd
-
-# Exclude common system processes that generate noise
--a never,exit -F exe=/usr/lib/systemd/systemd
--a never,exit -F exe=/usr/lib/systemd/systemd-resolved
--a never,exit -F exe=/usr/lib/systemd/systemd-networkd
--a never,exit -F exe=/usr/lib/systemd/systemd-timesyncd
--a never,exit -F exe=/usr/lib/systemd/systemd-logind
-
-# Exclude snap and package manager noise
--a never,exit -F exe=/usr/bin/snap
--a never,exit -F exe=/usr/lib/snapd/snapd
-
-# Exclude normal user processes that aren't security relevant
--a never,exit -F exe=/bin/ls
--a never,exit -F exe=/usr/bin/find
--a never,exit -F exe=/bin/grep
--a never,exit -F exe=/usr/bin/awk
--a never,exit -F exe=/bin/sed
-
-# Audit self-monitoring rules
--w /var/log/audit/ -p wa -k audit_logs
--w /etc/audit/ -p wa -k audit_tools
--w /sbin/auditctl -p x -k audit_tools
--w /sbin/auditd -p x -k audit_tools
-
-# System configuration monitoring
--w /var/crash/ -p wa -k system_crash
--w /etc/sysctl.conf -p wa -k kernel_param
--w /etc/sysctl.d -p wa -k kernel_param
--w /etc/modprobe.d -p wa -k kernel_mod
--w /etc/ld.so.conf -p wa -k lib_path_settings
--w /etc/ld.so.conf.d -p wa -k lib_path_settings
-
-# Kernel module operations
--a always,exit -F arch=b32 -S init_module -S finit_module -S delete_module -k kernel_module
--a always,exit -F arch=b64 -S init_module -S finit_module -S delete_module -k kernel_module
-
-# Systemd monitoring
--w /bin/systemctl -p x -k systemd_monitoring
--w /etc/systemd/ -p wa -k systemd_monitoring
-
-# Init script monitoring
--w /etc/inittab -p wa -k startup_scripts
--w /etc/init.d/ -p wa -k startup_scripts
-
-# Power state changes
--w /usr/sbin/shutdown -p x -k power_state
--w /usr/sbin/poweroff -p x -k power_state
--w /usr/sbin/reboot -p x -k power_state
--w /usr/sbin/halt -p x -k power_state
--w /sbin/shutdown -p x -k power_state
--w /sbin/poweroff -p x -k power_state
--w /sbin/reboot -p x -k power_state
--w /sbin/halt -p x -k power_state
-
-# Cron monitoring
--w /etc/cron.allow -p wa -k cron_events
--w /etc/cron.deny -p wa -k cron_events
--w /etc/cron.d/ -p wa -k cron_events
--w /etc/cron.daily/ -p wa -k cron_events
--w /etc/cron.hourly/ -p wa -k cron_events
--w /etc/cron.monthly/ -p wa -k cron_events
--w /etc/cron.weekly/ -p wa -k cron_events
--w /etc/crontab -p wa -k cron_events
--w /var/spool/cron/ -p wa -k cron_events
-
-# Network and security tools
--w /usr/bin/wget -p x -k suspicious
--w /usr/bin/curl -p x -k suspicious
--w /usr/bin/nc -p x -k suspicious
--w /bin/nc -p x -k suspicious
--w /usr/bin/ssh -p x -k suspicious
-
-# User and privilege monitoring
--w /etc/passwd -p wa -k user_list
--w /etc/group -p wa -k user_group
--w /etc/shadow -p wa -k user_pass
--w /etc/sudoers -p rw -k sudoers_change
--w /etc/sudoers.d/ -p rw -k sudoers_change
--w /usr/bin/sudo -p x -k privilege_esc
-
-# File deletion monitoring
--a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
--a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -k user_delete_files
-
-# System call monitoring for network environment changes
--a always,exit -F arch=b32 -S sethostname -S setdomainname -k net_environment_exe
--a always,exit -F arch=b64 -S sethostname -S setdomainname -k net_environment_exe
-
-# Time-related events monitoring
--a exit,always -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time_change
--a exit,always -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time_change
-
-# Mount operations monitoring
--a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount_operations
--a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount_operations
-
-# Session and user profile monitoring
--w /var/run/utmp -p wa -k session_info
--w /var/log/btmp -p wa -k session_info
--w /var/log/wtmp -p wa -k session_info
--w /etc/profile.d/ -p wa -k user_profiles
--w /etc/profile -p wa -k user_profiles
--w /etc/shells -p wa -k login_shells
-
-# External media, SELinux and permission modification monitoring
--w /media/ -p rwxa -k external_media
--w /etc/selinux/ -p wa -k MAC_policy
--a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod
--a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -k perm_mod
--a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod
--a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k perm_mod
--a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -k perm_mod
--a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k perm_mod
--w /bin/chmod -p x -k perm_mod
--w /bin/chown -p x -k perm_mod
--w /usr/bin/xattr -p x -k perm_mod
-
-# Login configuration and privilege escalation monitoring
--w /etc/login.defs -p wa -k login
--w /bin/su -p x -k privilege_esc
-
-# Root command execution monitoring
--a always,exit -F arch=b32 -F euid=0 -S execve -k root_commands
--a always,exit -F arch=b64 -F euid=0 -S execve -k root_commands
-
-# User and group management monitoring
--w /etc/gshadow -p wa -k group_accounts
--w /etc/security/opasswd -p wa -k passwd_history
--w /usr/bin/passwd -p x -k passwd_change
--w /usr/bin/gpasswd -p x -k user_add
--w /usr/sbin/groupadd -p x -k group_add
--w /usr/sbin/addgroup -p x -k user_add
--w /usr/sbin/groupmod -p x -k group_modification
--w /usr/sbin/adduser -p x -k user_add
--w /usr/sbin/useradd -p x -k user_add
--w /usr/sbin/userdel -p x -k user_del
--w /usr/sbin/deluser -p x -k user_del
--w /usr/sbin/usermod -p x -k user_modification
--w /usr/sbin/groupdel -p x -k group_del
--w /usr/sbin/delgroup -p x -k group_del
-
-# Network configuration monitoring
--w /etc/hosts -p wa -k network_config
--w /etc/hostname -p wa -k network_config
--w /etc/resolv.conf -p wa -k network_config
--w /etc/network/ -p wa -k network_config
--w /etc/netplan/ -p wa -k network_config
-
-# SSH configuration monitoring
--w /etc/ssh/sshd_config -p wa -k ssh_config
--w /etc/ssh/ssh_config -p wa -k ssh_config
--w /root/.ssh/ -p wa -k ssh_keys
-
-# Package management monitoring
--w /usr/bin/apt -p x -k package_management
--w /usr/bin/apt-get -p x -k package_management
--w /usr/bin/dpkg -p x -k package_management
--w /usr/bin/snap -p x -k package_management
--w /usr/bin/apt-add-repository -p x -k software_mgmt
-
-# Service management monitoring
--w /etc/init.d/ -p wa -k service_management
--w /lib/systemd/ -p wa -k service_management
-
-# Log file monitoring
--w /var/log/auth.log -p wa -k auth_logs
--w /var/log/syslog -p wa -k system_logs
--w /var/log/kern.log -p wa -k kernel_logs
-
-# Reconnaissance monitoring
--w /usr/bin/whoami -p x -k reconnaissance
--w /usr/sbin/ifconfig -p x -k reconnaissance
--w /usr/bin/id -p x -k reconnaissance
--w /bin/hostname -p x -k reconnaissance
--w /bin/uname -p x -k reconnaissance
--w /etc/issue -p r -k reconnaissance
--w /proc/version -p r -k reconnaissance
--w /proc/sys/kernel/domainname -p r -k reconnaissance
--w /proc/swaps -p r -k reconnaissance
--w /proc/partitions -p r -k reconnaissance
--w /proc/cpuinfo -p r -k reconnaissance
--w /proc/self/mounts -p r -k reconnaissance
-
-# Suspicious activity monitoring (expanded)
--w /usr/bin/base64 -p x -k suspicious
--w /etc/alternatives/nc -p x -k suspicious
--w /bin/netcat -p x -k suspicious
--w /etc/alternatives/netcat -p x -k suspicious
--w /usr/bin/scp -p x -k suspicious
--w /usr/bin/sftp -p x -k suspicious
--w /usr/bin/ftp -p x -k suspicious
--w /etc/alternatives/ftp -p x -k suspicious
--w /usr/bin/dmesg -p x -k suspicious
--w /usr/bin/ps -p x -k suspicious
--w /usr/bin/pstree -p x -k suspicious
--w /usr/bin/top -p x -k suspicious
--w /usr/bin/htop -p x -k suspicious
--w /usr/bin/kill -p x -k suspicious
--w /usr/bin/killall -p x -k suspicious
--w /usr/bin/last -p x -k suspicious
--w /usr/bin/lsof -p x -k suspicious
--w /usr/bin/kmod -p x -k suspicious
--w /usr/sbin/arp -p x -k suspicious
--w /bin/bash -p x -k suspicious
--w /etc/alternatives/arptables -p x -k suspicious
--w /usr/sbin/arptables -p x -k suspicious
-
-# Unsuccessful write attempt monitoring
--a always,exit -F dir=/etc -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
--a always,exit -F dir=/var -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
--a always,exit -F dir=/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
--a always,exit -F dir=/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
--a always,exit -F dir=/usr/bin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
--a always,exit -F dir=/usr/sbin -F perm=w -F uid>=1000 -F success=0 -k unsuccessful_write
-
-# Enhanced file deletion and renaming monitoring
--a always,exit -F arch=b32 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b32 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b32 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b32 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b32 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b64 -S rename -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b64 -S renameat -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b64 -S rmdir -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b64 -S unlink -F auid!=unset -F uid>=1000 -k user_delete_files
--a always,exit -F arch=b64 -S unlinkat -F auid!=unset -F uid>=1000 -k user_delete_files
-
-# Make the configuration immutable (optional - uncomment if desired)
-# -e 2
-AUDIT_EOF
-
-    # Restart audit services to apply new rules
-    echo "Restarting audit services..."
-    sudo systemctl stop auditd 2>/dev/null || echo "⚠️ Warning: Failed to stop auditd service"
-    sudo systemctl stop audit-rules.service 2>/dev/null || true
-
-    # Wait a moment for services to stop
-    sleep 2
-
-    # Start services in correct order
-    sudo systemctl start auditd || echo "⚠️ Warning: Failed to start auditd service"
-    sudo systemctl enable auditd || echo "⚠️ Warning: Failed to enable auditd service"
+    # Load rules via augenrules (preferred), fallback to restarting auditd
+    echo "Loading audit rules..."
+    if command -v augenrules >/dev/null 2>&1; then
+        sudo augenrules --load || echo "⚠️ Warning: augenrules load failed"
+    else
+        sudo systemctl restart auditd || sudo service auditd restart || echo "⚠️ Warning: Failed to restart auditd"
+    fi
 
     # Verify the rules were loaded
     echo "Verifying audit rules are loaded..."
     sudo auditctl -l || echo "⚠️ Warning: Could not verify audit rules"
-    
-    # Force reload of audit rules from the configuration file
-    echo "Forcing reload of audit rules from configuration file..."
-    sudo auditctl -R /etc/audit/rules.d/audit.rules || echo "❌ Error: Failed to reload audit rules from /etc/audit/rules.d/audit.rules. Please check output above for details."
 else
     echo "❌ Skipping audit rules setup as auditctl command is not available."
     AUDITD_INSTALLED=false
@@ -652,6 +418,21 @@ EOF
     
     # Copy the SSH key to the target
     scp -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -P "$SERVER_PORT" "$SSH_KEY_TMP_FILE" "$LOGIN_USER@$TARGET_IP:~/ids_monitor.pub"
+    
+    # Determine the audit rules file path
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    AUDIT_RULES_FILE="$(dirname "$SCRIPT_DIR")/rulesets/audit_default.rules"
+    
+    # Check if the audit rules file exists and copy it
+    if [ -f "$AUDIT_RULES_FILE" ]; then
+        echo "Copying audit rules file to target..."
+        scp -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -P "$SERVER_PORT" "$AUDIT_RULES_FILE" "$LOGIN_USER@$TARGET_IP:/tmp/audit_default.rules"
+    else
+        echo "❌ Error: audit_default.rules file not found at $AUDIT_RULES_FILE"
+        echo "Please ensure the rulesets/audit_default.rules file exists in the project directory."
+        rm -f "$TMP_SCRIPT_FILE" "$SSH_KEY_TMP_FILE"
+        exit 1
+    fi
     
     # Run the script on the target with a pseudo-terminal allocation
     ssh -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -t -p "$SERVER_PORT" "$LOGIN_USER@$TARGET_IP" "export USE_SUDO_PASSWORD=\"$USE_SUDO_PASSWORD\"; export SUDO_PASSWORD=\"$SUDO_PASSWORD\"; export SSH_PUB_KEY=\"\$(cat ~/ids_monitor.pub)\"; bash ~/setup_ids_monitor.sh && rm ~/setup_ids_monitor.sh ~/ids_monitor.pub"
