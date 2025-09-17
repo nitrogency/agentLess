@@ -21,7 +21,7 @@ command_exists() {
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="$APP_DIR/data"
 LOG_DIR="$APP_DIR/logs"
-SCRIPT_DIR="$APP_DIR"
+SCRIPT_DIR="$APP_DIR/scripts"
 
 # Create necessary directories
 echo "Creating required directories..."
