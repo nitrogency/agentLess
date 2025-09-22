@@ -2,11 +2,15 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
+
+	"example/go-website/db"
 )
 
 var (
@@ -43,42 +47,42 @@ var (
 		"reconnaissance": {},
 	}
 	mediumKeys = map[string]struct{}{
-		"privilege_esc":     {},
-		"user_pass":         {},
-		"sudoers_change":    {},
-		"authentication":    {},
-		"failed_login":      {},
-		"user_del":          {},
-		"mac_policy":        {},
-		"audit_tools":       {},
-		"audit_logs":        {},
-		"user_add":          {},
-		"user_modification": {},
-		"group_add":         {},
+		"privilege_esc":      {},
+		"user_pass":          {},
+		"sudoers_change":     {},
+		"authentication":     {},
+		"failed_login":       {},
+		"user_del":           {},
+		"mac_policy":         {},
+		"audit_tools":        {},
+		"audit_logs":         {},
+		"user_add":           {},
+		"user_modification":  {},
+		"group_add":          {},
 		"group_modification": {},
-		"user_list":         {},
-		"user_group":        {},
-		"group_accounts":    {},
-		"passwd_change":     {},
-		"passwd_history":    {},
-		"kernel_module":     {},
-		"kernel_param":      {},
+		"user_list":          {},
+		"user_group":         {},
+		"group_accounts":     {},
+		"passwd_change":      {},
+		"passwd_history":     {},
+		"kernel_module":      {},
+		"kernel_param":       {},
 		"systemd_monitoring": {},
-		"startup_scripts":   {},
-		"perm_mod":          {},
-		"mount_operations":  {},
+		"startup_scripts":    {},
+		"perm_mod":           {},
+		"mount_operations":   {},
 	}
 	lowKeys = map[string]struct{}{
-		"root_commands":    {},
-		"user_list":        {}, // overlaps allowed
-		"user_group":       {},
-		"group_accounts":   {},
-		"time_change":      {},
+		"root_commands":       {},
+		"user_list":           {}, // overlaps allowed
+		"user_group":          {},
+		"group_accounts":      {},
+		"time_change":         {},
 		"net_environment_exe": {},
-		"cron_events":      {},
-		"software_mgmt":    {},
-		"user_delete_files": {},
-		"command_execution": {},
+		"cron_events":         {},
+		"software_mgmt":       {},
+		"user_delete_files":   {},
+		"command_execution":   {},
 	}
 )
 
@@ -152,7 +156,7 @@ func classify(ev *Event) string {
 	return "low"
 }
 
-func flush(curID string, raw []string, host string) {
+func flush(curID string, raw []string, host string, deviceID int64) {
 	if len(raw) == 0 {
 		return
 	}
@@ -192,8 +196,40 @@ func flush(curID string, raw []string, host string) {
 	}
 
 	ev.Level = classify(&ev)
-	enc := json.NewEncoder(os.Stdout)
-	_ = enc.Encode(ev)
+
+	// Derive event_time from audit msg id (epoch seconds before '.')
+	eventTime := ""
+	if ev.ID != "" {
+		idPart := ev.ID
+		// ev.ID format typically: 1727027892.123:456
+		if colonIdx := strings.IndexByte(idPart, ':'); colonIdx >= 0 {
+			idPart = idPart[:colonIdx]
+		}
+		if dotIdx := strings.IndexByte(idPart, '.'); dotIdx >= 0 {
+			idPart = idPart[:dotIdx]
+		}
+		if sec, err := strconv.ParseInt(idPart, 10, 64); err == nil {
+			eventTime = time.Unix(sec, 0).UTC().Format("2006-01-02 15:04:05")
+		}
+	}
+
+	// Construct a human-friendly message
+	message := "Raw entry"
+	if len(ev.Argv) > 0 {
+		message = "Command Line: " + strings.Join(ev.Argv, " ")
+	} else if ev.Comm != "" && ev.Exe != "" {
+		message = "Command: " + ev.Comm + " (" + ev.Exe + ")"
+	} else if ev.Comm != "" {
+		message = "Command: " + ev.Comm
+	}
+
+	// Use comm as the type for display/filtering consistency
+	logType := ev.Comm
+
+	// Insert directly into DB; ignore duplicate via unique index (device_id, audit_id)
+	if _, err := db.InsertAuditLog(deviceID, eventTime, logType, ev.Key, message, buf, ev.Level, ev.ID); err != nil {
+		fmt.Fprintln(os.Stderr, "insert error:", err)
+	}
 }
 
 func main() {
@@ -201,6 +237,21 @@ func main() {
 	if host == "" {
 		host = "unknown"
 	}
+
+	// Flags
+	deviceFlag := flag.Int64("device", 0, "Device ID to attribute logs to (required)")
+	flag.Parse()
+	if *deviceFlag <= 0 {
+		fmt.Fprintln(os.Stderr, "error: -device <id> is required")
+		os.Exit(2)
+	}
+
+	// Initialize encrypted database using shared app settings
+	if err := db.InitDB(); err != nil {
+		fmt.Fprintln(os.Stderr, "db init error:", err)
+		os.Exit(1)
+	}
+	defer db.Close()
 
 	sc := bufio.NewScanner(os.Stdin)
 	// allow long lines
@@ -225,13 +276,13 @@ func main() {
 			curID = id
 		}
 		if id != curID {
-			flush(curID, raw, host)
+			flush(curID, raw, host, *deviceFlag)
 			curID = id
 			raw = raw[:0]
 		}
 		raw = append(raw, line)
 	}
-	flush(curID, raw, host)
+	flush(curID, raw, host, *deviceFlag)
 
 	if err := sc.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "scan error:", err)
