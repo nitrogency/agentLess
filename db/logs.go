@@ -433,14 +433,17 @@ func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, se
 
 // DeleteOldAuditLogs deletes audit logs older than the specified number of days
 func DeleteOldAuditLogs(retentionDays int) (int64, error) {
+    // Compute cutoff as an absolute timestamp string to avoid concatenation issues
+    cutoff := time.Now().AddDate(0, 0, -retentionDays).Format("2006-01-02 15:04:05")
+
     result, err := db.Exec(`
         DELETE FROM audit_logs 
-        WHERE timestamp < datetime('now', '-? day')
-    `, retentionDays)
+        WHERE timestamp < ?
+    `, cutoff)
 
-	if err != nil {
-		return 0, err
-	}
+    if err != nil {
+        return 0, err
+    }
 
-	return result.RowsAffected()
+    return result.RowsAffected()
 }
