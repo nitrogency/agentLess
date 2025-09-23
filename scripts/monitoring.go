@@ -42,52 +42,31 @@ func inSet(s string, set map[string]struct{}) bool {
 }
 
 var (
-	highKeys = map[string]struct{}{
-		"suspicious":     {},
-		"reconnaissance": {},
-	}
+	highKeys   = map[string]struct{}{}
 	mediumKeys = map[string]struct{}{
-		"privilege_esc":      {},
-		"user_pass":          {},
-		"sudoers_change":     {},
-		"authentication":     {},
-		"failed_login":       {},
-		"user_del":           {},
-		"mac_policy":         {},
-		"audit_tools":        {},
-		"audit_logs":         {},
-		"user_add":           {},
-		"user_modification":  {},
-		"group_add":          {},
-		"group_modification": {},
-		"user_list":          {},
-		"user_group":         {},
-		"group_accounts":     {},
-		"passwd_change":      {},
-		"passwd_history":     {},
-		"kernel_module":      {},
-		"kernel_param":       {},
-		"systemd_monitoring": {},
-		"startup_scripts":    {},
-		"perm_mod":           {},
-		"mount_operations":   {},
+		// From rulesets/audit_default.rules
+		"identity_mod":   {},
+		"mounts":         {},
+		"sudo_log_mod":   {},
+		"sudoers_mod":    {},
+		"user_emulation": {},
+		"system_env":     {},
+		"failed_access":  {},
+		"session":        {},
+		"file_delete":    {},
+		"conf_chcon":     {},
+		"conf_setfacl":   {},
+		"conf_chacl":     {},
+		"usermod":        {},
+		"kernel_modules": {},
 	}
 	lowKeys = map[string]struct{}{
-		"root_commands":       {},
-		"user_list":           {}, // overlaps allowed
-		"user_group":          {},
-		"group_accounts":      {},
-		"time_change":         {},
-		"net_environment_exe": {},
-		"cron_events":         {},
-		"software_mgmt":       {},
-		"user_delete_files":   {},
-		"command_execution":   {},
+		"exec_all": {},
 	}
 )
 
 func classify(ev *Event) string {
-	key := ev.Key
+	key := strings.ToLower(ev.Key)
 	comm := strings.ToLower(ev.Comm)
 	exe := ev.Exe
 	success := strings.ToLower(ev.Success)
@@ -97,6 +76,42 @@ func classify(ev *Event) string {
 	if (comm == "tail" || comm == "cat" || comm == "ausearch" || comm == "ssh" || comm == "sudo") &&
 		(strings.Contains(argvJoined, "/var/log/audit") || strings.Contains(argvJoined, "audit.log")) {
 		return "low"
+	}
+
+	// ---- Explicit high-risk executables/patterns (cheap substring checks)
+	// Single pass list: exact exe paths and argv substrings considered high-risk
+	exeLower := strings.ToLower(exe)
+	highList := []string{
+		// exact binaries (also checked in argv)
+		"/bin/netcat", "/usr/bin/netcat", "/bin/nc", "/usr/bin/nc", "/usr/bin/ncat", "/usr/bin/socat",
+		// nc command-exec variants
+		" nc -e ", " nc -c ",
+		// reverse shells
+		" bash -i", "/dev/tcp/",
+		// download-and-execute one-liners (broader match)
+		"| sh",
+		// socat pty reverse pattern
+		"socat pty,raw,echo=0",
+	}
+	for _, pat := range highList {
+		if exeLower == pat || strings.Contains(argvJoined, pat) {
+			return "high"
+		}
+	}
+	mediumList := []string{
+		"/usr/bin/whoami", "/usr/sbin/ifconfig", "/usr/bin/id", "/bin/hostname", "/bin/uname",
+		"/etc/issue", "/proc/version", "/proc/sys/kernel/domainname", "/proc/swaps", "/proc/partitions",
+		"/proc/cpuinfo", "/proc/self/mounts",
+
+		"/usr/bin/base64", "/usr/bin/scp", "/usr/bin/sftp", "/usr/bin/ftp", "/etc/alternatives/ftp",
+		"/usr/bin/dmesg", "/usr/bin/ps", "/usr/bin/pstree", "/usr/bin/top", "/usr/bin/htop",
+		"/usr/bin/kill", "/usr/bin/killall", "/usr/bin/last", "/usr/bin/lsof", "/usr/bin/kmod",
+		"/usr/sbin/arp", "/bin/bash", "/etc/alternatives/arptables", "/usr/sbin/arptables",
+	}
+	for _, pat := range mediumList {
+		if exeLower == pat || strings.Contains(argvJoined, pat) {
+			return "medium"
+		}
 	}
 
 	// ---- Key-based classification (fast paths)
@@ -150,7 +165,7 @@ func classify(ev *Event) string {
 
 	// If sudo failed
 	if success == "no" && comm == "sudo" {
-		return "high"
+		return "medium"
 	}
 
 	return "low"

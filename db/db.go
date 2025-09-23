@@ -68,7 +68,7 @@ func InitDB() error {
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`PRAGMA synchronous=OFF;`); err != nil {
+	if _, err := db.Exec(`PRAGMA synchronous=ON;`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`PRAGMA foreign_keys=ON;`); err != nil {

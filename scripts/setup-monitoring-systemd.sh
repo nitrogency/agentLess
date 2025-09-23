@@ -47,7 +47,43 @@ echo "Reading devices from DB..."
 DEVICES=$(sqlcipher "$DB_PATH" "PRAGMA key = '$DB_KEY'; SELECT id, ip_address, ssh_user, ssh_key_path, COALESCE(ssh_port,'22') FROM devices WHERE status != 'deleted';" 2>/dev/null | grep -v '^ok$' || true)
 if [ -z "$DEVICES" ]; then
   echo "No devices found. Add devices to the DB first." >&2
-  exit 1
+  # Still proceed to reconcile and stop any stale services
+fi
+
+# Build a space-delimited list of active IDs for reconciliation like: " 1 2 3 "
+ACTIVE_IDS=""
+if [ -n "$DEVICES" ]; then
+  IFS=$'\n'
+  for row in $DEVICES; do
+    IFS='|' read -r ID _rest <<<"$row"
+    if [ -n "$ID" ]; then
+      ACTIVE_IDS+=" $ID"
+    fi
+  done
+fi
+ACTIVE_IDS="${ACTIVE_IDS# }"
+
+# Reconcile: disable/stop units and remove env files for IDs not in DB
+echo "Reconciling stale monitor units/env files..."
+if ls "$ENV_DIR"/monitor-*.env >/dev/null 2>&1; then
+  for envf in "$ENV_DIR"/monitor-*.env; do
+    [ -e "$envf" ] || continue
+    bn=$(basename "$envf")
+    did=${bn#monitor-}
+    did=${did%.env}
+    case " $ACTIVE_IDS " in
+      *" $did "*)
+        # still active
+        :
+        ;;
+      *)
+        echo "Removing stale device $did"
+        sudo systemctl disable --now "agentless-monitor@$did.service" >/dev/null 2>&1 || true
+        sudo systemctl reset-failed "agentless-monitor@$did.service" >/dev/null 2>&1 || true
+        sudo rm -f -- "$envf"
+        ;;
+    esac
+  done
 fi
 
 # Create env dir
