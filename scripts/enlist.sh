@@ -421,7 +421,7 @@ EOF
     
     # Determine the audit rules file path
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    AUDIT_RULES_FILE="$(dirname "$SCRIPT_DIR")/rulesets/audit_default.rules"
+    AUDIT_RULES_FILE="$(dirname "$SCRIPT_DIR")/rulesets/x64/audit_default.rules"
     
     # Check if the audit rules file exists and copy it
     if [ -f "$AUDIT_RULES_FILE" ]; then
