@@ -245,10 +245,10 @@ sudo grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || {
     fi
 }
 
-# Set up sudoers entry for specific commands
-echo "Setting up sudoers entry for $REMOTE_USER..."
-# Write the sudoers entry directly without using a variable
-sudo bash -c "echo \"$REMOTE_USER ALL=(ALL) NOPASSWD: /usr/bin/netstat, /usr/bin/ss, /usr/bin/lsof, /usr/bin/ps, /usr/bin/last, /sbin/auditctl, /sbin/ausearch, /usr/bin/cat\" > /etc/sudoers.d/$REMOTE_USER"
+# Set up sudoers entry for specific commands (least privilege)
+echo "Setting up sudoers entry for $REMOTE_USER (least privilege)..."
+# Allow only reading audit log via cat/tail; rely primarily on adm group for access
+sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log\" > /etc/sudoers.d/$REMOTE_USER"
 sudo chmod 440 /etc/sudoers.d/$REMOTE_USER
 
 # Verify the sudoers entry was created correctly
@@ -391,17 +391,8 @@ else
     sudo auditctl -e 1 || echo "Warning: Could not re-enable audit logging"
 fi
 
-# Clear audit logs to remove setup-related entries
-echo "Clearing audit logs to remove setup-related entries..."
-if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
-    echo "\$SUDO_PASSWORD" | sudo -S bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
-    echo "\$SUDO_PASSWORD" | sudo -S ausearch --start today --format raw | sudo tee /var/log/audit/audit.log.bak > /dev/null || echo "Warning: Could not backup audit logs"
-    echo "\$SUDO_PASSWORD" | sudo -S bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
-else
-    sudo bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
-    sudo ausearch --start today --format raw | sudo tee /var/log/audit/audit.log.bak > /dev/null || echo "Warning: Could not backup audit logs"
-    sudo bash -c 'echo > /var/log/audit/audit.log' || echo "Warning: Could not clear audit logs"
-fi
+# Do not clear audit logs (preserve forensic evidence). Consider marking a baseline timestamp in DB instead.
+echo "Preserving existing audit logs; no destructive clearing performed."
 
 echo "Remote setup completed successfully"
 EOF

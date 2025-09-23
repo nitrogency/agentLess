@@ -105,11 +105,25 @@ EnvironmentFile=%s/monitor-%%i.env
 ExecStart=/usr/bin/env bash -lc '%s -d %%i -u "\$SSH_USER" -i "\$IP" -k "\$SSH_KEY" -p "\$SSH_PORT"'
 Restart=always
 RestartSec=2
-# Hardening (simple)
+# Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6
+SystemCallFilter=@system-service
 
 [Install]
 WantedBy=multi-user.target
