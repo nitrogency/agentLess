@@ -290,3 +290,43 @@ func evaluateRulesAndCreateNotifications(log AuditLog, insertedLogID int64) erro
 	}
 	return nil
 }
+
+// UpdateUserNotificationRules creates or updates notification rules for a user based on their search terms
+func UpdateUserNotificationRules(userID int64, searchTerms string) error {
+	// First, delete existing rules for this user (rules with names starting with "User-[userID]-")
+	_, err := db.Exec(`DELETE FROM notification_rules WHERE name LIKE ?`, fmt.Sprintf("User-%d-%%", userID))
+	if err != nil {
+		return fmt.Errorf("failed to delete existing user rules: %v", err)
+	}
+
+	// If search terms are empty, we're done
+	if strings.TrimSpace(searchTerms) == "" {
+		return nil
+	}
+
+	// Parse search terms (comma-separated)
+	terms := strings.Split(searchTerms, ",")
+	for i, term := range terms {
+		term = strings.TrimSpace(term)
+		if term == "" {
+			continue
+		}
+
+		// Create a notification rule for this search term
+		ruleName := fmt.Sprintf("User-%d-Term-%d", userID, i+1)
+		_, err := CreateNotificationRule(
+			ruleName,
+			"search_term", // match type
+			"",            // security level (not used for search_term)
+			"",            // audit type (not used for search_term)
+			term,          // search term
+			sql.NullInt64{}, // device_id (null = all devices)
+			true,          // enabled
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create notification rule for term '%s': %v", term, err)
+		}
+	}
+
+	return nil
+}

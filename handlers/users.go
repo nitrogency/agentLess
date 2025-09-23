@@ -193,9 +193,11 @@ func EditUserHandler(c *gin.Context) {
 		flickerLow := c.PostForm("flickerLow") == "on"
 		flickerMedium := c.PostForm("flickerMedium") == "on"
 		flickerHigh := c.PostForm("flickerHigh") == "on"
+		searchTerms := strings.TrimSpace(c.PostForm("searchTerms"))
 
 		// Store form data for repopulating on error
 		data.FormData["username"] = username
+		data.FormData["searchTerms"] = searchTerms
 
 		// Validate required fields
 		if username == "" {
@@ -265,10 +267,10 @@ func EditUserHandler(c *gin.Context) {
 		// Update user
 		if password != "" {
 			// Update with new password
-			err = db.UpdateUserWithPassword(userID, username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh)
+			err = db.UpdateUserWithPassword(userID, username, password, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, searchTerms)
 		} else {
 			// Update without changing password
-			err = db.UpdateUser(userID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh)
+			err = db.UpdateUser(userID, username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, searchTerms)
 		}
 
 		if err != nil {
@@ -277,6 +279,13 @@ func EditUserHandler(c *gin.Context) {
 			data.User = user
 			templates.RenderGinTemplate(c, "edit-user", data)
 			return
+		}
+
+		// Update notification rules based on search terms
+		err = db.UpdateUserNotificationRules(userID, searchTerms)
+		if err != nil {
+			log.Printf("Error updating user notification rules: %v", err)
+			// Don't fail the user update for notification rule errors, just log it
 		}
 
 		// Redirect to users list on success

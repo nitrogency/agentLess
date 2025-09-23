@@ -99,6 +99,17 @@
                         </label>
                     </div>
                 </fieldset>
+                
+                <fieldset>
+                    <legend>Custom Alert Keywords</legend>
+                    <div class="permission-content">
+                        <p>Enter keywords or terms (separated by commas) that will trigger notifications when found in audit logs.</p>
+                        <div class="form-group">
+                            <label for="searchTerms">Alert Keywords</label>
+                            <textarea name="searchTerms" id="searchTerms" rows="3" placeholder="ssh, sudo, passwd, login, error" class="form-control">{{if .FormData.searchTerms}}{{.FormData.searchTerms}}{{else}}{{.User.SearchTerms}}{{end}}</textarea>
+                        </div>
+                    </div>
+                </fieldset>
             </div>
         </div>
 
