@@ -95,22 +95,16 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 
 	data.Username = username
 
-	// Get user ID from session
-	userIDInterface := session.Get("user_id")
-	if userIDInterface != nil {
-		if userID, ok := userIDInterface.(int64); ok {
-			data.UserID = userID
-		}
-	}
-
-	// Get user from database to check admin status
+	// Get user from database to get user ID and other details
 	user, err := db.GetUserByUsername(username)
 	if err == nil && user != nil {
+		data.UserID = user.ID  // Use user ID from database instead of session
 		data.IsAdmin = user.IsAdmin
 		// Populate flicker preferences
 		data.FlickerLow = user.FlickerLow
 		data.FlickerMedium = user.FlickerMedium
 		data.FlickerHigh = user.FlickerHigh
+		// Note: SearchTerms is specific to user and not needed in general page data
 	}
 
 	return data

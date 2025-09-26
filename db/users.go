@@ -21,6 +21,7 @@ type User struct {
 	FlickerLow       bool      `json:"flicker_low"`
 	FlickerMedium    bool      `json:"flicker_medium"`
 	FlickerHigh      bool      `json:"flicker_high"`
+	SearchTerms      string    `json:"search_terms"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
@@ -39,10 +40,16 @@ func InitUserTable() error {
 			flicker_low INTEGER NOT NULL DEFAULT 0,
 			flicker_medium INTEGER NOT NULL DEFAULT 1,
 			flicker_high INTEGER NOT NULL DEFAULT 1,
+			search_terms TEXT NOT NULL DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	`)
+	
+	// Add search_terms column if it doesn't exist (for existing databases)
+	if err == nil {
+		_, _ = db.Exec(`ALTER TABLE users ADD COLUMN search_terms TEXT NOT NULL DEFAULT ''`)
+	}
 
 	if err != nil {
 		return err
@@ -137,9 +144,9 @@ func ValidateUser(username, password string) (bool, error) {
 func GetUser(username string) (*User, error) {
 	user := &User{}
 	err := db.QueryRow(
-		"SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE username = ?",
+		"SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, search_terms, created_at FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.SearchTerms, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -154,8 +161,8 @@ func GetUser(username string) (*User, error) {
 // GetUserByID returns a user by their ID
 func GetUserByID(id int64) (*User, error) {
 	var user User
-	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE id = ?", id).
-		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
+	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, search_terms, created_at FROM users WHERE id = ?", id).
+		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.SearchTerms, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -168,8 +175,8 @@ func GetUserByID(id int64) (*User, error) {
 // GetUserByUsername returns a user by their username
 func GetUserByUsername(username string) (*User, error) {
 	var user User
-	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users WHERE username = ?", username).
-		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt)
+	err := db.QueryRow("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, search_terms, created_at FROM users WHERE username = ?", username).
+		Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.SearchTerms, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -181,7 +188,7 @@ func GetUserByUsername(username string) (*User, error) {
 
 // GetAllUsers returns all users from the database
 func GetAllUsers() ([]User, error) {
-	rows, err := db.Query("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, created_at FROM users")
+	rows, err := db.Query("SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, search_terms, created_at FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +197,7 @@ func GetAllUsers() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.SearchTerms, &user.CreatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, user)
@@ -199,9 +206,9 @@ func GetAllUsers() ([]User, error) {
 }
 
 // UpdateUser updates a user's information
-func UpdateUser(id int64, username string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool) error {
-	_, err := db.Exec("UPDATE users SET username = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ? WHERE id = ?",
-		username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, id)
+func UpdateUser(id int64, username string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool, searchTerms string) error {
+	_, err := db.Exec("UPDATE users SET username = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ?, search_terms = ? WHERE id = ?",
+		username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, searchTerms, id)
 	return err
 }
 
@@ -218,14 +225,14 @@ func UpdateUserPassword(id int64, newPassword string) error {
 }
 
 // UpdateUserWithPassword updates a user's information including password
-func UpdateUserWithPassword(id int64, username, newPassword string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool) error {
+func UpdateUserWithPassword(id int64, username, newPassword string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool, searchTerms string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Exec("UPDATE users SET username = ?, password_hash = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ? WHERE id = ?",
-		username, string(hashedPassword), isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, id)
+	_, err = db.Exec("UPDATE users SET username = ?, password_hash = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ?, search_terms = ? WHERE id = ?",
+		username, string(hashedPassword), isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, searchTerms, id)
 	return err
 }
 

@@ -882,6 +882,8 @@ select.form-control {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
+    position: relative;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }
 .notification-item:hover { background: rgba(176, 28, 46, 0.08); }
 .notification-item .item-title { font-weight: 600; margin-bottom: 4px; }
@@ -889,5 +891,23 @@ select.form-control {
 .notification-item .item-title.medium { color: #ffd166; }
 .notification-item .item-title.low { color: #6bdc7a; }
 .notification-item .item-message { color: var(--text-secondary); font-size: 0.92em; }
+
+.notification-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+.notification-close:hover {
+    background: rgba(176, 28, 46, 0.1);
+    color: var(--danger-color);
+}
 
 .notification-actions { padding: 8px 12px; display: flex; justify-content: flex-end; }

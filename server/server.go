@@ -153,6 +153,7 @@ func setupRoutes(router *gin.Engine) {
 		// Notifications
 		protected.GET("/notifications/summary", handlers.NotificationsSummaryHandler)
 		protected.POST("/notifications/mark-seen", handlers.NotificationsMarkSeenHandler)
+		protected.POST("/notifications/:id/mark-seen", handlers.NotificationMarkSeenHandler)
 	}
 
 	// Admin routes

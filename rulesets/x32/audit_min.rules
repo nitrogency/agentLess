@@ -1,0 +1,118 @@
+# ---Default ruleset---
+# This is the default ruleset following the base CIS Ubuntu Server benchmark audit recommendations,
+# plus common commands that might be used for malicious behavior. Minimal performance impact.
+
+# First rule - delete all
+-D
+
+# Increase the buffers to survive stress events.
+# Make this bigger for busy systems
+-b 8192
+
+# Set failure mode to syslog
+-f 1
+
+# ---FILTERS---
+# CWD event logging has no meaning, yet generates lots of volume, we already know directory by PATH (redundant)
+-a always,exclude -F msgtype=CWD
+
+# ---RULES---
+
+# Sensitive file modifying
+# Editing these files can change or break the behavior of system users and grant privileges
+# System groups
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/group -F perm=wa -F auid!=unset -k identity_mod
+# System users
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/passwd -F perm=wa -F auid!=unset -k identity_mod
+# Password for each group
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/gshadow -F perm=wa -F auid!=unset -k identity_mod
+# System user passwords
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/shadow -F perm=wa -F auid!=unset -k identity_mod
+# Storage of old passwords
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/security/opasswd -F perm=wa -F auid!=unset -k identity_mod
+# Name service switch configuration
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/nsswitch.conf -F perm=wa -F auid!=unset -k identity_mod
+# What authentication modules are used
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F path=/etc/pam.conf -F perm=wa -F auid!=unset -k identity_mod
+# PAM config files directory
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/pam.d -F perm=wa -F auid!=unset -k identity_mod
+
+# Permission modification
+# Can be used to grant execution to scripts/binaries or read access to sensitive files
+-a always,exit -F arch=b32 -S chmod,fchmod,fchmodat -F auid>=1000 -F auid!=unset -F key=perm_mod
+-a always,exit -F arch=b32 -S chown,fchown,lchown,fchownat -F auid>=1000 -F auid!=unset -F key=perm_mod
+-a always,exit -F arch=b32 -S setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=unset -F key=perm_mod
+
+# Mounts by unprivileged users
+# Mounting by user other than root is rare and unusual
+-a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=unset -k mounts
+
+# Sudoers modification
+# Changes in sudoers files can alter regular or administrative user privileges, which may be abused
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat -F path=/etc/sudoers -F perm=wa -F auid!=unset -k sudoers_mod
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/sudoers.d -F perm=wa -F auid!=unset -k sudoers_mod
+
+# Temporary privilege escalations (e.g. sudo)
+# Commands executed with elevated privileges may be used maliciously
+-a always,exit -F arch=b32 -C euid!=uid -S execve -F auid!=unset -k user_emulation
+
+# Time-related events
+# System date/time changes can be used to disrupt investigation and services which rely on accurate time
+# Tune kernel clock
+-a always,exit -F arch=b32 -S adjtimex,settimeofday -F auid!=unset -F key=time_change
+# Set time using timeval and timezone
+-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -F auid!=unset -F key=time_change
+# Sets internal clocks and timers
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/localtime -F perm=wa -F auid!=unset -k time_change
+
+# Network environment changes - hostname, domain name, etc.
+# Helps identify unauthorized host/domain name edits, network interface editing
+-a always,exit -F arch=b32 -S sethostname,setdomainname -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/issue -F perm=wa -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/issue.net -F perm=wa -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/hosts -F perm=wa -F auid!=unset -k system_env
+# Hostnames and associated IP addresses
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/hosts -F perm=wa -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/networks -F perm=wa -F auid!=unset -k system_env
+# Symbolic names for networks
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/etc/networks -F perm=wa -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/network -F perm=wa -F auid!=unset -k system_env
+# Network interface scripts and config files
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/network -F perm=wa -F auid!=unset -k system_env
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/netplan -F perm=wa -F auid!=unset -k system_env
+# Central place for YAML networking config files
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/netplan -F perm=wa -F auid!=unset -k system_env
+
+# Unsuccessful file access attempts
+-a always,exit -F arch=b32 -S creat,open,openat,truncate,ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k failed_access
+-a always,exit -F arch=b32 -S creat,open,openat,truncate,ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k failed_access
+
+# Session initiation events
+# Monitoring session creation time could inform about unusual login times
+# All currently logged in users
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/var/run/utmp -F perm=wa -F auid!=unset -k session
+# Logins, logouts, shutdowns, reboots
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/var/log/wtmp -F perm=wa -F auid!=unset -k session
+# Failed login attempts
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/var/log/btmp -F perm=wa -F auid!=unset -k session
+
+# File deletion
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat -F auid>=1000 -F auid!=unset -k file_delete
+
+# MAC policy changes
+# Changes to AppArmor profiles can alter system behavior or grant additional privileges
+-a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/apparmor -F perm=wa -F auid!=unset -k MAC_policy
+-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,rename,renameat,unlink,unlinkat,chmod,fchmod,fchmodat,chown,lchown,fchown,fchownat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,utime,utimes,utimensat -F dir=/etc/apparmor.d -F perm=wa -F auid!=unset -k MAC_policy
+
+# These commands can be used to alter ACLs or the security context
+-a always,exit -F arch=b32 -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=unset -k conf_chcon
+-a always,exit -F arch=b32 -F path=/usr/bin/setfacl -F perm=x -F auid>=1000 -F auid!=unset -k conf_setfacl
+-a always,exit -F arch=b32 -F path=/usr/bin/chacl -F perm=x -F auid>=1000 -F auid!=unset -k conf_chacl
+
+# User account modification
+# Usermod can be used to grant, edit or revoke privileges
+-a always,exit -F arch=b32 -F path=/usr/sbin/usermod -F perm=x -F auid>=1000 -F auid!=unset -k usermod
+
+# Kernel module loading
+-a always,exit -F arch=b32 -S create_module,init_module,delete_module,query_module,finit_module -F auid>=1000 -F auid!=unset -k kernel_modules
+-a always,exit -F arch=b32 -S all -F path=/usr/bin/kmod -F perm=x -F auid>=1000 -F auid!=unset -k kernel_modules

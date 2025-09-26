@@ -11,7 +11,7 @@ import (
 	"example/go-website/templates"
 )
 
-// RequireAuth middleware ensures user is authenticated
+// RequireAuth middleware ensures user is authenticated and sets user context
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
@@ -24,6 +24,19 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 		
+		// Get user details and set in context for handlers to use
+		user, err := db.GetUserByUsername(username.(string))
+		if err != nil || user == nil {
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+		
+		// Set user information in context
+		c.Set("user_id", user.ID)
+		c.Set("username", user.Username)
+		c.Set("is_admin", user.IsAdmin)
+		
 		c.Next()
 	}
 }
@@ -31,17 +44,10 @@ func RequireAuth() gin.HandlerFunc {
 // RequireAdmin middleware ensures user is an admin
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		username := session.Get("username")
+		// Get admin status from context (set by RequireAuth middleware)
+		isAdmin, exists := c.Get("is_admin")
 		
-		if username == nil {
-			c.Redirect(http.StatusFound, "/login")
-			c.Abort()
-			return
-		}
-		
-		user, err := db.GetUserByUsername(username.(string))
-		if err != nil || user == nil || !user.IsAdmin {
+		if !exists || isAdmin != true {
 			templates.RenderGinTemplate(c, "404", models.PageData{
 				Title: "403 - Forbidden",
 				Error: "You don't have permission to access this resource.",
