@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# setup-monitoring-systemd.sh
+# setup-monitoring.sh
 # Create and enable one systemd service per device to run continuous monitoring.
 # Keeps it as simple as possible and self-contained.
 #
