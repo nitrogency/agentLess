@@ -15,8 +15,6 @@
 # ---FILTERS---
 # CWD event logging has no meaning, yet generates lots of volume, we already know directory by PATH (redundant)
 -a always,exclude -F msgtype=CWD
-# Exclude chrony NTP service related events
--a never,exit -F arch=b32 -S adjtimex -F auid=unset -F uid=chrony -F subj_type=chronyd_
 
 # ---RULES---
 
@@ -48,10 +46,6 @@
 # Mounts by unprivileged users
 # Mounting by user other than root is rare and unusual
 -a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=unset -k mounts
-
-# Sudo log modification
-# Shows sudo commands executed by sudoers, can be helpful for audit trail
--a always,exit -F arch=b32 -S open,openat,openat2,truncate,ftruncate,rename,renameat,unlink,unlinkat -F path=/var/log/sudo.log -F perm=wa -F auid!=unset -k sudo_log_mod
 
 # Sudoers modification
 # Changes in sudoers files can alter regular or administrative user privileges, which may be abused
