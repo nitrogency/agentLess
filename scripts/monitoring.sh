@@ -6,8 +6,14 @@
 # Notes: keeps it simple on purpose; relies on Go program to classify and insert into DB.
 set -euo pipefail
 
+# Source shared libraries (minimal logging for this lightweight script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/.."
+source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/common.sh"
+
+# Configuration
+PROJECT_ROOT="$(get_repo_root)"
 GO_MONITOR="$PROJECT_ROOT/scripts/monitoring.go"
 BIN_MONITOR="$PROJECT_ROOT/bin/monitor"
 
@@ -15,7 +21,12 @@ DEVICE_ID=""
 SSH_USER=""
 IP=""
 KEY=""
-PORT="22"
+PORT="$(get_config ssh_port)"
+
+show_usage() {
+    log_error "Usage: $0 -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> [-p <port>]"
+    exit 2
+}
 
 while getopts ":d:u:i:k:p:" opt; do
   case "$opt" in
@@ -24,37 +35,57 @@ while getopts ":d:u:i:k:p:" opt; do
     i) IP="$OPTARG" ;;
     k) KEY="$OPTARG" ;;
     p) PORT="$OPTARG" ;;
-    *) echo "Usage: $0 -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> [-p <port>]" >&2; exit 2 ;;
+    *) show_usage ;;
   esac
 done
 
+# Validate required parameters
 if [[ -z "$DEVICE_ID" || -z "$SSH_USER" || -z "$IP" || -z "$KEY" ]]; then
-  echo "Usage: $0 -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> [-p <port>]" >&2
-  exit 2
+  show_usage
 fi
 
-# SSH options (lean, with compression + timeouts)
+# Validate inputs
+if ! validate_ip "$IP"; then
+    handle_error "Invalid IP address: $IP"
+fi
+
+if ! validate_ssh_key "$KEY"; then
+    handle_error "Invalid or missing SSH key: $KEY"
+fi
+
+if ! validate_username "$SSH_USER"; then
+    handle_error "Invalid username: $SSH_USER"
+fi
+
+# SSH options (using config defaults with overrides)
 SSH_OPTS=(
   -i "$KEY"
   -p "$PORT"
   -o StrictHostKeyChecking=no
   -o UserKnownHostsFile=/dev/null
-  -o ConnectTimeout=3
+  -o ConnectTimeout="$(get_config ssh_connect_timeout)"
   -o ServerAliveInterval=5
   -o ServerAliveCountMax=2
   -o Compression=yes
 )
 
-# Remote command: try tail (preferred), fallback to sudo tail, then cat
-REMOTE_CMD='if [ -r /var/log/audit/audit.log ]; then tail -n 1000 -F /var/log/audit/audit.log; \
-else sudo -n tail -n 1000 -F /var/log/audit/audit.log 2>/dev/null || sudo tail -n 1000 -F /var/log/audit/audit.log; fi'
+# Remote command: try tail (preferred), fallback to sudo tail, then cat  
+LOG_LIMIT="$(get_config log_limit)"
+REMOTE_CMD="if [ -r $AUDIT_LOG_PATH ]; then tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; \
+else sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; fi"
+
+log_debug "Starting monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
+log_debug "SSH options: ${SSH_OPTS[*]}"
+log_debug "Remote command: $REMOTE_CMD"
 
 # Pipe raw audit lines into Go program which writes directly to the encrypted DB
 # Prefer compiled binary under systemd (Go may not be in PATH); fallback to go run.
 if [ -x "$BIN_MONITOR" ]; then
+  log_debug "Using compiled monitor binary: $BIN_MONITOR"
   ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
     (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID")
 else
+  log_debug "Using go run with source: $GO_MONITOR"
   ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
     (cd "$PROJECT_ROOT" && go run ./scripts/monitoring.go -device "$DEVICE_ID")
 fi
