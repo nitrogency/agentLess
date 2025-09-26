@@ -243,6 +243,11 @@ func flush(curID string, raw []string, host string, deviceID int64) {
 		message = "Command: " + ev.Comm
 	}
 
+	// Skip logs without assigned keys (reduces noise from generic system activity)
+	if strings.TrimSpace(ev.Key) == "" {
+		return // Don't store logs without specific audit rule keys
+	}
+
 	// Use comm as the type for display/filtering consistency
 	logType := ev.Comm
 

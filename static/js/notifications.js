@@ -48,14 +48,69 @@ document.addEventListener('DOMContentLoaded', () => {
             item.innerHTML = `
               <div class="item-title ${level}">${escapeHtml(title)}</div>
               <div class="item-message">${escapeHtml(n.message || '')}</div>
+              <button class="notification-close" aria-label="Remove notification">&times;</button>
             `;
-            item.addEventListener('click', () => {
-              if (level === 'high' || level === 'medium' || level === 'low') {
-                window.location.href = `/logs?security_level=${encodeURIComponent(level)}`;
-              } else {
-                window.location.href = '/logs';
+            // Handle main notification click (navigation)
+            item.addEventListener('click', (e) => {
+              // Don't navigate if clicking the close button
+              if (e.target.classList.contains('notification-close')) {
+                return;
+              }
+              
+              // Navigate to logs page with appropriate filter
+              let url = '/logs?';
+              
+              // If notification has a search term (from custom rule), use that
+              if (n.search_term && n.search_term.trim() !== '') {
+                url += `search=${encodeURIComponent(n.search_term)}`;
+              } 
+              // Otherwise, filter by security level
+              else if (level === 'high' || level === 'medium' || level === 'low') {
+                url += `security_level=${encodeURIComponent(level)}`;
+              }
+              
+              window.location.href = url;
+            });
+            
+            // Handle close button click
+            const closeBtn = item.querySelector('.notification-close');
+            closeBtn.addEventListener('click', async (e) => {
+              e.stopPropagation(); // Prevent navigation
+              
+              // Immediately hide the notification with animation
+              item.style.transition = 'all 0.2s ease-out';
+              item.style.opacity = '0';
+              item.style.maxHeight = item.offsetHeight + 'px';
+              item.style.transform = 'translateX(100%)';
+              
+              // Remove from DOM after animation
+              setTimeout(() => {
+                item.remove();
+                // Check if this was the last notification
+                if (recentEl.children.length === 0) {
+                  recentEl.innerHTML = '<div class="empty">No recent notifications</div>';
+                }
+              }, 200);
+              
+              // Update backend and refresh counts
+              try {
+                const response = await fetch(`/notifications/${n.id}/mark-seen`, { 
+                  method: 'POST', 
+                  credentials: 'same-origin',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                });
+                if (!response.ok) {
+                  console.error('Failed to mark notification as seen:', response.status);
+                  // Could show user feedback here if needed
+                }
+                fetchSummary(); // Refresh notification counts only
+              } catch (error) {
+                console.error('Error marking notification as seen:', error);
               }
             });
+            
             recentEl.appendChild(item);
           });
         }
@@ -71,17 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
     bell.setAttribute('aria-expanded', String(isHidden));
   };
 
-  // Clicking bell toggles dropdown and marks seen
-  bell.addEventListener('click', async (e) => {
+  // Clicking bell toggles dropdown (without marking as seen)
+  bell.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleDropdown();
-    try {
-      await fetch('/notifications/mark-seen', { method: 'POST', credentials: 'same-origin' });
-      // immediately update indicator and re-pull summary (counts will drop to 0 unseen)
-      if (indicator) indicator.classList.remove('active');
-      bell.classList.remove('flicker');
-      fetchSummary();
-    } catch (_) {}
   });
 
   // Clicking outside closes dropdown
@@ -107,12 +155,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (markAllBtn) {
     markAllBtn.addEventListener('click', async () => {
+      // Get all notification items
+      const notificationItems = recentEl.querySelectorAll('.notification-item');
+      
+      if (notificationItems.length > 0) {
+        // Animate all notifications out with staggered timing
+        notificationItems.forEach((item, index) => {
+          setTimeout(() => {
+            item.style.transition = 'all 0.2s ease-out';
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(100%)';
+          }, index * 50); // Stagger by 50ms each
+        });
+        
+        // Remove all items after animation and show empty state
+        setTimeout(() => {
+          recentEl.innerHTML = '<div class="empty">No recent notifications</div>';
+        }, notificationItems.length * 50 + 200);
+      }
+      
+      // Immediately update visual indicators
+      if (indicator) indicator.classList.remove('active');
+      bell.classList.remove('flicker');
+      
+      // Update backend in background
       try {
-        await fetch('/notifications/mark-seen', { method: 'POST', credentials: 'same-origin' });
-        if (indicator) indicator.classList.remove('active');
-        bell.classList.remove('flicker');
-        fetchSummary();
-      } catch (_) {}
+        const response = await fetch('/notifications/mark-seen', { 
+          method: 'POST', 
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!response.ok) {
+          console.error('Failed to mark all notifications as seen:', response.status);
+        }
+        fetchSummary(); // Refresh counts
+      } catch (error) {
+        console.error('Error marking all notifications as seen:', error);
+      }
     });
   }
 

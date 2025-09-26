@@ -102,13 +102,14 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=%s
 EnvironmentFile=%s/monitor-%%i.env
-ExecStart=/usr/bin/env bash -lc '%s -d %%i -u "\$SSH_USER" -i "\$IP" -k "\$SSH_KEY" -p "\$SSH_PORT"'
+ExecStart=%s -d %%i -u \${SSH_USER} -i \${IP} -k \${SSH_KEY} -p \${SSH_PORT}
 Restart=always
 RestartSec=2
-# Hardening
+# Hardening (relaxed for script execution)
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+ProtectSystem=strict
+ReadWritePaths=%s
 ProtectHome=false
 PrivateDevices=true
 ProtectKernelTunables=true
@@ -118,18 +119,15 @@ ProtectControlGroups=true
 ProtectHostname=true
 ProtectClock=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
 RestrictSUIDSGID=true
-CapabilityBoundingSet=
-AmbientCapabilities=
-RestrictAddressFamilies=AF_INET AF_INET6
-SystemCallFilter=@system-service
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service @network-io
 
 [Install]
 WantedBy=multi-user.target
 "
 # shellcheck disable=SC2059
-printf "$UNIT_CONTENT" "$REPO_ROOT" "$ENV_DIR" "$MONITOR_SH" | sudo tee "$UNIT_PATH" >/dev/null
+printf "$UNIT_CONTENT" "$REPO_ROOT" "$ENV_DIR" "$MONITOR_SH" "$REPO_ROOT" | sudo tee "$UNIT_PATH" >/dev/null
 
 sudo systemctl daemon-reload
 

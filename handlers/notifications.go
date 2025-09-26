@@ -1,7 +1,9 @@
 package handlers
 
 import (
+    "log"
     "net/http"
+    "strconv"
 
     "github.com/gin-gonic/gin"
 
@@ -10,21 +12,39 @@ import (
 
 // NotificationsSummaryHandler returns JSON with unseen count and counts by level, plus a few recent unseen notifications
 func NotificationsSummaryHandler(c *gin.Context) {
-    unseen, err := db.CountUnseenNotifications()
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+    // Get current user ID from session
+    userID, exists := c.Get("user_id")
+    if !exists {
+        log.Printf("No user_id in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+        return
+    }
+    
+    uid, ok := userID.(int64)
+    if !ok {
+        log.Printf("Invalid user_id type in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
         return
     }
 
-    byLevel, err := db.CountNotificationsByLevel(true)
+    unseen, err := db.CountUnseenNotifications(uid)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        log.Printf("Error counting unseen notifications: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve notification summary"})
         return
     }
 
-    recent, err := db.ListNotifications(10, true)
+    byLevel, err := db.CountNotificationsByLevel(uid, true)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        log.Printf("Error counting notifications by level: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve notification summary"})
+        return
+    }
+
+    recent, err := db.ListNotifications(uid, 10, true)
+    if err != nil {
+        log.Printf("Error listing recent notifications: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve notification summary"})
         return
     }
 
@@ -39,10 +59,66 @@ func NotificationsSummaryHandler(c *gin.Context) {
     })
 }
 
-// NotificationsMarkSeenHandler marks all notifications as seen
+// NotificationsMarkSeenHandler marks all notifications as seen for the current user
 func NotificationsMarkSeenHandler(c *gin.Context) {
-    if err := db.MarkAllNotificationsSeen(); err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+    // Get current user ID from session
+    userID, exists := c.Get("user_id")
+    if !exists {
+        log.Printf("No user_id in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+        return
+    }
+    
+    uid, ok := userID.(int64)
+    if !ok {
+        log.Printf("Invalid user_id type in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+        return
+    }
+
+    if err := db.MarkAllNotificationsSeen(uid); err != nil {
+        log.Printf("Error marking all notifications as seen: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark notifications as seen"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// NotificationMarkSeenHandler marks a specific notification as seen
+func NotificationMarkSeenHandler(c *gin.Context) {
+    // Get current user ID from session
+    userID, exists := c.Get("user_id")
+    if !exists {
+        log.Printf("No user_id in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+        return
+    }
+    
+    uid, ok := userID.(int64)
+    if !ok {
+        log.Printf("Invalid user_id type in session context")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+        return
+    }
+    
+    idStr := c.Param("id")
+    id, err := strconv.ParseInt(idStr, 10, 64)
+    if err != nil {
+        log.Printf("Invalid notification ID provided: %s", idStr)
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid notification ID"})
+        return
+    }
+    
+    // Input validation: ensure ID is positive
+    if id <= 0 {
+        log.Printf("Invalid notification ID provided: %d", id)
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid notification ID"})
+        return
+    }
+    
+    if err := db.MarkNotificationSeenByUser(id, uid); err != nil {
+        log.Printf("Error marking notification %d as seen for user %d: %v", id, uid, err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark notification as seen"})
         return
     }
     c.JSON(http.StatusOK, gin.H{"status": "ok"})
