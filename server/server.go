@@ -176,7 +176,7 @@ func setupRoutes(router *gin.Engine) {
 	router.NoRoute(handlers.NotFoundHandler)
 }
 
-// CreateServer creates and configures the HTTP server
+// CreateServer creates and configures the HTTPS server
 func CreateServer(router *gin.Engine, cfg *config.Config) *http.Server {
 	return &http.Server{
 		Addr:         ":" + cfg.Server.Port,

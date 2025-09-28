@@ -68,21 +68,58 @@ case $OS_ID in
       curl \
       jq
     ;;
-  fedora|rhel|centos)
-    echo "Installing dependencies for Fedora/RHEL/CentOS..."
-    sudo dnf install -y \
-      gcc \
-      git \
-      golang \
-      sqlcipher \
-      sqlcipher-devel \
-      vim-common \
-      audit \
-      openssh-clients \
-      openssh-server \
-      cronie \
-      curl \
-      jq
+  fedora|rhel|centos|rocky|almalinux)
+    echo "Installing dependencies for Fedora/RHEL/CentOS/Rocky/AlmaLinux..."
+    
+    # Enable EPEL repository for RHEL-based systems (needed for some packages)
+    if [[ "$OS_ID" =~ ^(rhel|centos|rocky|almalinux)$ ]]; then
+      if ! rpm -q epel-release >/dev/null 2>&1; then
+        echo "Installing EPEL repository..."
+        if [[ "$OS_ID" == "rhel" && "$OS_VERSION" =~ ^[89] ]]; then
+          # RHEL 8/9
+          sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-${OS_VERSION%%.*}.noarch.rpm || true
+        elif [[ "$OS_ID" =~ ^(centos|rocky|almalinux)$ ]]; then
+          # CentOS/Rocky/AlmaLinux
+          sudo dnf install -y epel-release || true
+        fi
+      fi
+    fi
+    
+    # Use dnf for newer systems, fallback to yum for older ones
+    if command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf package manager..."
+      sudo dnf install -y \
+        gcc \
+        git \
+        golang \
+        sqlcipher \
+        sqlcipher-devel \
+        vim-common \
+        audit \
+        openssh-clients \
+        openssh-server \
+        cronie \
+        curl \
+        jq
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum package manager..."
+      sudo yum install -y \
+        gcc \
+        git \
+        golang \
+        sqlcipher \
+        sqlcipher-devel \
+        vim-common \
+        audit \
+        openssh-clients \
+        openssh-server \
+        cronie \
+        curl \
+        jq
+    else
+      echo "Error: No package manager found (dnf/yum)"
+      exit 1
+    fi
     ;;
   *)
     echo "Unsupported OS: $OS_ID"
@@ -146,8 +183,10 @@ if [ ! -f "$APP_DIR/.env" ]; then
   DB_KEY=$(openssl rand -hex 32)
   
   cat > "$APP_DIR/.env" << EOF
-# AgentLess Web App Configuration
-PORT=8080
+# Agent< Web config
+PORT=8443
+CERT_FILE=certs/server.crt
+KEY_FILE=certs/server.key
 DB_PATH=data/site.db
 DB_ENCRYPTION_KEY=$DB_KEY
 SESSION_SECRET=$SESSION_KEY
@@ -196,6 +235,70 @@ if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then
   ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/ids_monitoring_key" -N "" -C "ids_monitoring"
   chmod 600 "$HOME/.ssh/ids_monitoring_key"
   chmod 644 "$HOME/.ssh/ids_monitoring_key.pub"
+fi
+
+# Set up HTTPS certificates if they don't exist
+CERT_DIR="$APP_DIR/certs"
+if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
+  echo "Generating self-signed SSL certificates for HTTPS..."
+  mkdir -p "$CERT_DIR"
+  
+  # Get the hostname/IP for the certificate
+  HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+  LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -n1)
+  
+  # Create certificate configuration file
+  cat > "$CERT_DIR/cert.conf" << EOF
+[req]
+default_bits = 4096
+prompt = no
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+
+[req_distinguished_name]
+C=US
+ST=State
+L=City
+O=Agent< IDS
+OU=None
+CN=$HOSTNAME
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = $HOSTNAME
+IP.1 = 127.0.0.1
+EOF
+  
+  # Add local IP to certificate if detected
+  if [ -n "$LOCAL_IP" ]; then
+    echo "IP.2 = $LOCAL_IP" >> "$CERT_DIR/cert.conf"
+  fi
+  
+  # Generate private key
+  openssl genrsa -out "$CERT_DIR/server.key" 4096
+  
+  # Generate certificate signing request and self-signed certificate
+  openssl req -new -x509 -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
+    -days 365 -config "$CERT_DIR/cert.conf" -extensions v3_req
+  
+  # Set appropriate permissions
+  chmod 600 "$CERT_DIR/server.key"
+  chmod 644 "$CERT_DIR/server.crt"
+  chmod 644 "$CERT_DIR/cert.conf"
+  
+  echo "SSL certificates generated successfully:"
+  echo "  - Certificate: $CERT_DIR/server.crt"
+  echo "  - Private key: $CERT_DIR/server.key"
+  echo "  - Valid for: localhost, $HOSTNAME"
+  if [ -n "$LOCAL_IP" ]; then
+    echo "  - Also valid for IP: $LOCAL_IP"
+  fi
+  echo "  - Valid for 365 days"
 fi
 
 # Check if audit is installed and configured
@@ -259,10 +362,10 @@ echo "Next steps:"
 echo "  1. Update the .env file with secure credentials"
 echo "  2. Start the application directly: ./agentless"
 echo "  3. Or use systemd: sudo systemctl start agentless"
-echo "  4. Access the web interface at: http://localhost:8080"
+echo "  4. Access the web interface: https://localhost:8443"
 echo ""
-echo "Would you like to start the application now? (y/n)"
-read -r start_now
+echo "Note: Your browser will show a security warning for the self-signed certificate."
+echo "This is normal - click 'Advanced' and 'Proceed' to continue."
 
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
   # Make sure logs directory exists
@@ -278,7 +381,7 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
     # Check if application started successfully
     sleep 2
     if ps -p $APP_PID > /dev/null; then
-      echo "Application started! Access at http://localhost:8080"
+      echo "Application started! Access at: https://localhost:8443"
       echo "  - Logs are available at: $LOG_DIR/app.log"
       echo "  - Process ID: $APP_PID"
       echo "  - To stop: kill $APP_PID or pkill -f agentless"
