@@ -238,9 +238,72 @@ if command -v auditctl >/dev/null 2>&1; then
     fi
 else
     echo "Installing auditd..."
-    sudo apt-get update -q || echo "Warning: Package update failed"
-    if sudo apt-get install -y auditd audispd-plugins; then
-        echo "auditd installed"
+    
+    # Detect OS on remote system
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        REMOTE_OS_ID=$ID
+    else
+        echo "Warning: Cannot detect remote OS, assuming Debian-based"
+        REMOTE_OS_ID="debian"
+    fi
+    
+    # Install auditd based on detected OS
+    case $REMOTE_OS_ID in
+        ubuntu|debian)
+            echo "Installing auditd on Debian/Ubuntu system..."
+            sudo apt-get update -q || echo "Warning: Package update failed"
+            if sudo apt-get install -y auditd audispd-plugins; then
+                echo "auditd installed"
+                AUDITD_INSTALLED=true
+            else
+                echo "Failed to install auditd"
+                AUDITD_INSTALLED=false
+            fi
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            echo "Installing auditd on RHEL/Fedora/CentOS/Rocky/AlmaLinux system..."
+            # Try dnf first (newer systems), fall back to yum
+            if command -v dnf >/dev/null 2>&1; then
+                if sudo dnf install -y audit; then
+                    echo "auditd installed via dnf"
+                    AUDITD_INSTALLED=true
+                else
+                    echo "Failed to install auditd via dnf"
+                    AUDITD_INSTALLED=false
+                fi
+            elif command -v yum >/dev/null 2>&1; then
+                if sudo yum install -y audit; then
+                    echo "auditd installed via yum"
+                    AUDITD_INSTALLED=true
+                else
+                    echo "Failed to install auditd via yum"
+                    AUDITD_INSTALLED=false
+                fi
+            else
+                echo "No package manager found (dnf/yum)"
+                AUDITD_INSTALLED=false
+            fi
+            ;;
+        sles|opensuse*)
+            echo "Installing auditd on SUSE system..."
+            if sudo zypper install -y audit; then
+                echo "auditd installed via zypper"
+                AUDITD_INSTALLED=true
+            else
+                echo "Failed to install auditd via zypper"
+                AUDITD_INSTALLED=false
+            fi
+            ;;
+        *)
+            echo "Unsupported OS for automatic auditd installation: $REMOTE_OS_ID"
+            echo "Please install auditd manually on the target system"
+            AUDITD_INSTALLED=false
+            ;;
+    esac
+    
+    # Enable and start auditd service if installation succeeded
+    if [ "$AUDITD_INSTALLED" = "true" ]; then
         sudo systemctl enable auditd || echo "Warning: Failed to enable auditd"
         sudo systemctl start auditd || echo "Warning: Failed to start auditd"
         if command -v auditctl >/dev/null 2>&1; then
@@ -250,9 +313,6 @@ else
             echo "auditctl still unavailable"
             AUDITD_INSTALLED=false
         fi
-    else
-        echo "Failed to install auditd"
-        AUDITD_INSTALLED=false
     fi
 fi
 

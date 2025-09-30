@@ -3,6 +3,8 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,6 +15,50 @@ import (
 	"example/go-website/models"
 	"example/go-website/templates"
 )
+
+// Security logger for fail2ban integration
+var securityLogger *log.Logger
+
+func init() {
+	// Get the current working directory (app directory)
+	appDir, err := os.Getwd()
+	if err != nil {
+		appDir = "."
+	}
+	
+	// Create logs directory if it doesn't exist
+	logsDir := filepath.Join(appDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		log.Printf("Warning: Could not create logs directory %s: %v", logsDir, err)
+	}
+	
+	// Create or open security log file for fail2ban in app directory
+	securityLogFile := filepath.Join(logsDir, "agentless-security.log")
+
+	// Try to create/open the log file
+	logFile, err := os.OpenFile(securityLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		// Fallback to standard logger if can't open security log
+		securityLogger = log.New(os.Stderr, "[SECURITY] ", log.LstdFlags)
+		log.Printf("Warning: Could not open security log file %s: %v", securityLogFile, err)
+	} else {
+		securityLogger = log.New(logFile, "", log.LstdFlags)
+		log.Printf("Security logging enabled: %s", securityLogFile)
+	}
+}
+
+// logSecurityEvent logs security events in a format that fail2ban can parse
+func logSecurityEvent(c *gin.Context, event string, username string) {
+	clientIP := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+
+	// Log in fail2ban-compatible format
+	securityLogger.Printf("%s from %s - Username: %s, User-Agent: %s",
+		event, clientIP, username, userAgent)
+
+	// Also log to standard logger for debugging
+	log.Printf("Security event: %s from %s (username: %s)", event, clientIP, username)
+}
 
 // LoginHandler handles user login (GET and POST)
 func LoginHandler(c *gin.Context) {
@@ -65,7 +111,10 @@ func LoginHandler(c *gin.Context) {
 		// Validate user credentials
 		valid, err := db.ValidateUser(username, password)
 		if err != nil || !valid {
-			log.Printf("Login validation error: %v", err)
+			// Log security event for fail2ban
+			logSecurityEvent(c, "Authentication failed", username)
+
+			log.Printf("Login validation error for user %s from %s: %v", username, c.ClientIP(), err)
 			data.Error = "Invalid username or password"
 			data.ErrorFields["username"] = true
 			data.ErrorFields["password"] = true
@@ -76,6 +125,9 @@ func LoginHandler(c *gin.Context) {
 		// Get user details after successful validation
 		user, err := db.GetUserByUsername(username)
 		if err != nil || user == nil {
+			// Log security event for fail2ban
+			logSecurityEvent(c, "Authentication failed", username)
+
 			log.Printf("Error getting user details: %v", err)
 			data.Error = "Login failed. Please try again."
 			templates.RenderGinTemplate(c, "login", data)
@@ -88,13 +140,19 @@ func LoginHandler(c *gin.Context) {
 		session.Set("user_id", user.ID)
 		session.Set("authenticated", true)
 		session.Set("login_time", time.Now().Format(time.RFC3339))
-		
+
 		if err := session.Save(); err != nil {
+			// Log security event for fail2ban
+			logSecurityEvent(c, "Authentication failed", username)
+
 			log.Printf("Session save error: %v", err)
 			data.Error = "Login failed. Please try again."
 			templates.RenderGinTemplate(c, "login", data)
 			return
 		}
+
+		// Log successful login
+		logSecurityEvent(c, "Successful login", user.Username)
 
 		c.Redirect(http.StatusFound, "/")
 		return
@@ -106,6 +164,12 @@ func LoginHandler(c *gin.Context) {
 // LogoutHandler handles user logout
 func LogoutHandler(c *gin.Context) {
 	session := sessions.Default(c)
+
+	// Log logout event if user was authenticated
+	if username := session.Get("username"); username != nil {
+		logSecurityEvent(c, "User logout", username.(string))
+	}
+
 	session.Clear()
 	session.Save()
 	c.Redirect(http.StatusFound, "/login")
@@ -173,7 +237,7 @@ func SignupHandler(c *gin.Context) {
 		session.Set("username", username)
 		session.Set("authenticated", true)
 		session.Set("login_time", time.Now().Format(time.RFC3339))
-		
+
 		if err := session.Save(); err != nil {
 			log.Printf("Session save error: %v", err)
 			data.Error = "Account created but login failed. Please try logging in."
