@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "content"}}
-<div class="container" style="width: 150%; margin-left: -25%;">
+<div class="container-wide">
     <h2>Device Monitoring: {{.Device.Name}}</h2>
     
     {{if .Error}}
@@ -66,12 +66,12 @@
         </div>
         <div class="card-body">
             <!-- Search and page size controls -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div class="page-controls with-search">
                 <!-- Search bar -->
-                <div style="display: flex; align-items: center;">
-                    <form action="" method="GET" style="display: flex; align-items: center;">
-                        <input type="text" name="search" class="form-control" placeholder="Search logs..." value="{{.Data.SearchTerm}}" style="margin-right: 10px; width: 250px;">
-                        <button class="btn btn-primary" type="submit" style="margin-right: 10px;">Search</button>
+                <div class="search-controls">
+                    <form action="" method="GET" class="d-flex align-items-center">
+                        <input type="text" name="search" class="form-control search-input" placeholder="Search logs..." value="{{.Data.SearchTerm}}">
+                        <button class="btn btn-primary me-2" type="submit">Search</button>
                         {{if .Data.SearchTerm}}
                         <a href="?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
                         {{end}}
@@ -79,8 +79,8 @@
                 </div>
                 
                 <!-- Page size controls -->
-                <div style="display: flex; align-items: center;">
-                    <div class="btn-group" role="group" style="margin-right: 15px;">
+                <div class="page-size-controls">
+                    <div class="btn-group" role="group">
                         <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
                         <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
                         <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
@@ -89,8 +89,8 @@
                 </div>
             </div>
             
-            <div style="padding: 0 15px;">
-                <table class="users-table" style="width: 100%;">
+            <div class="table-container">
+                <table class="logs-table">
                     <thead>
                         <tr>
                             <th>Event Time</th>
@@ -109,7 +109,7 @@
                             <td>{{$log.Type}}</td>
                             <td>{{$log.Key}}</td>
                             <td><div class="log-message">{{$log.Message}}</div></td>
-                            <td><pre style="min-width: 500px;" class="raw-log">{{$log.RawLog}}</pre></td>
+                            <td><pre class="raw-log">{{$log.RawLog}}</pre></td>
                         </tr>
                         {{else}}
                         <tr>
@@ -189,53 +189,9 @@
     </div>
 
     <div class="actions mt-4">
-        <a href="/devices" class="btn btn-secondary">Back to Devices</a>
         <a href="/devices/edit/{{.Device.ID}}" class="btn btn-primary">Edit Device</a>
         <a href="/devices/delete/{{.Device.ID}}" class="btn btn-danger">Delete Device</a>
     </div>
 </div>
 
-<style>
-.code-block {
-    background-color: #212529;
-    color: #f8f9fa;
-    border: 1px solid #495057;
-    border-radius: 3px;
-    padding: 10px;
-    margin: 10px 0;
-    overflow-x: auto;
-    font-family: monospace;
-}
-.note {
-    font-size: 0.9em;
-    color: var(--text-secondary);
-    margin-top: 5px;
-    font-style: italic;
-}
-.alert-info {
-    background-color: #1a3c42;
-    border-color: #164450;
-    color: var(--text-primary);
-    padding: 15px;
-    border-radius: 5px;
-}
-.log-message {
-    max-height: 60px; /* Adjust as needed */
-    overflow-y: auto;
-    font-size: 0.9em;
-    white-space: pre-wrap; /* Allows wrapping long lines */
-    word-break: break-all; /* Breaks long words if necessary */
-}
-.raw-log {
-    max-height: 100px; /* Adjust as needed */
-    width: 300px;
-    overflow: auto;
-    background-color: #212529;
-    padding: 5px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-</style>
 {{end}}
