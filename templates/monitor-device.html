@@ -35,30 +35,6 @@
             </div>
         </div>
     </div>
-
-    <div class="card mt-4">
-        <div class="card-header">
-            <h3>Monitoring Data</h3>
-            <button class="btn btn-secondary btn-sm float-right">Refresh Data</button>
-        </div>
-        <div class="card-body">
-            <h4>System Information</h4>
-            <table class="users-table mb-4">
-                <tbody>
-                    {{range $key, $value := .MonitoringData}}
-                    <tr>
-                        <td><strong>{{$key}}</strong></td>
-                        <td>{{$value}}</td>
-                    </tr>
-                    {{else}}
-                    <tr>
-                        <td colspan="2" class="text-center">No monitoring data available</td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
-        </div>
-    </div>
             
     <div class="card mt-4">
         <div class="card-header">
@@ -181,9 +157,9 @@
             </ol>
             <div class="alert alert-info mt-3">
                 <h4>Important!</h4>
-                <p>Each time you add a new device, you must run the cron monitoring script to start automatically monitoring your devices (may require sudo):</p>
-                <pre class="code-block">./scripts/setup-monitoring-cron.sh</pre>
-                <p>This will set up a cron job on your server that runs the monitoring script automatically.</p>
+                <p>Each time you add a new device, you must run the monitoring script to start automatically monitoring your devices (may require sudo):</p>
+                <pre class="code-block">./scripts/setup-monitoring.sh</pre>
+                <p>This will setup a systemd unit for each device. In addition, a log cleanup timer will be started as well.</p>
             </div>
         </div>
     </div>

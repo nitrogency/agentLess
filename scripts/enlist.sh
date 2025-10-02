@@ -242,14 +242,14 @@ else
     # Detect OS on remote system
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        REMOTE_OS_ID=$ID
+        REMOTE_OS_ID=\$ID
     else
         echo "Warning: Cannot detect remote OS, assuming Debian-based"
         REMOTE_OS_ID="debian"
     fi
     
     # Install auditd based on detected OS
-    case $REMOTE_OS_ID in
+    case \$REMOTE_OS_ID in
         ubuntu|debian)
             echo "Installing auditd on Debian/Ubuntu system..."
             sudo apt-get update -q || echo "Warning: Package update failed"
@@ -296,14 +296,14 @@ else
             fi
             ;;
         *)
-            echo "Unsupported OS for automatic auditd installation: $REMOTE_OS_ID"
+            echo "Unsupported OS for automatic auditd installation: \$REMOTE_OS_ID"
             echo "Please install auditd manually on the target system"
             AUDITD_INSTALLED=false
             ;;
     esac
     
     # Enable and start auditd service if installation succeeded
-    if [ "$AUDITD_INSTALLED" = "true" ]; then
+    if [ "\$AUDITD_INSTALLED" = "true" ]; then
         sudo systemctl enable auditd || echo "Warning: Failed to enable auditd"
         sudo systemctl start auditd || echo "Warning: Failed to start auditd"
         if command -v auditctl >/dev/null 2>&1; then
