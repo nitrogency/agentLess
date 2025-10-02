@@ -2,15 +2,12 @@
 
 set -e
 
-echo "Starting Agent< Setup"
-echo "===================================="
-echo "This script will install all required dependencies and set up the AgentLess web application."
+# Source the logging library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts"
+source "$SCRIPT_DIR/lib/logging.sh"
 
-# Function to handle errors
-handle_error() {
-  echo "Error: $1"
-  exit 1
-}
+log_section "AgentLess IDS Setup"
+log_info "This script will install all required dependencies and set up the AgentLess web application."
 
 # Function to check if command exists
 command_exists() {
@@ -24,14 +21,15 @@ LOG_DIR="$APP_DIR/logs"
 SCRIPT_DIR="$APP_DIR/scripts"
 
 # Create necessary directories
-echo "Creating required directories..."
+log_progress "Creating required directories..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOG_DIR"
 mkdir -p "$APP_DIR/tmp"
+log_success "Directories created successfully"
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-  echo "Warning: Running as root. Consider running as a regular user with sudo privileges."
+  log_warn "Running as root. Consider running as a regular user with sudo privileges."
 fi
 
 # Detect OS
@@ -41,18 +39,17 @@ if [ -f /etc/os-release ]; then
   OS_VERSION=$VERSION_ID
   OS_ID=$ID
 else
-  echo "Error: Cannot detect operating system"
-  exit 1
+  handle_error "Cannot detect operating system" 1
 fi
 
-echo "Detected OS: $OS_NAME $OS_VERSION"
+log_info "Detected OS: $OS_NAME $OS_VERSION"
 
 # Install dependencies based on OS
-echo "Installing system dependencies..."
+log_section "System Dependencies"
 
 case $OS_ID in
   ubuntu|debian)
-    echo "Installing dependencies for Ubuntu/Debian..."
+    log_progress "Installing dependencies for Ubuntu/Debian..."
     sudo apt update
     sudo apt install -y \
       build-essential \
@@ -69,12 +66,12 @@ case $OS_ID in
       jq
     ;;
   fedora|rhel|centos|rocky|almalinux)
-    echo "Installing dependencies for Fedora/RHEL/CentOS/Rocky/AlmaLinux..."
+    log_progress "Installing dependencies for Fedora/RHEL/CentOS/Rocky/AlmaLinux..."
     
     # Enable EPEL repository for RHEL-based systems (needed for some packages)
     if [[ "$OS_ID" =~ ^(rhel|centos|rocky|almalinux)$ ]]; then
       if ! rpm -q epel-release >/dev/null 2>&1; then
-        echo "Installing EPEL repository..."
+        log_progress "Installing EPEL repository..."
         if [[ "$OS_ID" == "rhel" && "$OS_VERSION" =~ ^[89] ]]; then
           # RHEL 8/9
           sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-${OS_VERSION%%.*}.noarch.rpm || true
@@ -87,7 +84,7 @@ case $OS_ID in
     
     # Use dnf for newer systems, fallback to yum for older ones
     if command -v dnf >/dev/null 2>&1; then
-      echo "Using dnf package manager..."
+      log_info "Using dnf package manager..."
       sudo dnf install -y \
         gcc \
         git \
@@ -102,7 +99,7 @@ case $OS_ID in
         curl \
         jq
     elif command -v yum >/dev/null 2>&1; then
-      echo "Using yum package manager..."
+      log_info "Using yum package manager..."
       sudo yum install -y \
         gcc \
         git \
@@ -117,51 +114,49 @@ case $OS_ID in
         curl \
         jq
     else
-      echo "Error: No package manager found (dnf/yum)"
-      exit 1
+      handle_error "No package manager found (dnf/yum)" 1
     fi
     ;;
   *)
-    echo "Unsupported OS: $OS_ID"
-    echo "Please install the following packages manually:"
-    echo "- Go (1.24 or later)"
-    echo "- SQLCipher"
-    echo "- xxd (vim-common)"
-    echo "- auditd"
-    echo "- OpenSSH client and server"
-    echo "- cron"
-    echo "- curl"
-    echo "- jq"
+    log_warn "Unsupported OS: $OS_ID"
+    log_info "Please install the following packages manually:"
+    log_info "- Go (1.24 or later)"
+    log_info "- SQLCipher"
+    log_info "- xxd (vim-common)"
+    log_info "- auditd"
+    log_info "- OpenSSH client and server"
+    log_info "- cron"
+    log_info "- curl"
+    log_info "- jq"
     ;;
 esac
 
 # Check if Go is installed
+log_progress "Checking Go installation..."
 if ! command -v go &> /dev/null; then
-  echo "Error: Go is not installed or not in PATH"
-  echo "Please install Go 1.24 or later"
-  exit 1
+  handle_error "Go is not installed or not in PATH. Please install Go 1.24 or later" 1
 fi
 
 # Check Go version
 GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-echo "Detected Go version: $GO_VERSION"
+log_success "Detected Go version: $GO_VERSION"
 
 # Compare versions (simple check)
 if [[ "$GO_VERSION" < "1.24" ]]; then
-  echo "Warning: Go version $GO_VERSION is older than the recommended version (1.24)"
-  echo "Some features may not work correctly"
+  log_warn "Go version $GO_VERSION is older than the recommended version (1.24)"
+  log_warn "Some features may not work correctly"
 fi
 
 # Check if SQLCipher is installed
+log_progress "Checking SQLCipher installation..."
 if ! command -v sqlcipher &> /dev/null; then
-  echo "Error: SQLCipher is not installed or not in PATH"
-  echo "Please install SQLCipher"
-  exit 1
+  handle_error "SQLCipher is not installed or not in PATH. Please install SQLCipher" 1
 fi
+log_success "SQLCipher is installed"
 
 # Set up Go environment if needed
 if [ -z "$GOPATH" ]; then
-  echo "Setting up Go environment..."
+  log_progress "Setting up Go environment..."
   export GOPATH="$HOME/go"
   mkdir -p "$GOPATH"
   
@@ -169,12 +164,14 @@ if [ -z "$GOPATH" ]; then
   if ! grep -q "export GOPATH=" "$HOME/.profile" 2>/dev/null; then
     echo 'export GOPATH="$HOME/go"' >> "$HOME/.profile"
     echo 'export PATH="$PATH:$GOPATH/bin"' >> "$HOME/.profile"
+    log_success "Go environment configured"
   fi
 fi
 
 # Create .env file if it doesn't exist
+log_section "Application Configuration"
 if [ ! -f "$APP_DIR/.env" ]; then
-  echo "Creating default .env file..."
+  log_progress "Creating default .env file..."
   
   # Generate a secure random key for session
   SESSION_KEY=$(openssl rand -hex 32)
@@ -193,54 +190,60 @@ SESSION_SECRET=$SESSION_KEY
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
 EOF
-  echo "Created .env file with secure random keys"
-  echo "Please change the default admin password in the .env file"
+  log_success "Created .env file with secure random keys"
+  log_warn "Please change the default admin password in the .env file"
 fi
 
 # Initialize the database directory
 if [ ! -f "$DATA_DIR/site.db" ]; then
-  echo "Initializing database directory..."
+  log_progress "Initializing database directory..."
   mkdir -p "$DATA_DIR"
     touch "$DATA_DIR/site.db"
   
   # Set appropriate permissions
   chmod 700 "$DATA_DIR"
   chmod 600 "$DATA_DIR/site.db"
+  log_success "Database directory initialized"
 fi
 
 # Make scripts executable
-echo "Setting script permissions..."
+log_progress "Setting script permissions..."
 chmod +x "$SCRIPT_DIR"/*.sh
+log_success "Script permissions set"
 
 # Install Go dependencies
-echo "Installing Go dependencies..."
+log_section "Building Application"
+log_progress "Installing Go dependencies..."
 cd "$APP_DIR"
 go mod download
 if [ $? -ne 0 ]; then
-  echo "Error downloading Go dependencies"
-  exit 1
+  handle_error "Failed to download Go dependencies" 1
 fi
+log_success "Go dependencies installed"
 
 # Build the application
-echo "Building the application..."
+log_progress "Building the application..."
 go build -o agentless
 if [ $? -ne 0 ]; then
-  echo "Error building the application"
-    exit 1
+  handle_error "Failed to build the application" 1
 fi
+log_success "Application built successfully"
 
 # Set up SSH keys for monitoring if they don't exist
+log_section "SSH Configuration"
 if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then
-  echo "Generating SSH keys for monitoring..."
+  log_progress "Generating SSH keys for monitoring..."
   ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/ids_monitoring_key" -N "" -C "ids_monitoring"
   chmod 600 "$HOME/.ssh/ids_monitoring_key"
   chmod 644 "$HOME/.ssh/ids_monitoring_key.pub"
+  log_success "SSH keys generated successfully"
 fi
 
 # Set up HTTPS certificates if they don't exist
+log_section "SSL Certificate Generation"
 CERT_DIR="$APP_DIR/certs"
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
-  echo "Generating self-signed SSL certificates for HTTPS..."
+  log_progress "Generating self-signed SSL certificates for HTTPS..."
   mkdir -p "$CERT_DIR"
   
   # Get the hostname/IP for the certificate
@@ -291,37 +294,39 @@ EOF
   chmod 644 "$CERT_DIR/server.crt"
   chmod 644 "$CERT_DIR/cert.conf"
   
-  echo "SSL certificates generated successfully:"
-  echo "  - Certificate: $CERT_DIR/server.crt"
-  echo "  - Private key: $CERT_DIR/server.key"
-  echo "  - Valid for: localhost, $HOSTNAME"
+  log_success "SSL certificates generated successfully"
+  log_info "Certificate: $CERT_DIR/server.crt"
+  log_info "Private key: $CERT_DIR/server.key"
+  log_info "Valid for: localhost, $HOSTNAME"
   if [ -n "$LOCAL_IP" ]; then
-    echo "  - Also valid for IP: $LOCAL_IP"
+    log_info "Also valid for IP: $LOCAL_IP"
   fi
-  echo "  - Valid for 365 days"
+  log_info "Valid for 365 days"
 fi
 
 # Check if audit is installed and configured
+log_progress "Checking audit system..."
 if command -v auditctl &> /dev/null; then
-  echo "Audit system is installed"
+  log_success "Audit system is installed"
 else
-  echo "Warning: Audit system (auditd) is not installed or not in PATH"
-  echo "Some monitoring features may not work correctly"
+  log_warn "Audit system (auditd) is not installed or not in PATH"
+  log_warn "Some monitoring features may not work correctly"
 fi
 
 # Create a systemd service file for the application
+log_section "Systemd Service Setup"
 if [ -d "/etc/systemd/system" ]; then
-  echo "Creating systemd service file..."
+  log_progress "Creating systemd service file..."
   
   # Check if service is masked and unmask it if needed
   if systemctl is-enabled agentless.service 2>&1 | grep -q "masked"; then
-    echo "Unmasking existing service..."
+    log_progress "Unmasking existing service..."
     sudo systemctl unmask agentless.service
   fi
   
   # Remove old service if it exists
   if [ -f "/etc/systemd/system/agentless.service" ]; then
-    echo "Removing existing service file..."
+    log_progress "Removing existing service file..."
     sudo rm -f "/etc/systemd/system/agentless.service"
   fi
   
@@ -347,25 +352,25 @@ Environment=GOPATH=$GOPATH
 WantedBy=multi-user.target
 EOF"
 
-  echo "Reloading systemd..."
+  log_progress "Reloading systemd..."
   sudo systemctl daemon-reload
   
-  echo "Systemd service created"
-  echo "To start the service: sudo systemctl start agentless"
-  echo "To enable on boot: sudo systemctl enable agentless"
+  log_success "Systemd service created"
+  log_info "To start the service: sudo systemctl start agentless"
+  log_info "To enable on boot: sudo systemctl enable agentless"
 fi
 
-echo ""
-echo "Setup completed successfully!"
-echo ""
-echo "Next steps:"
-echo "  1. Update the .env file with secure credentials"
-echo "  2. Start the application directly: ./agentless"
-echo "  3. Or use systemd: sudo systemctl start agentless"
-echo "  4. Access the web interface: https://localhost:8443"
-echo ""
-echo "Note: Your browser will show a security warning for the self-signed certificate."
-echo "This is normal - click 'Advanced' and 'Proceed' to continue."
+log_section "Setup Complete"
+log_success "Setup completed successfully!"
+log_info ""
+log_info "Next steps:"
+log_info "  1. Update the .env file with secure credentials"
+log_info "  2. Start the application directly: ./agentless"
+log_info "  3. Or use systemd: sudo systemctl start agentless"
+log_info "  4. Access the web interface: https://localhost:8443"
+log_info ""
+log_warn "Your browser will show a security warning for the self-signed certificate."
+log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
 
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
   # Make sure logs directory exists
@@ -373,7 +378,7 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
   
   # Check if the application was built successfully
   if [ -f "$APP_DIR/agentless" ]; then
-    echo "Starting application directly..."
+    log_progress "Starting application directly..."
     # Run in background
     nohup "$APP_DIR/agentless" > "$LOG_DIR/app.log" 2>&1 &
     APP_PID=$!
@@ -381,20 +386,20 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
     # Check if application started successfully
     sleep 2
     if ps -p $APP_PID > /dev/null; then
-      echo "Application started! Access at: https://localhost:8443"
-      echo "  - Logs are available at: $LOG_DIR/app.log"
-      echo "  - Process ID: $APP_PID"
-      echo "  - To stop: kill $APP_PID or pkill -f agentless"
+      log_success "Application started! Access at: https://localhost:8443"
+      log_info "  - Logs are available at: $LOG_DIR/app.log"
+      log_info "  - Process ID: $APP_PID"
+      log_info "  - To stop: kill $APP_PID or pkill -f agentless"
     else
-      echo "Application failed to start. Check logs at: $LOG_DIR/app.log"
+      log_error "Application failed to start. Check logs at: $LOG_DIR/app.log"
     fi
   else
-    echo "Application binary not found. Build may have failed."
+    log_error "Application binary not found. Build may have failed."
   fi
 fi
-echo ""
-echo "For monitoring setup:"
-echo "  - Add devices through the web interface"
-echo "  - Use the enlist.sh script to configure devices"
-echo "  - Check logs in the data directory"
-echo ""
+log_info ""
+log_info "For monitoring setup:"
+log_info "  - Add devices through the web interface"
+log_info "  - Use the enlist.sh script to configure devices"
+log_info "  - Check logs in the data directory"
+log_info ""
