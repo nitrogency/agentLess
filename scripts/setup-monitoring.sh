@@ -7,7 +7,7 @@
 # This script:
 #  1) Reads devices from the encrypted SQLite DB (SQLCipher)
 #  2) Creates per-device environment files with SSH parameters
-#  3) Installs a template unit agentless-monitor@.service pointing to scripts/monitoring.sh
+#  3) Installs a template unit agentless-monitor@.service pointing to scripts/start-monitoring.sh
 #  4) Enables and starts agentless-monitor@<device-id>.service for each device
 #
 set -euo pipefail
@@ -26,7 +26,7 @@ REPO_ROOT="$(get_repo_root)"
 DB_PATH="$REPO_ROOT/$(get_config db_path)"
 ENV_DIR="$AGENTLESS_ENV_DIR"
 UNIT_PATH="$SYSTEMD_SYSTEM_DIR/$MONITOR_SERVICE_TEMPLATE"
-MONITOR_SH="$REPO_ROOT/scripts/monitoring.sh"
+MONITOR_SH="$REPO_ROOT/scripts/start-monitoring.sh"
 
 # Check dependencies
 check_dependency sqlcipher

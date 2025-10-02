@@ -45,6 +45,10 @@ readonly DEFAULT_LOG_LIMIT="1000"
 readonly DEFAULT_SSH_CONNECT_TIMEOUT="5"
 readonly DEFAULT_SSH_COMMAND_TIMEOUT="10"
 
+# Windows-specific settings
+readonly DEFAULT_WINDOWS_COLLECTION_INTERVAL="30"
+readonly WINDOWS_SYSMON_LOG="Microsoft-Windows-Sysmon/Operational"
+
 # Security settings
 readonly SSH_KEY_TYPE="rsa"
 readonly SSH_KEY_BITS="4096"
@@ -89,9 +93,18 @@ get_config() {
         "audit_rules_source_path")
             echo "${AUDIT_RULES_SOURCE_PATH:-$AUDIT_RULES_SOURCE_PATH}"
             ;;
+        "windows_collection_interval")
+            echo "${WINDOWS_COLLECTION_INTERVAL:-$DEFAULT_WINDOWS_COLLECTION_INTERVAL}"
+            ;;
         *)
-            echo ""
-            return 1
+            # Allow custom config values with default
+            local default="$2"
+            if [ -n "$default" ]; then
+                echo "$default"
+            else
+                echo ""
+                return 1
+            fi
             ;;
     esac
 }

@@ -42,6 +42,15 @@
         </div>
         
         <div class="form-group">
+            <label for="os_type">Operating System</label>
+            <select id="os_type" name="os_type" class="form-control {{if .ErrorFields.os_type}}input-error{{end}}" required>
+                <option value="linux" {{if eq .FormData.os_type "linux"}}selected{{else if eq .FormData.os_type ""}}selected{{end}}>Linux (auditd)</option>
+                <option value="windows" {{if eq .FormData.os_type "windows"}}selected{{end}}>Windows (Sysmon)</option>
+            </select>
+            <p class="help-text">Select the operating system for appropriate log collection method</p>
+        </div>
+        
+        <div class="form-group">
             <label for="ip_address">IP Address</label>
             <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{.FormData.ip_address}}" placeholder="e.g. 192.168.1.100" required>
         </div>

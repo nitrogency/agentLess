@@ -23,6 +23,7 @@ type Device struct {
 	SSHPort       int
 	Hostname      string
 	OSInfo        string
+	OSType        string // "linux" or "windows"
 	SSHGroup      string
 	RandomUser    bool
 	RandomKey     bool
@@ -45,6 +46,7 @@ func InitDeviceTable() error {
 			ssh_port INTEGER DEFAULT 22,
 			hostname TEXT,
 			os_info TEXT,
+			os_type TEXT DEFAULT 'linux',
 			ssh_group TEXT,
 			random_user INTEGER DEFAULT 0,
 			random_key INTEGER DEFAULT 0,
@@ -52,7 +54,15 @@ func InitDeviceTable() error {
 			setup_password TEXT
 		)
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	
+	// Add os_type column if it doesn't exist (for existing databases)
+	_, err = db.Exec(`ALTER TABLE devices ADD COLUMN os_type TEXT DEFAULT 'linux'`)
+	// Ignore error if column already exists
+	
+	return nil
 }
 
 // CreateDevice creates a new device
@@ -66,15 +76,20 @@ func CreateDevice(name, deviceType string) error {
 
 // CreateMonitoredDevice creates a new device with SSH monitoring details
 func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
+	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword)
+}
+
+// CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
+func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
 	_, err := db.Exec(`
 		INSERT INTO devices (
 			name, type, status, last_updated, 
 			ip_address, ssh_user, ssh_key_path, ssh_port, 
-			hostname, os_info, ssh_group, random_user, random_key,
+			hostname, os_info, os_type, ssh_group, random_user, random_key,
 			setup_user, setup_password
 		)
-		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword)
+		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword)
 	return err
 }
 
@@ -90,7 +105,7 @@ func boolToInt(b bool) int {
 func GetAllDevices() ([]Device, error) {
 	rows, err := db.Query(`
 		SELECT id, name, type, status, last_updated, 
-		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info,
+		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, random_user, random_key, setup_user, setup_password
 		FROM devices
 		ORDER BY id DESC
@@ -103,12 +118,12 @@ func GetAllDevices() ([]Device, error) {
 	var devices []Device
 	for rows.Next() {
 		var d Device
-		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, sshGroup, setupUser, setupPassword sql.NullString
+		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword sql.NullString
 		var sshPort, randomUser, randomKey sql.NullInt64
 
 		err := rows.Scan(
 			&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
-			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo,
+			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 			&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
 		)
 		if err != nil {
@@ -136,6 +151,11 @@ func GetAllDevices() ([]Device, error) {
 		if osInfo.Valid {
 			d.OSInfo = osInfo.String
 		}
+		if osType.Valid {
+			d.OSType = osType.String
+		} else {
+			d.OSType = "linux" // Default to Linux
+		}
 		if sshGroup.Valid {
 			d.SSHGroup = sshGroup.String
 		}
@@ -160,18 +180,18 @@ func GetAllDevices() ([]Device, error) {
 // GetDeviceByID returns a device by its ID
 func GetDeviceByID(id int64) (*Device, error) {
 	var d Device
-	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, sshGroup, setupUser, setupPassword sql.NullString
+	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword sql.NullString
 	var sshPort, randomUser, randomKey sql.NullInt64
 
 	err := db.QueryRow(`
 		SELECT id, name, type, status, last_updated,
-		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info,
+		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, random_user, random_key, setup_user, setup_password
 		FROM devices
 		WHERE id = ?
 	`, id).Scan(
 		&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
-		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo,
+		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 		&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
 	)
 
@@ -202,6 +222,11 @@ func GetDeviceByID(id int64) (*Device, error) {
 	}
 	if osInfo.Valid {
 		d.OSInfo = osInfo.String
+	}
+	if osType.Valid {
+		d.OSType = osType.String
+	} else {
+		d.OSType = "linux" // Default to Linux
 	}
 	if sshGroup.Valid {
 		d.SSHGroup = sshGroup.String
@@ -270,14 +295,19 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 
 // UpdateMonitoredDevice updates a monitored device's information
 func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
+	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword)
+}
+
+// UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
+func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
 	_, err := db.Exec(`
 		UPDATE devices
 		SET name = ?, type = ?, status = ?, last_updated = CURRENT_TIMESTAMP,
 		    ip_address = ?, ssh_user = ?, ssh_key_path = ?, ssh_port = ?,
-		    hostname = ?, os_info = ?, ssh_group = ?, random_user = ?, random_key = ?,
+		    hostname = ?, os_info = ?, os_type = ?, ssh_group = ?, random_user = ?, random_key = ?,
 		    setup_user = ?, setup_password = ?
 		WHERE id = ?
-	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, id)
+	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, id)
 	return err
 }
 

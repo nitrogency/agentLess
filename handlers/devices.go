@@ -50,10 +50,16 @@ func AddDeviceHandler(c *gin.Context) {
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
 		setupPassword := c.PostForm("setup_password")
+		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
 		randomUserVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_user")))
 		randomKeyVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_key")))
 		randomUser := randomUserVal == "on" || randomUserVal == "true" || randomUserVal == "1"
 		randomKey := randomKeyVal == "on" || randomKeyVal == "true" || randomKeyVal == "1"
+		
+		// Default to linux if not specified
+		if osType == "" {
+			osType = "linux"
+		}
 
 		// Store form data for repopulating on error
 		data.FormData["name"] = name
@@ -64,6 +70,7 @@ func AddDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_port"] = sshPortStr
 		data.FormData["hostname"] = hostname
 		data.FormData["os_info"] = osInfo
+		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
 		data.FormData["setup_password"] = setupPassword
@@ -144,10 +151,18 @@ func AddDeviceHandler(c *gin.Context) {
 			setupUser = "root"
 		}
 
+		// Validate OS type
+		if osType != "linux" && osType != "windows" {
+			data.Error = "Invalid OS type. Must be 'linux' or 'windows'"
+			data.ErrorFields["os_type"] = true
+			templates.RenderGinTemplate(c, "add-device", data)
+			return
+		}
+		
 		// Create device
 		if ipAddress != "" {
-			// Create monitored device with SSH details
-			err = db.CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, setupPassword)
+			// Create monitored device with SSH details and OS type
+			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword)
 		} else {
 			// Create simple device
 			err = db.CreateDevice(name, deviceType)
@@ -216,11 +231,20 @@ func EditDeviceHandler(c *gin.Context) {
 		sshPortStr := strings.TrimSpace(c.PostForm("ssh_port"))
 		hostname := strings.TrimSpace(c.PostForm("hostname"))
 		osInfo := strings.TrimSpace(c.PostForm("os_info"))
+		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
 		setupPassword := c.PostForm("setup_password")
 		randomUser := c.PostForm("random_user") == "on"
 		randomKey := c.PostForm("random_key") == "on"
+		
+		// Default to device's current OS type if not specified
+		if osType == "" {
+			osType = device.OSType
+			if osType == "" {
+				osType = "linux"
+			}
+		}
 
 		// Store form data for repopulating on error
 		data.FormData["name"] = name
@@ -231,6 +255,7 @@ func EditDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_port"] = sshPortStr
 		data.FormData["hostname"] = hostname
 		data.FormData["os_info"] = osInfo
+		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
 		data.FormData["setup_password"] = setupPassword
@@ -319,9 +344,18 @@ func EditDeviceHandler(c *gin.Context) {
 		if setupUser == "" {
 			setupUser = "root"
 		}
+		
+		// Validate OS type
+		if osType != "linux" && osType != "windows" {
+			data.Error = "Invalid OS type. Must be 'linux' or 'windows'"
+			data.ErrorFields["os_type"] = true
+			data.Data["Device"] = device
+			templates.RenderGinTemplate(c, "edit-device", data)
+			return
+		}
 
-		// Update device
-		err = db.UpdateMonitoredDevice(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, setupPassword)
+		// Update device with OS type
+		err = db.UpdateMonitoredDeviceWithOS(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword)
 		if err != nil {
 			log.Printf("Error updating device: %v", err)
 			data.Error = "Failed to update device"
@@ -345,6 +379,7 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["ssh_port"] = strconv.Itoa(device.SSHPort)
 	data.FormData["hostname"] = device.Hostname
 	data.FormData["os_info"] = device.OSInfo
+	data.FormData["os_type"] = device.OSType
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
 	data.FormData["setup_password"] = device.SetupPassword

@@ -1,22 +1,21 @@
 #!/bin/bash
 #
-# monitoring.sh - minimal collector to feed audit lines into scripts/monitoring.go
+# monitoring.sh - minimal collector to feed audit lines into scripts/linux/monitoring.go
 #
 # Usage: monitoring.sh -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> -p <port>
 # Notes: keeps it simple on purpose; relies on Go program to classify and insert into DB.
 set -euo pipefail
 
-# Source shared libraries (minimal logging for this lightweight script)
+# Source shared libraries (minimal logging for this
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
 
 # Configuration
 PROJECT_ROOT="$(get_repo_root)"
-GO_MONITOR="$PROJECT_ROOT/scripts/monitoring.go"
+GO_MONITOR="$PROJECT_ROOT/scripts/linux/monitoring.go"
 BIN_MONITOR="$PROJECT_ROOT/bin/monitor"
-
 DEVICE_ID=""
 SSH_USER=""
 IP=""
@@ -87,5 +86,5 @@ if [ -x "$BIN_MONITOR" ]; then
 else
   log_debug "Using go run with source: $GO_MONITOR"
   ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
-    (cd "$PROJECT_ROOT" && go run ./scripts/monitoring.go -device "$DEVICE_ID")
+    (cd "$PROJECT_ROOT" && go run ./scripts/linux/monitoring.go -device "$DEVICE_ID")
 fi
