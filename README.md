@@ -1,21 +1,20 @@
-# AgentLess IDS
+# Agent< IDS
 
-A lightweight, agentless intrusion detection system that monitors remote Linux systems using SSH and Linux auditd. The system provides a web interface for managing monitored devices and viewing security events.
+A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring through auditd and Windows monitoring through Sysmon. Logs are gathered through auditd and Sysmon rules, and then extracted to the webserver using SSH, where they can be displayed.
 
 ## Features
 
-- **Agentless Monitoring**: No software installation required on target devices
-- **Real-time Audit Log Collection**: Collects and analyzes Linux audit logs
-- **Security Event Classification**: Automatically classifies events by severity (low, medium, high)
+- **Agentless Monitoring**: No agent installation required on target devices. Only things moved to endpoints are temporary setup scripts which install required dependencies. Because of this, the client doesn't connect to the server to send logs, instead, the server connects to the client and gathers them itself.
+- **Security Event Classification**: Automatically classifies events by severity. These severities can be modified. By default, LOW usually means regular system tasks or regular events, MEDIUM can signal changes made to relatively important directories/configurations, and HIGH is mostly reserved for suspicious command execution.
 
 ## Prerequisites
 
-- Linux server/VM (Ubuntu/Debian recommended. RHEL support is untested.)
+- Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but untested)
 - Go 1.16+ (for building the web application)
 - SQLite3 with SQLCipher extension
 - SSH server on target devices
 - Systemd (for service management)
-- Root or sudo access on the monitoring server
+- Root or sudo access through SSH on the monitoring server
 
 ## Installation
 
@@ -29,30 +28,8 @@ cd agentLess
 ### 2. Run the setup script
 
 ```bash
-chmod +x scripts/setup.sh
-./scripts/setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
-## Adding custom rules
-If you wish to add custom audit rules, all you have to do is to edit the enlist.sh script, which is responsible for rule creation on the target system.
-You can find a guide for audit rules [here](https://www.redhat.com/en/blog/configure-linux-auditing-auditd).
-
-
-## Hardening
-Make sure to at least somewhat harden your host VM.
-
-```bash
-# Enable automatic security updates
-sudo apt install -y unattended-upgrades
-sudo dpkg-reconfigure -plow unattended-upgrades
-
-# Configure firewall
-sudo ufw allow ssh
-sudo ufw allow 8080/tcp  # Web interface port
-sudo ufw enable
-
-# Disable root login over SSH
-sudo sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-sudo systemctl restart sshd
-```
-
+You can find a more-detailed write-up of how the app works + some best-practices in the `docs` section.
