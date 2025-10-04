@@ -40,14 +40,14 @@ try {
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         
         New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
-        Write-Host "  ✓ User created: $MonitoringUser" -ForegroundColor Green
+        Write-Host "  [OK] User created: $MonitoringUser" -ForegroundColor Green
     } else {
-        Write-Host "  ✓ User already exists: $MonitoringUser" -ForegroundColor Green
+        Write-Host "  [OK] User already exists: $MonitoringUser" -ForegroundColor Green
     }
     
     # Add to Event Log Readers group
     Add-LocalGroupMember -Group "Event Log Readers" -Member $MonitoringUser -ErrorAction SilentlyContinue
-    Write-Host "  ✓ Added to Event Log Readers group" -ForegroundColor Green
+    Write-Host "  [OK] Added to Event Log Readers group" -ForegroundColor Green
     
 } catch {
     Write-Error "Failed to create monitoring user: $_"
@@ -68,13 +68,13 @@ try {
     # Start and enable SSH service
     Start-Service sshd
     Set-Service -Name sshd -StartupType 'Automatic'
-    Write-Host "  ✓ SSH server configured and running" -ForegroundColor Green
+    Write-Host "  [OK] SSH server configured and running" -ForegroundColor Green
     
     # Configure firewall
     $firewallRule = Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue
     if (-not $firewallRule) {
         New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
-        Write-Host "  ✓ Firewall rule created" -ForegroundColor Green
+        Write-Host "  [OK] Firewall rule created" -ForegroundColor Green
     }
     
 } catch {
@@ -101,7 +101,7 @@ try {
         # Set proper permissions
         icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
         
-        Write-Host "  ✓ SSH key configured" -ForegroundColor Green
+        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
     } else {
         Write-Warning "  No SSH key provided. You'll need to configure this manually."
     }
@@ -140,12 +140,12 @@ try {
         
         if ($sysmonExe) {
             & $sysmonExe.FullName -accepteula -i $sysmonConfig
-            Write-Host "  ✓ Sysmon installed successfully" -ForegroundColor Green
+            Write-Host "  [OK] Sysmon installed successfully" -ForegroundColor Green
         } else {
             throw "Sysmon executable not found"
         }
     } else {
-        Write-Host "  ✓ Sysmon already installed" -ForegroundColor Green
+        Write-Host "  [OK] Sysmon already installed" -ForegroundColor Green
         
         # Update configuration
         Write-Host "  Updating Sysmon configuration..." -ForegroundColor Cyan
@@ -154,7 +154,7 @@ try {
         $sysmonPath = "C:\Windows\Sysmon64.exe"
         if (Test-Path $sysmonPath) {
             & $sysmonPath -c $sysmonConfig
-            Write-Host "  ✓ Sysmon configuration updated" -ForegroundColor Green
+            Write-Host "  [OK] Sysmon configuration updated" -ForegroundColor Green
         }
     }
     
@@ -176,7 +176,7 @@ try {
     $log.MaximumSizeInBytes = 1GB
     $log.SaveChanges()
     
-    Write-Host "  ✓ Event log configured (1GB max size)" -ForegroundColor Green
+    Write-Host "  [OK] Event log configured (1GB max size)" -ForegroundColor Green
     
 } catch {
     Write-Warning "Failed to configure event log size: $_"
