@@ -144,22 +144,45 @@
         </div>
         <div class="card-body">
             <h4 class="card-title">Setup Instructions</h4>
-            <p>To set up this device for monitoring, follow these steps:</p>
+            {{if eq .Device.OSType "windows"}}
+            <p>To set up this Windows device for monitoring, follow these steps:</p>
             <ol>
-                <li>Copy the server's public key to the client device:
+                <li><strong>Get your SSH public key from the IDS server</strong>
+                    <pre class="code-block">cat {{.Device.SSHKeyPath}}.pub</pre>
+                    <p class="note">Copy the entire output </p>
+                </li>
+                <li><strong>Transfer the enrollment script to Windows</strong>
+                    <p>You can either copy the "enlist-windows.ps1" script from the github repo or from the monitoring server. If possible copy over to your setup user's Temp folder.</p>
+                    <pre class="code-block">
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/nitrogency/agentLess/main/scripts/windows/enlist-windows.ps1" -OutFile "C:\Users\{{.Device.SetupUser}}\AppData\Local\Temp\enlist-windows.ps1"</pre>
+                </li>
+                <li><strong>Run the enrollment script on Windows (as Administrator)</strong>
+                    <pre class="code-block">
+cd C:\Users\{{.Device.SetupUser}}\AppData\Local\Temp
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+.\enlist-windows.ps1 -ServerIP &lt;IDS-SERVER-IP&gt; -MonitoringUser {{.Device.SSHUser}}</pre>
+                    <p class="note">Replace <code>&lt;IDS-SERVER-IP&gt;</code> with this server's IP, then paste the SSH public key from step 1 when prompted</p>
+                </li>
+            </ol>
+            {{else}}
+            <!-- Linux Setup Instructions -->
+            <p>To set up this Linux device for monitoring, follow these steps:</p>
+            <ol>
+                <li><strong>Copy the server's public key to the client device:</strong>
                     <pre class="code-block">ssh-copy-id -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
-                <li>Run the enlist.sh script from your terminal:
+                <li><strong>Run the enrollment script from your terminal:</strong>
                     <pre class="code-block">./scripts/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
-                    <p></p>
                 </li>
             </ol>
+            {{end}}
+            
             <div class="alert alert-info mt-3">
                 <h4>Important!</h4>
-                <p>Each time you add a new device, you must run the monitoring script to start automatically monitoring your devices (may require sudo):</p>
+                <p>After enrolling the device, run the monitoring setup script to start automatic monitoring (may require sudo):</p>
                 <pre class="code-block">./scripts/setup-monitoring.sh</pre>
-                <p>This will setup a systemd unit for each device. In addition, a log cleanup timer will be started as well.</p>
+                <p>This will create a systemd service for each device and start log collection automatically.</p>
             </div>
         </div>
     </div>
