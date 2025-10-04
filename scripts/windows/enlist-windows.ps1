@@ -40,7 +40,7 @@ try {
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
         Write-Host "  [OK] User created: $MonitoringUser" -ForegroundColor Green
-        Write-Host "  [INFO] Password: $securePassword" -ForegroundColor Cyan
+        Write-Host "  [INFO] Password: $password" -ForegroundColor Cyan
     } else {
         Write-Host "  [OK] User already exists: $MonitoringUser" -ForegroundColor Green
     }
