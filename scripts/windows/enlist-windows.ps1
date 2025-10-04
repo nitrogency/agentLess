@@ -106,40 +106,6 @@ try {
         Write-Warning "  No SSH key provided. You'll need to configure this manually."
     }
     
-    # Configure SSH for passwordless authentication
-    Write-Host "  Configuring passwordless SSH authentication..." -ForegroundColor Cyan
-    $sshdConfigPath = "C:\ProgramData\ssh\sshd_config"
-    
-    if (Test-Path $sshdConfigPath) {
-        # Backup original config
-        Copy-Item $sshdConfigPath "$sshdConfigPath.backup" -Force
-        
-        # Read current config
-        $sshdConfig = Get-Content $sshdConfigPath
-        
-        # Check if administrators_authorized_keys is already commented
-        $needsUpdate = $false
-        $updatedConfig = $sshdConfig | ForEach-Object {
-            if ($_ -match "^\s*Match Group administrators" -and $_ -notmatch "^\s*#") {
-                $needsUpdate = $true
-                "# $_"
-            } elseif ($_ -match "^\s*AuthorizedKeysFile.*__PROGRAMDATA__" -and $_ -notmatch "^\s*#") {
-                $needsUpdate = $true
-                "# $_"
-            } else {
-                $_
-            }
-        }
-        
-        if ($needsUpdate) {
-            Set-Content -Path $sshdConfigPath -Value $updatedConfig
-            Restart-Service sshd
-            Write-Host "  [OK] Passwordless SSH enabled" -ForegroundColor Green
-        } else {
-            Write-Host "  [OK] Passwordless SSH already enabled" -ForegroundColor Green
-        }
-    }
-    
 } catch {
     Write-Warning "Failed to setup SSH keys: $_"
 }
