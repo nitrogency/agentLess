@@ -99,28 +99,48 @@ try {
     $publicKey = Read-Host
     
     if ($publicKey) {
-        $sshDir = "C:\Users\$MonitoringUser\.ssh"
-        $authorizedKeysFile = "$sshDir\authorized_keys"
+        # Use saved password from user creation
+        if (-not $script:userPassword) {
+            Write-Error "Password not available. This shouldn't happen."
+            return
+        }
+        $securePassword = ConvertTo-SecureString $script:userPassword -AsPlainText -Force
+        $credential = New-Object System.Management.Automation.PSCredential ("${MonitoringUser}", $securePassword)
         
-        # Create .ssh directory
-        New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+        # Create a temporary script file to run as the user
+        $tempScript = "$env:TEMP\setup-ssh-$MonitoringUser.ps1"
+        $scriptContent = @"
+# Create .ssh directory
+`$sshDir = "`$env:USERPROFILE\.ssh"
+New-Item -ItemType Directory -Path `$sshDir -Force | Out-Null
+
+# Write authorized_keys file
+`$authKeysFile = "`$sshDir\authorized_keys"
+@'
+$publicKey
+'@ | Out-File -FilePath `$authKeysFile -Encoding ASCII -NoNewline
+
+Write-Host "Created: `$authKeysFile"
+"@
         
-        # Write authorized_keys using Out-File
-        $publicKey | Out-File -FilePath $authorizedKeysFile -Encoding ASCII -NoNewline
+        Set-Content -Path $tempScript -Value $scriptContent
         
-        # Transfer ownership to ids-monitor user
-        icacls.exe $sshDir /setowner "${MonitoringUser}" /T /C | Out-Null
-        icacls.exe $authorizedKeysFile /setowner "${MonitoringUser}" /C | Out-Null
-        
-        # Set permissions (only ids-monitor and SYSTEM)
-        icacls.exe $sshDir /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F" | Out-Null
-        icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F" | Out-Null
-        
-        # Verify file was created
-        if (Test-Path $authorizedKeysFile) {
-            Write-Host "  [OK] SSH key configured" -ForegroundColor Green
-        } else {
-            Write-Warning "  Failed to create SSH key file"
+        # Run the script as ids-monitor user
+        try {
+            $result = Start-Process powershell -Credential $credential -ArgumentList "-ExecutionPolicy", "Bypass", "-File", $tempScript -Wait -NoNewWindow -PassThru
+            
+            if ($result.ExitCode -eq 0) {
+                # Set permissions from admin context (file is now owned by ids-monitor)
+                $authorizedKeysFile = "C:\Users\$MonitoringUser\.ssh\authorized_keys"
+                icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F" | Out-Null
+                
+                Write-Host "  [OK] SSH key configured" -ForegroundColor Green
+            } else {
+                Write-Warning "  Failed to create SSH key file as user (exit code: $($result.ExitCode))"
+            }
+        } finally {
+            # Clean up temp script
+            Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
         }
     } else {
         Write-Warning "  No SSH key provided. You'll need to configure this manually."
