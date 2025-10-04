@@ -170,6 +170,8 @@ try {
 
 # Display connection information
 Write-Host "[5/5] Enrollment complete!" -ForegroundColor Yellow
+Write-Host "Sysmon is now monitoring system events!" -ForegroundColor Green
+Write-Host "Event log: Microsoft-Windows-Sysmon/Operational" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "=== Connection Information ===" -ForegroundColor Cyan
 Write-Host "Hostname: $env:COMPUTERNAME" -ForegroundColor White
@@ -177,12 +179,3 @@ Write-Host "IP Address: $(Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$
 Write-Host "SSH User: $MonitoringUser" -ForegroundColor White
 Write-Host "SSH Port: 22" -ForegroundColor White
 Write-Host ""
-Write-Host "To add this device to AgentLess IDS:" -ForegroundColor Green
-Write-Host "1. Log in to the IDS web interface" -ForegroundColor White
-Write-Host "2. Go to Devices > Add Device" -ForegroundColor White
-Write-Host "3. Enter the information above" -ForegroundColor White
-Write-Host "4. Select OS Type: Windows" -ForegroundColor White
-Write-Host "5. Upload the SSH private key that matches the public key you provided" -ForegroundColor White
-Write-Host ""
-Write-Host "Sysmon is now monitoring system events!" -ForegroundColor Green
-Write-Host "Event log: Microsoft-Windows-Sysmon/Operational" -ForegroundColor Cyan
