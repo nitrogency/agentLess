@@ -31,7 +31,6 @@ Write-Host ""
 
 # Create monitoring user if doesn't exist
 Write-Host "[1/6] Creating monitoring user..." -ForegroundColor Yellow
-$script:userPassword = $null
 try {
     $userExists = Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue
     
@@ -39,18 +38,11 @@ try {
         # Generate random password
         $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object {[char]$_})
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        $script:userPassword = $password
         
         New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
         Write-Host "  [OK] User created: $MonitoringUser" -ForegroundColor Green
-        Write-Host "  [INFO] Password: $password" -ForegroundColor Cyan
-        Write-Host "  [INFO] Save this password! You'll need it in the next step." -ForegroundColor Yellow
     } else {
         Write-Host "  [OK] User already exists: $MonitoringUser" -ForegroundColor Green
-        Write-Host "  [INFO] Enter password for ${MonitoringUser} for SSH key setup:" -ForegroundColor Cyan
-        $secPass = Read-Host -AsSecureString
-        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
-        $script:userPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
     }
     
     # Add to Event Log Readers group
@@ -90,30 +82,33 @@ try {
     exit 1
 }
 
-# Setup SSH key authentication# [3/6] Setting up SSH key authentication (simple + fixed)
+# Setup SSH key authentication
 Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
 try {
-    Write-Host "  Paste the SSH public key and press Enter:" -ForegroundColor Cyan
-    $publicKey = Read-Host
-    if (-not $publicKey) { throw "No SSH key provided." }
-
     $sshDir = "C:\Users\$MonitoringUser\.ssh"
     New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    $auth = Join-Path $sshDir 'authorized_keys'
-    Set-Content -Path $auth -Value $publicKey -Encoding ASCII -NoNewline
-
-    $localUser = "$env:COMPUTERNAME\$MonitoringUser"
-
-    icacls $sshDir /inheritance:r | Out-Null
-    icacls $sshDir /grant:r "${localUser}:(OI)(CI)F" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" | Out-Null
-    icacls $auth  /inheritance:r | Out-Null
-    icacls $auth  /grant:r "${localUser}:F" "Administrators:F" "SYSTEM:F" | Out-Null
-
-    Write-Host "  [OK] SSH key configured" -ForegroundColor Green
+    
+    $authorizedKeysFile = "$sshDir\authorized_keys"
+    
+    Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
+    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
+    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
+    $publicKey = Read-Host
+    
+    if ($publicKey) {
+        Set-Content -Path $authorizedKeysFile -Value $publicKey
+        
+        # Set proper permissions
+        icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
+        
+        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
+    } else {
+        Write-Warning "  No SSH key provided. You'll need to configure this manually."
+    }
+    
 } catch {
     Write-Warning "Failed to setup SSH keys: $_"
 }
-
 
 # Download and install Sysmon
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
