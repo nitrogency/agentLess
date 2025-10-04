@@ -6,8 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts"
 source "$SCRIPT_DIR/lib/logging.sh"
 
-log_section "AgentLess IDS Setup"
-log_info "This script will install all required dependencies and set up the AgentLess web application."
+log_section "Agent< IDS Setup"
+log_info "This script will install all required dependencies and set up the application."
 
 # Function to check if command exists
 command_exists() {
@@ -356,50 +356,40 @@ EOF"
   sudo systemctl daemon-reload
   
   log_success "Systemd service created"
-  log_info "To start the service: sudo systemctl start agentless"
-  log_info "To enable on boot: sudo systemctl enable agentless"
+  
+  # Enable and start the service automatically
+  log_progress "Enabling service on boot..."
+  sudo systemctl enable agentless
+  
+  log_progress "Starting service..."
+  sudo systemctl start agentless
+  
+  # Wait a moment and check if it started successfully
+  sleep 2
+  if sudo systemctl is-active --quiet agentless; then
+    log_success "Service started successfully!"
+  else
+    log_error "Service failed to start. Check status with: sudo systemctl status agentless"
+  fi
 fi
 
 log_section "Setup Complete"
 log_success "Setup completed successfully!"
 log_info ""
-log_info "Next steps:"
-log_info "  1. Update the .env file with secure credentials"
-log_info "  2. Start the application directly: ./agentless"
-log_info "  3. Or use systemd: sudo systemctl start agentless"
-log_info "  4. Access the web interface: https://localhost:8443"
+log_success "The Agent< IDS service is now running!"
 log_info ""
+log_info "Access the web interface: https://localhost:8443"
 log_warn "Your browser will show a security warning for the self-signed certificate."
 log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
-
-if [[ "$start_now" =~ ^[Yy]$ ]]; then
-  # Make sure logs directory exists
-  mkdir -p "$LOG_DIR"
-  
-  # Check if the application was built successfully
-  if [ -f "$APP_DIR/agentless" ]; then
-    log_progress "Starting application directly..."
-    # Run in background
-    nohup "$APP_DIR/agentless" > "$LOG_DIR/app.log" 2>&1 &
-    APP_PID=$!
-    
-    # Check if application started successfully
-    sleep 2
-    if ps -p $APP_PID > /dev/null; then
-      log_success "Application started! Access at: https://localhost:8443"
-      log_info "  - Logs are available at: $LOG_DIR/app.log"
-      log_info "  - Process ID: $APP_PID"
-      log_info "  - To stop: kill $APP_PID or pkill -f agentless"
-    else
-      log_error "Application failed to start. Check logs at: $LOG_DIR/app.log"
-    fi
-  else
-    log_error "Application binary not found. Build may have failed."
-  fi
-fi
+log_info ""
+log_info "Service Management:"
+log_info "  - Check status: sudo systemctl status agentless"
+log_info "  - View logs: sudo journalctl -u agentless -f"
+log_info "  - Restart: sudo systemctl restart agentless"
+log_info "  - Stop: sudo systemctl stop agentless"
 log_info ""
 log_info "For monitoring setup:"
 log_info "  - Add devices through the web interface"
-log_info "  - Use the enlist.sh script to configure devices"
+log_info "  - Use the enlist.sh script to enroll devices"
 log_info "  - Check logs in the data directory"
 log_info ""
