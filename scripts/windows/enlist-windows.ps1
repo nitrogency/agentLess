@@ -82,6 +82,61 @@ try {
     exit 1
 }
 
+# Setup SSH key authentication
+Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
+try {
+    Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
+    Write-Host "  (You can find it at: ~/.ssh/id_ed25519.pub or ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
+    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
+    $publicKey = Read-Host
+    
+    if ($publicKey) {
+        # Ensure user home directory exists and is owned by the user
+        $userHome = "C:\Users\$MonitoringUser"
+        $sshDir = "$userHome\.ssh"
+        
+        New-Item -Force -ItemType Directory -Path $userHome | Out-Null
+        icacls $userHome /setowner $MonitoringUser | Out-Null
+        
+        # Set ProfileImagePath in registry (required for proper home directory)
+        $userSID = (Get-LocalUser $MonitoringUser).Sid.Value
+        $regKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$userSID"
+        if (-not (Test-Path $regKey)) {
+            New-Item $regKey | Out-Null
+        }
+        Set-ItemProperty $regKey ProfileImagePath $userHome
+        
+        # Create .ssh directory
+        New-Item -Force -ItemType Directory -Path $sshDir | Out-Null
+        
+        # Write the public key to authorized_keys
+        Set-Content "$sshDir\authorized_keys" $publicKey -Encoding ASCII
+        Add-Content "$sshDir\authorized_keys" "" # Ensure newline at end
+        
+        # Set proper permissions on home directory
+        icacls $userHome /inheritance:r | Out-Null
+        icacls $userHome /grant "${MonitoringUser}:(OI)(CI)M" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
+        
+        # Set proper permissions on .ssh directory
+        icacls $sshDir /inheritance:r | Out-Null
+        icacls $sshDir /grant "${MonitoringUser}:(OI)(CI)F" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
+        
+        # Set proper permissions on authorized_keys file
+        icacls "$sshDir\authorized_keys" /inheritance:r | Out-Null
+        icacls "$sshDir\authorized_keys" /grant "${MonitoringUser}:R" "Administrators:F" "SYSTEM:F" "NT SERVICE\sshd:(R)" | Out-Null
+        
+        # Restart SSH service to pick up changes
+        Restart-Service sshd
+        
+        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
+    } else {
+        Write-Warning "  No SSH key provided. You'll need to configure this manually."
+    }
+    
+} catch {
+    Write-Warning "Failed to setup SSH keys: $_"
+}
+
 # Download and install Sysmon
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
 try {
