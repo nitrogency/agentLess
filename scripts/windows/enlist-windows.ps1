@@ -90,8 +90,7 @@ try {
     exit 1
 }
 
-# Setup SSH key authentication
-# [3/6] Setting up SSH key authentication (simplified, no Start-Process)
+# Setup SSH key authentication# [3/6] Setting up SSH key authentication (simple + fixed)
 Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
 try {
     Write-Host "  Paste the SSH public key and press Enter:" -ForegroundColor Cyan
@@ -103,17 +102,12 @@ try {
     $auth = Join-Path $sshDir 'authorized_keys'
     Set-Content -Path $auth -Value $publicKey -Encoding ASCII -NoNewline
 
-    # Lock down permissions to what Win32-OpenSSH expects
-    icacls $sshDir /inheritance:r | Out-Null
-    icacls $sshDir /grant "$MonitoringUser:(F)" /grant "Administrators:(F)" /grant "SYSTEM:(F)" | Out-Null
-    icacls $auth  /inheritance:r | Out-Null
-    icacls $auth  /grant "$MonitoringUser:(F)" /grant "Administrators:(F)" /grant "SYSTEM:(F)" | Out-Null
+    $localUser = "$env:COMPUTERNAME\$MonitoringUser"
 
-    # (optional but nice) make the user the owner of .ssh
-    try {
-        $owner = New-Object System.Security.Principal.NTAccount($MonitoringUser)
-        $acl = Get-Acl $sshDir; $acl.SetOwner($owner); Set-Acl $sshDir $acl
-    } catch {}
+    icacls $sshDir /inheritance:r | Out-Null
+    icacls $sshDir /grant:r "${localUser}:(OI)(CI)F" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" | Out-Null
+    icacls $auth  /inheritance:r | Out-Null
+    icacls $auth  /grant:r "${localUser}:F" "Administrators:F" "SYSTEM:F" | Out-Null
 
     Write-Host "  [OK] SSH key configured" -ForegroundColor Green
 } catch {
