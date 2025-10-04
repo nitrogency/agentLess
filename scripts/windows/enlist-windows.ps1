@@ -1,198 +1,145 @@
 # enlist-windows.ps1
-# Windows Device Enrollment Script for AgentLess IDS
-# This script must be run with Administrator privileges on the target Windows machine
-#
-# Usage: .\enlist-windows.ps1 -ServerIP <ids_server_ip> -MonitoringUser <username>
-
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$ServerIP,
-    
-    [Parameter(Mandatory=$false)]
-    [string]$MonitoringUser = "ids-monitor",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$SysmonConfigURL = "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$SysmonDownloadURL = "https://download.sysinternals.com/files/Sysmon.zip"
+  [Parameter(Mandatory=$true)][string]$ServerIP,
+  [string]$MonitoringUser="ids-monitor",
+  [string]$SysmonConfigURL="https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml",
+  [string]$SysmonDownloadURL="https://download.sysinternals.com/files/Sysmon.zip"
 )
 
-# Require Administrator privileges
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "This script must be run as Administrator"
-    exit 1
+# --- guard: admin ---
+if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+  Write-Error "Run as Administrator"; exit 1
 }
 
+# --- basics ---
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Write-Host "=== AgentLess IDS - Windows Enrollment ===" -ForegroundColor Cyan
 Write-Host "Server: $ServerIP" -ForegroundColor Green
 Write-Host "Monitoring User: $MonitoringUser" -ForegroundColor Green
 Write-Host ""
 
-# Create monitoring user if doesn't exist
+# --- [1/6] user + group ---
 Write-Host "[1/6] Creating monitoring user..." -ForegroundColor Yellow
-try {
-    $userExists = Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue
-    
-    if (-not $userExists) {
-        # Generate random password
-        $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object {[char]$_})
-        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        
-        New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
-        Write-Host "  ✓ User created: $MonitoringUser" -ForegroundColor Green
-    } else {
-        Write-Host "  ✓ User already exists: $MonitoringUser" -ForegroundColor Green
-    }
-    
-    # Add to Event Log Readers group
-    Add-LocalGroupMember -Group "Event Log Readers" -Member $MonitoringUser -ErrorAction SilentlyContinue
-    Write-Host "  ✓ Added to Event Log Readers group" -ForegroundColor Green
-    
-} catch {
-    Write-Error "Failed to create monitoring user: $_"
-    exit 1
-}
+try{
+  $user = Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue
+  if(-not $user){
+    $pw = -join ((48..57+65..90+97..122) | Get-Random -Count 24 | % {[char]$_})
+    $spw = ConvertTo-SecureString $pw -AsPlainText -Force
+    New-LocalUser -Name $MonitoringUser -Password $spw -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires | Out-Null
+    Write-Host "  ✓ User created: $MonitoringUser" -ForegroundColor Green
+  } else {
+    Write-Host "  ✓ User exists: $MonitoringUser" -ForegroundColor Green
+  }
+  # Add to Event Log Readers via SID (S-1-5-32-573)
+  $elr = (Get-LocalGroup -SID 'S-1-5-32-573').Name
+  Add-LocalGroupMember -Group $elr -Member $MonitoringUser -ErrorAction SilentlyContinue
+  Write-Host "  ✓ Added to Event Log Readers" -ForegroundColor Green
+}catch{ Write-Error "User setup failed: $_"; exit 1 }
 
-# Setup SSH for Windows
+# --- [2/6] OpenSSH server ---
 Write-Host "[2/6] Configuring OpenSSH Server..." -ForegroundColor Yellow
-try {
-    # Check if OpenSSH Server is installed
-    $sshServer = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*'
-    
-    if ($sshServer.State -ne "Installed") {
-        Write-Host "  Installing OpenSSH Server..." -ForegroundColor Cyan
-        Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+try{
+  $sshCap = Get-WindowsCapability -Online | ? Name -like 'OpenSSH.Server*' | Select-Object -First 1
+  if($sshCap.State -ne 'Installed'){ Write-Host "  Installing OpenSSH..." -ForegroundColor Cyan; Add-WindowsCapability -Online -Name $sshCap.Name | Out-Null }
+  Start-Service sshd -ErrorAction SilentlyContinue
+  Set-Service sshd -StartupType Automatic
+  if(-not (Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue)){
+    New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+  }
+  # harden: disable password auth
+  $cfg = 'C:\ProgramData\ssh\sshd_config'
+  if(Test-Path $cfg){
+    $c = Get-Content $cfg
+    if($c -match '^\s*PasswordAuthentication\s+'){
+      $c = ($c -replace '^\s*#?\s*PasswordAuthentication\s+\w+','PasswordAuthentication no')
+    } else {
+      $c += 'PasswordAuthentication no'
     }
-    
-    # Start and enable SSH service
-    Start-Service sshd
-    Set-Service -Name sshd -StartupType 'Automatic'
-    Write-Host "  ✓ SSH server configured and running" -ForegroundColor Green
-    
-    # Configure firewall
-    $firewallRule = Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue
-    if (-not $firewallRule) {
-        New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
-        Write-Host "  ✓ Firewall rule created" -ForegroundColor Green
-    }
-    
-} catch {
-    Write-Error "Failed to configure SSH: $_"
-    exit 1
-}
+    $c | Set-Content $cfg -Encoding ascii
+    Restart-Service sshd
+  }
+  Write-Host "  ✓ SSH server ready" -ForegroundColor Green
+}catch{ Write-Error "OpenSSH setup failed: $_"; exit 1 }
 
-# Setup SSH key authentication
+# --- [3/6] SSH key auth (strict ACLs) ---
 Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
-try {
-    $sshDir = "C:\Users\$MonitoringUser\.ssh"
-    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    
-    $authorizedKeysFile = "$sshDir\authorized_keys"
-    
-    Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
-    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
-    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
-    $publicKey = Read-Host
-    
-    if ($publicKey) {
-        Set-Content -Path $authorizedKeysFile -Value $publicKey
-        
-        # Set proper permissions
-        icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
-        
-        Write-Host "  ✓ SSH key configured" -ForegroundColor Green
-    } else {
-        Write-Warning "  No SSH key provided. You'll need to configure this manually."
-    }
-    
-} catch {
-    Write-Warning "Failed to setup SSH keys: $_"
-}
+try{
+  $prof = Join-Path 'C:\Users' $MonitoringUser
+  $sshDir = Join-Path $prof '.ssh'
+  New-Item $sshDir -ItemType Directory -Force | Out-Null
+  $authorized = Join-Path $sshDir 'authorized_keys'
+  Write-Host "  Paste the SSH public key (single line) and press Enter:" -ForegroundColor Cyan
+  $pub = Read-Host
+  if($pub){
+    Set-Content $authorized $pub -Encoding utf8NoBOM
+    $acct = "$env:COMPUTERNAME\$MonitoringUser"
+    icacls $sshDir /inheritance:r /grant "$acct:(OI)(CI)F" "SYSTEM:(OI)(CI)F" | Out-Null
+    icacls $authorized /inheritance:r /grant "$acct:F" "SYSTEM:F" | Out-Null
+    icacls $sshDir /setowner $acct /T | Out-Null
+    Write-Host "  ✓ SSH key configured" -ForegroundColor Green
+  } else {
+    Write-Warning "  No key provided; configure later."
+  }
+}catch{ Write-Warning "SSH key setup warning: $_" }
 
-# Download and install Sysmon
-# [4/6] Installing Sysmon
+# --- [4/6] Sysmon install/update ---
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
-try {
-  $tempDir       = Join-Path $env:TEMP 'sysmon-install'
-  $sysmonZip     = Join-Path $tempDir 'Sysmon.zip'
-  $sysmonConfig  = Join-Path $tempDir 'sysmonconfig.xml'
-  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+try{
+  $temp = Join-Path $env:TEMP 'sysmon-install'
+  $zip  = Join-Path $temp 'Sysmon.zip'
+  $cfgf = Join-Path $temp 'sysmonconfig.xml'
+  New-Item $temp -ItemType Directory -Force | Out-Null
 
-  $sysmonService = Get-Service -Name 'Sysmon64','Sysmon' -ErrorAction SilentlyContinue | Select-Object -First 1
-
-  if (-not $sysmonService) {
+  $svc = Get-Service -Name 'Sysmon64','Sysmon' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if(-not $svc){
     Write-Host "  Downloading Sysmon..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $SysmonDownloadURL -OutFile $sysmonZip
-    Expand-Archive -Path $sysmonZip -DestinationPath $tempDir -Force
-
+    Invoke-WebRequest $SysmonDownloadURL -OutFile $zip
+    Expand-Archive $zip $temp -Force
     Write-Host "  Downloading Sysmon configuration..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
-
-    $sysmonExe = Get-ChildItem -Path $tempDir -Recurse -Filter 'Sysmon*.exe' | Select-Object -First 1
-    if ($null -eq $sysmonExe) { throw "Sysmon executable not found" }
-
+    Invoke-WebRequest $SysmonConfigURL -OutFile $cfgf
+    $exe = Get-ChildItem $temp -Recurse -Filter 'Sysmon*.exe' | Select-Object -First 1
+    if(-not $exe){ throw "Sysmon executable not found" }
     Write-Host "  Installing Sysmon with configuration..." -ForegroundColor Cyan
-    & $sysmonExe.FullName -accepteula -i $sysmonConfig
-    Write-Host "  ✓ Sysmon installed successfully" -ForegroundColor Green
-  }
-  else {
+    & $exe.FullName -accepteula -i $cfgf
+    Write-Host "  ✓ Sysmon installed" -ForegroundColor Green
+  } else {
     Write-Host "  ✓ Sysmon already installed" -ForegroundColor Green
-
     Write-Host "  Updating Sysmon configuration..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
-
-    # detect installed exe (32/64)
-    $existingExe = @('C:\Windows\Sysmon64.exe','C:\Windows\Sysmon.exe') |
-      Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($existingExe) {
-      & $existingExe -c $sysmonConfig
-      Write-Host "  ✓ Sysmon configuration updated" -ForegroundColor Green
-    } else {
-      Write-Warning "  Sysmon executable not found in C:\Windows\*.exe"
-    }
+    Invoke-WebRequest $SysmonConfigURL -OutFile $cfgf
+    $installedExe = @('C:\Windows\Sysmon64.exe','C:\Windows\Sysmon.exe') | ? { Test-Path $_ } | Select-Object -First 1
+    if($installedExe){ & $installedExe -c $cfgf; Write-Host "  ✓ Config updated" -ForegroundColor Green } else { Write-Warning "  Sysmon exe not found" }
   }
-}
-catch {
-  Write-Error "Failed to install Sysmon: $_"
-  exit 1
-}
-finally {
-  Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+}catch{ Write-Error "Sysmon step failed: $_"; exit 1 }
+finally{
+  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-
-# Configure event log size
+# --- [5/6] Sysmon event log size ---
 Write-Host "[5/6] Configuring Sysmon event log..." -ForegroundColor Yellow
-try {
-    $logName = "Microsoft-Windows-Sysmon/Operational"
-    $log = Get-WinEvent -ListLog $logName -ErrorAction Stop
-    
-    # Set log size to 1GB
-    $log.MaximumSizeInBytes = 1GB
-    $log.SaveChanges()
-    
-    Write-Host "  ✓ Event log configured (1GB max size)" -ForegroundColor Green
-    
-} catch {
-    Write-Warning "Failed to configure event log size: $_"
-}
+try{
+  $log = Get-WinEvent -ListLog 'Microsoft-Windows-Sysmon/Operational' -ErrorAction Stop
+  $log.MaximumSizeInBytes = 1GB
+  $log.SaveChanges()
+  Write-Host "  ✓ Event log set to 1GB" -ForegroundColor Green
+}catch{ Write-Warning "Event log size not set: $_" }
 
-# Display connection information
+# --- [6/6] Connection info ---
 Write-Host "[6/6] Enrollment complete!" -ForegroundColor Yellow
+$defRouteIf = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric | Select-Object -First 1).InterfaceIndex
+$ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $defRouteIf -ErrorAction SilentlyContinue).IPAddress
 Write-Host ""
 Write-Host "=== Connection Information ===" -ForegroundColor Cyan
-Write-Host "Hostname: $env:COMPUTERNAME" -ForegroundColor White
-Write-Host "IP Address: $(Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -notlike '*Loopback*'} | Select-Object -First 1 -ExpandProperty IPAddress)" -ForegroundColor White
-Write-Host "SSH User: $MonitoringUser" -ForegroundColor White
-Write-Host "SSH Port: 22" -ForegroundColor White
+Write-Host "Hostname: $env:COMPUTERNAME"
+Write-Host "IP Address: $ip"
+Write-Host "SSH User: $MonitoringUser"
+Write-Host "SSH Port: 22"
 Write-Host ""
 Write-Host "To add this device to AgentLess IDS:" -ForegroundColor Green
-Write-Host "1. Log in to the IDS web interface" -ForegroundColor White
-Write-Host "2. Go to Devices > Add Device" -ForegroundColor White
-Write-Host "3. Enter the information above" -ForegroundColor White
-Write-Host "4. Select OS Type: Windows" -ForegroundColor White
-Write-Host "5. Upload the SSH private key that matches the public key you provided" -ForegroundColor White
+Write-Host "1. Log in to the IDS web interface"
+Write-Host "2. Go to Devices > Add Device"
+Write-Host "3. Enter the information above"
+Write-Host "4. Select OS Type: Windows"
+Write-Host "5. Upload the SSH private key matching the public key you provided"
 Write-Host ""
 Write-Host "Sysmon is now monitoring system events!" -ForegroundColor Green
 Write-Host "Event log: Microsoft-Windows-Sysmon/Operational" -ForegroundColor Cyan
