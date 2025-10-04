@@ -66,7 +66,7 @@ try {
     $pub = Read-Host
 
     if (-not (Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue)) { net user $MonitoringUser (New-Guid).Guid /add | Out-Null }
-    
+    Write-Host "  Setting up user. This may take a while... (press ENTER if script hangs)" -ForegroundColor Cyan
     $uh="C:\Users\$MonitoringUser"; $ssh="$uh\.ssh"
     New-Item -Force -ItemType Directory -Path $ssh | Out-Null
     Set-Content "$ssh\authorized_keys" $pub -Encoding Ascii
