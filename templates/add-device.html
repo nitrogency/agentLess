@@ -55,7 +55,7 @@
             <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{.FormData.ip_address}}" placeholder="e.g. 192.168.1.100" required>
         </div>
         
-        <fieldset class="form-section">
+        <fieldset class="form-section" id="setup_auth_section">
             <legend>Setup Authentication</legend>
             <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
             

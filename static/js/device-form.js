@@ -78,4 +78,28 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleSshKeyPathField();
         randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
     }
+
+    // Hide setup authentication section when OS type is Windows
+    const osTypeSelect = document.getElementById('os_type');
+    const setupAuthSection = document.getElementById('setup_auth_section');
+    const setupUserInput = document.getElementById('setup_user');
+
+    if (osTypeSelect && setupAuthSection && setupUserInput) {
+        const originalRequired = setupUserInput.required;
+
+        function toggleSetupAuthSection() {
+            if (osTypeSelect.value === 'windows') {
+                setupAuthSection.classList.add('hidden');
+                setupUserInput.required = false;
+                setupUserInput.disabled = true;
+            } else {
+                setupAuthSection.classList.remove('hidden');
+                setupUserInput.disabled = false;
+                setupUserInput.required = originalRequired;
+            }
+        }
+
+        toggleSetupAuthSection();
+        osTypeSelect.addEventListener('change', toggleSetupAuthSection);
+    }
 });
