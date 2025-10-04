@@ -86,7 +86,11 @@ try {
 Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
 try {
     $sshDir = "C:\Users\$MonitoringUser\.ssh"
-    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+    
+    # Create .ssh directory if it doesn't exist
+    if (-not (Test-Path $sshDir)) {
+        New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+    }
     
     $authorizedKeysFile = "$sshDir\authorized_keys"
     
@@ -96,9 +100,15 @@ try {
     $publicKey = Read-Host
     
     if ($publicKey) {
-        Set-Content -Path $authorizedKeysFile -Value $publicKey
+        # Write the public key to authorized_keys
+        $publicKey | Out-File -FilePath $authorizedKeysFile -Encoding ASCII -NoNewline
         
-        # Set proper permissions
+        # Set ownership to the monitoring user
+        icacls.exe $sshDir /setowner "${MonitoringUser}" /T /C
+        icacls.exe $authorizedKeysFile /setowner "${MonitoringUser}" /C
+        
+        # Set proper permissions (remove inheritance, grant only to user and SYSTEM)
+        icacls.exe $sshDir /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
         icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
         
         Write-Host "  [OK] SSH key configured" -ForegroundColor Green

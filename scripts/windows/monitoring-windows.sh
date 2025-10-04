@@ -44,6 +44,13 @@ if [[ -z "$DEVICE_ID" || -z "$SSH_USER" || -z "$IP" || -z "$KEY" ]]; then
   show_usage
 fi
 
+log_debug "Received parameters:"
+log_debug "  Device ID: $DEVICE_ID"
+log_debug "  SSH User: $SSH_USER"
+log_debug "  IP: $IP"
+log_debug "  SSH Key: $KEY"
+log_debug "  Port: $PORT"
+
 # Validate inputs
 if ! validate_ip "$IP"; then
     handle_error "Invalid IP address: $IP"
@@ -70,6 +77,8 @@ SSH_OPTS=(
 )
 
 log_debug "Starting Windows Sysmon monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
+log_debug "SSH command: ssh ${SSH_OPTS[*]} $SSH_USER@$IP"
+log_debug "SSH key file: $(ls -la \"$KEY\" 2>&1 || echo 'NOT FOUND')"
 
 # PowerShell command to export Sysmon events in XML format
 # We use Get-WinEvent to query Sysmon logs and export as XML
@@ -129,12 +138,16 @@ collect_logs_once() {
     # Execute remote command and pipe to Go parser
     if [ -x "$BIN_MONITOR_WIN" ]; then
         log_debug "Using compiled Windows monitor binary: $BIN_MONITOR_WIN"
-        ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>/dev/null | \
-            (cd "$PROJECT_ROOT" && "$BIN_MONITOR_WIN" -device "$DEVICE_ID")
+        ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
+            (cd "$PROJECT_ROOT" && "$BIN_MONITOR_WIN" -device "$DEVICE_ID" 2>&1)
+    elif [ -f "$BIN_MONITOR_WIN" ]; then
+        log_error "Binary exists but is not executable: $BIN_MONITOR_WIN"
+        log_info "Run: chmod +x $BIN_MONITOR_WIN"
+        exit 1
     else
-        log_debug "Using go run with source: $GO_MONITOR"
-        ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>/dev/null | \
-            (cd "$PROJECT_ROOT" && go run ./scripts/windows/monitoring-windows.go -device "$DEVICE_ID")
+        log_error "Compiled binary not found: $BIN_MONITOR_WIN"
+        log_info "Run: go build -o $BIN_MONITOR_WIN ./scripts/windows/monitoring-windows.go"
+        exit 1
     fi
     
     local exit_code=$?

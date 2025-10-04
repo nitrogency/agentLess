@@ -20,7 +20,18 @@ get_script_dir() {
 
 # Get the repository root directory
 get_repo_root() {
-    cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd
+    local dir="$(dirname "${BASH_SOURCE[1]}")"
+    # Keep going up until we find go.mod (project root marker)
+    while [ ! -f "$dir/go.mod" ] && [ "$dir" != "/" ]; do
+        dir="$(cd "$dir/.." && pwd)"
+    done
+    
+    if [ -f "$dir/go.mod" ]; then
+        echo "$dir"
+    else
+        # Fallback: assume we're in scripts/ subdirectory
+        cd "$(dirname "${BASH_SOURCE[1]}")/../" && pwd
+    fi
 }
 
 # Check if a command exists (returns 0/1 for use in conditionals)

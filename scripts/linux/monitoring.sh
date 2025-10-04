@@ -78,13 +78,16 @@ log_debug "SSH options: ${SSH_OPTS[*]}"
 log_debug "Remote command: $REMOTE_CMD"
 
 # Pipe raw audit lines into Go program which writes directly to the encrypted DB
-# Prefer compiled binary under systemd (Go may not be in PATH); fallback to go run.
 if [ -x "$BIN_MONITOR" ]; then
   log_debug "Using compiled monitor binary: $BIN_MONITOR"
-  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
-    (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID")
+  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
+    (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
+elif [ -f "$BIN_MONITOR" ]; then
+  log_error "Binary exists but is not executable: $BIN_MONITOR"
+  log_info "Run: chmod +x $BIN_MONITOR"
+  exit 1
 else
-  log_debug "Using go run with source: $GO_MONITOR"
-  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
-    (cd "$PROJECT_ROOT" && go run ./scripts/linux/monitoring.go -device "$DEVICE_ID")
+  log_error "Compiled binary not found: $BIN_MONITOR"
+  log_info "Run: go build -o $BIN_MONITOR ./scripts/linux/monitoring.go"
+  exit 1
 fi

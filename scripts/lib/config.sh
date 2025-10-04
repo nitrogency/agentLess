@@ -23,7 +23,6 @@ readonly DEFAULT_SSH_KEY_PATH="${HOME:-/root}/.ssh/ids_monitoring_key"
 
 # System paths
 readonly SYSTEMD_SYSTEM_DIR="/etc/systemd/system"
-readonly AGENTLESS_ENV_DIR="/etc/agentless"
 readonly SUDOERS_DIR="/etc/sudoers.d"
 
 # Service and timer names

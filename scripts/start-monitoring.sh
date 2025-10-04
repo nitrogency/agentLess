@@ -37,19 +37,7 @@ fi
 log_info "Starting monitoring for device ID: $DEVICE_ID"
 
 # Query device information from database
-DEVICE_INFO=$(sqlite3 "$DB_PATH" << EOF
-PRAGMA key="$(get_config db_encryption_key)";
-SELECT 
-    ip_address, 
-    ssh_user, 
-    ssh_key_path, 
-    ssh_port, 
-    COALESCE(os_type, 'linux') as os_type,
-    name
-FROM devices 
-WHERE id = $DEVICE_ID;
-EOF
-)
+DEVICE_INFO=$(execute_sqlite "SELECT ip_address || '|' || ssh_user || '|' || ssh_key_path || '|' || ssh_port || '|' || COALESCE(os_type, 'linux') || '|' || name FROM devices WHERE id = $DEVICE_ID;" "$DB_PATH")
 
 if [ -z "$DEVICE_INFO" ]; then
     log_error "Device not found in database: ID $DEVICE_ID"
