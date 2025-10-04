@@ -82,34 +82,6 @@ try {
     exit 1
 }
 
-# Setup SSH key authentication
-Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
-try {
-    $sshDir = "C:\Users\$MonitoringUser\.ssh"
-    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    
-    $authorizedKeysFile = "$sshDir\authorized_keys"
-    
-    Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
-    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
-    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
-    $publicKey = Read-Host
-    
-    if ($publicKey) {
-        Set-Content -Path $authorizedKeysFile -Value $publicKey
-        
-        # Set proper permissions
-        icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F"
-        
-        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
-    } else {
-        Write-Warning "  No SSH key provided. You'll need to configure this manually."
-    }
-    
-} catch {
-    Write-Warning "Failed to setup SSH keys: $_"
-}
-
 # Download and install Sysmon
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
 try {
