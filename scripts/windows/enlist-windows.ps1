@@ -38,9 +38,9 @@ try {
         # Generate random password
         $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object {[char]$_})
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        Write-Host "  [INFO] Password: $password" -ForegroundColor Cyan
         New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
         Write-Host "  [OK] User created: $MonitoringUser" -ForegroundColor Green
+        Write-Host "  [INFO] Password: $securePassword" -ForegroundColor Cyan
     } else {
         Write-Host "  [OK] User already exists: $MonitoringUser" -ForegroundColor Green
     }
