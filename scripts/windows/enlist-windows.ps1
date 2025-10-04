@@ -111,60 +111,56 @@ try {
 }
 
 # Download and install Sysmon
+# [4/6] Installing Sysmon
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
 try {
-    $tempDir = "$env:TEMP\sysmon-install"
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-    
-    $sysmonZip = "$tempDir\Sysmon.zip"
-    $sysmonConfig = "$tempDir\sysmonconfig.xml"
-    
-    # Check if Sysmon is already installed
-    $sysmonService = Get-Service -Name "Sysmon64" -ErrorAction SilentlyContinue
-    
-    if (-not $sysmonService) {
-        # Download Sysmon
-        Write-Host "  Downloading Sysmon..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $SysmonDownloadURL -OutFile $sysmonZip
-        
-        # Extract
-        Expand-Archive -Path $sysmonZip -DestinationPath $tempDir -Force
-        
-        # Download Sysmon config
-        Write-Host "  Downloading Sysmon configuration..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
-        
-        # Install Sysmon
-        Write-Host "  Installing Sysmon with configuration..." -ForegroundColor Cyan
-        $sysmonExe = Get-ChildItem -Path $tempDir -Filter "Sysmon64.exe" -Recurse | Select-Object -First 1
-        
-        if ($sysmonExe) {
-            & $sysmonExe.FullName -accepteula -i $sysmonConfig
-            Write-Host "  ✓ Sysmon installed successfully" -ForegroundColor Green
-        } else {
-            throw "Sysmon executable not found"
-        }
+  $tempDir       = Join-Path $env:TEMP 'sysmon-install'
+  $sysmonZip     = Join-Path $tempDir 'Sysmon.zip'
+  $sysmonConfig  = Join-Path $tempDir 'sysmonconfig.xml'
+  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+  $sysmonService = Get-Service -Name 'Sysmon64','Sysmon' -ErrorAction SilentlyContinue | Select-Object -First 1
+
+  if (-not $sysmonService) {
+    Write-Host "  Downloading Sysmon..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $SysmonDownloadURL -OutFile $sysmonZip
+    Expand-Archive -Path $sysmonZip -DestinationPath $tempDir -Force
+
+    Write-Host "  Downloading Sysmon configuration..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
+
+    $sysmonExe = Get-ChildItem -Path $tempDir -Recurse -Filter 'Sysmon*.exe' | Select-Object -First 1
+    if ($null -eq $sysmonExe) { throw "Sysmon executable not found" }
+
+    Write-Host "  Installing Sysmon with configuration..." -ForegroundColor Cyan
+    & $sysmonExe.FullName -accepteula -i $sysmonConfig
+    Write-Host "  ✓ Sysmon installed successfully" -ForegroundColor Green
+  }
+  else {
+    Write-Host "  ✓ Sysmon already installed" -ForegroundColor Green
+
+    Write-Host "  Updating Sysmon configuration..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
+
+    # detect installed exe (32/64)
+    $existingExe = @('C:\Windows\Sysmon64.exe','C:\Windows\Sysmon.exe') |
+      Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($existingExe) {
+      & $existingExe -c $sysmonConfig
+      Write-Host "  ✓ Sysmon configuration updated" -ForegroundColor Green
     } else {
-        Write-Host "  ✓ Sysmon already installed" -ForegroundColor Green
-        
-        # Update configuration
-        Write-Host "  Updating Sysmon configuration..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $SysmonConfigURL -OutFile $sysmonConfig
-        
-        $sysmonPath = "C:\Windows\Sysmon64.exe"
-        if (Test-Path $sysmonPath) {
-            & $sysmonPath -c $sysmonConfig
-            Write-Host "  ✓ Sysmon configuration updated" -ForegroundColor Green
-        }
+      Write-Warning "  Sysmon executable not found in C:\Windows\*.exe"
     }
-    
-    # Cleanup
-    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    
-} catch {
-    Write-Error "Failed to install Sysmon: $_"
-    exit 1
+  }
 }
+catch {
+  Write-Error "Failed to install Sysmon: $_"
+  exit 1
+}
+finally {
+  Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 
 # Configure event log size
 Write-Host "[5/6] Configuring Sysmon event log..." -ForegroundColor Yellow
