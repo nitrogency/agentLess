@@ -29,33 +29,8 @@ Write-Host "Server: $ServerIP" -ForegroundColor Green
 Write-Host "Monitoring User: $MonitoringUser" -ForegroundColor Green
 Write-Host ""
 
-# Create monitoring user if doesn't exist
-Write-Host "[1/6] Creating monitoring user..." -ForegroundColor Yellow
-try {
-    $userExists = Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue
-    
-    if (-not $userExists) {
-        # Generate random password
-        $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object {[char]$_})
-        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        New-LocalUser -Name $MonitoringUser -Password $securePassword -Description "AgentLess IDS Monitoring Account" -PasswordNeverExpires
-        Write-Host "  [OK] User created: $MonitoringUser" -ForegroundColor Green
-        Write-Host "  [INFO] Password: $password" -ForegroundColor Cyan
-    } else {
-        Write-Host "  [OK] User already exists: $MonitoringUser" -ForegroundColor Green
-    }
-    
-    # Add to Event Log Readers group
-    Add-LocalGroupMember -Group "Event Log Readers" -Member $MonitoringUser -ErrorAction SilentlyContinue
-    Write-Host "  [OK] Added to Event Log Readers group" -ForegroundColor Green
-    
-} catch {
-    Write-Error "Failed to create monitoring user: $_"
-    exit 1
-}
-
 # Setup SSH for Windows
-Write-Host "[2/6] Configuring OpenSSH Server..." -ForegroundColor Yellow
+Write-Host "[1/5] Configuring OpenSSH Server..." -ForegroundColor Yellow
 try {
     # Check if OpenSSH Server is installed
     $sshServer = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*'
@@ -82,63 +57,47 @@ try {
     exit 1
 }
 
-# Setup SSH key authentication
-Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
+# Create monitoring user if doesn't exist
+Write-Host "[2/5] Creating monitoring user and setting up SSH..." -ForegroundColor Yellow
 try {
     Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
-    Write-Host "  (You can find it at: ~/.ssh/id_ed25519.pub or ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
+    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
     Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
-    $publicKey = Read-Host
+    $pub = Read-Host
+
+    if (-not (Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue)) { net user $MonitoringUser (New-Guid).Guid /add | Out-Null }
     
-    if ($publicKey) {
-        # Ensure user home directory exists and is owned by the user
-        $userHome = "C:\Users\$MonitoringUser"
-        $sshDir = "$userHome\.ssh"
-        
-        New-Item -Force -ItemType Directory -Path $userHome | Out-Null
-        icacls $userHome /setowner $MonitoringUser | Out-Null
-        
-        # Set ProfileImagePath in registry (required for proper home directory)
-        $userSID = (Get-LocalUser $MonitoringUser).Sid.Value
-        $regKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$userSID"
-        if (-not (Test-Path $regKey)) {
-            New-Item $regKey | Out-Null
-        }
-        Set-ItemProperty $regKey ProfileImagePath $userHome
-        
-        # Create .ssh directory
-        New-Item -Force -ItemType Directory -Path $sshDir | Out-Null
-        
-        # Write the public key to authorized_keys
-        Set-Content "$sshDir\authorized_keys" $publicKey -Encoding ASCII
-        Add-Content "$sshDir\authorized_keys" "" # Ensure newline at end
-        
-        # Set proper permissions on home directory
-        icacls $userHome /inheritance:r | Out-Null
-        icacls $userHome /grant "${MonitoringUser}:(OI)(CI)M" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
-        
-        # Set proper permissions on .ssh directory
-        icacls $sshDir /inheritance:r | Out-Null
-        icacls $sshDir /grant "${MonitoringUser}:(OI)(CI)F" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
-        
-        # Set proper permissions on authorized_keys file
-        icacls "$sshDir\authorized_keys" /inheritance:r | Out-Null
-        icacls "$sshDir\authorized_keys" /grant "${MonitoringUser}:R" "Administrators:F" "SYSTEM:F" "NT SERVICE\sshd:(R)" | Out-Null
-        
-        # Restart SSH service to pick up changes
-        Restart-Service sshd
-        
-        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
-    } else {
-        Write-Warning "  No SSH key provided. You'll need to configure this manually."
-    }
+    $uh="C:\Users\$MonitoringUser"; $ssh="$uh\.ssh"
+    New-Item -Force -ItemType Directory -Path $ssh | Out-Null
+    Set-Content "$ssh\authorized_keys" $pub -Encoding Ascii
+    Add-Content "$ssh\authorized_keys" ""
+    icacls $uh /inheritance:r | Out-Null
+    icacls $uh /grant "${MonitoringUser}:(OI)(CI)M" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
+    icacls $ssh /inheritance:r | Out-Null
+    icacls $ssh /grant "${MonitoringUser}:(OI)(CI)F" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "NT SERVICE\sshd:(OI)(CI)(RX)" | Out-Null
+    icacls "$ssh\authorized_keys" /inheritance:r | Out-Null
+    icacls "$ssh\authorized_keys" /grant "${MonitoringUser}:R" "Administrators:F" "SYSTEM:F" "NT SERVICE\sshd:(R)" | Out-Null
+    Restart-Service sshd
+
+    # Ensure directory exists and owned
+    $uh="C:\Users\$MonitoringUser"
+    mkdir $uh -Force | Out-Null
+    icacls $uh /setowner $MonitoringUser | Out-Null
+
+    # (Optional) set ProfileImagePath in registry to C:\Users\ids-monitor if missing
+    $SID = (Get-LocalUser $MonitoringUser).Sid.Value
+    $k = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$SID"
+    if (-not (Test-Path $k)) { New-Item $k | Out-Null }
+    Set-ItemProperty $k ProfileImagePath $uh
+
     
 } catch {
-    Write-Warning "Failed to setup SSH keys: $_"
+    Write-Error "Failed to create monitoring user: $_"
+    exit 1
 }
 
 # Download and install Sysmon
-Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
+Write-Host "[3/5] Installing Sysmon..." -ForegroundColor Yellow
 try {
     $tempDir = "$env:TEMP\sysmon-install"
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
@@ -194,7 +153,7 @@ try {
 }
 
 # Configure event log size
-Write-Host "[5/6] Configuring Sysmon event log..." -ForegroundColor Yellow
+Write-Host "[4/5] Configuring Sysmon event log..." -ForegroundColor Yellow
 try {
     $logName = "Microsoft-Windows-Sysmon/Operational"
     $log = Get-WinEvent -ListLog $logName -ErrorAction Stop
@@ -210,7 +169,7 @@ try {
 }
 
 # Display connection information
-Write-Host "[6/6] Enrollment complete!" -ForegroundColor Yellow
+Write-Host "[5/5] Enrollment complete!" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "=== Connection Information ===" -ForegroundColor Cyan
 Write-Host "Hostname: $env:COMPUTERNAME" -ForegroundColor White
