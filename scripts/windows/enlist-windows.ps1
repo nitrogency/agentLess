@@ -91,40 +91,35 @@ try {
 }
 
 # Setup SSH key authentication
+# [3/6] Setting up SSH key authentication (simplified, no Start-Process)
 Write-Host "[3/6] Setting up SSH key authentication..." -ForegroundColor Yellow
 try {
-    Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
-    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
-    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
+    Write-Host "  Paste the SSH public key and press Enter:" -ForegroundColor Cyan
     $publicKey = Read-Host
-    
-    if ($publicKey) {
-        # Create .ssh directory and authorized_keys file
-        $sshDir = "C:\Users\$MonitoringUser\.ssh"
-        $authorizedKeysFile = "$sshDir\authorized_keys"
-        
-        # Create directory
-        New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-        
-        # Write public key to authorized_keys
-        $publicKey | Out-File -FilePath $authorizedKeysFile -Encoding ASCII -NoNewline
-        
-        # Change ownership to the monitoring user
-        $null = icacls.exe $sshDir /setowner "${MonitoringUser}" /T /C 2>&1
-        $null = icacls.exe $authorizedKeysFile /setowner "${MonitoringUser}" /C 2>&1
-        
-        # Set permissions (only user and SYSTEM)
-        $null = icacls.exe $sshDir /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F" 2>&1
-        $null = icacls.exe $authorizedKeysFile /inheritance:r /grant "${MonitoringUser}:F" /grant "SYSTEM:F" 2>&1
-        
-        Write-Host "  [OK] SSH key configured" -ForegroundColor Green
-    } else {
-        Write-Warning "  No SSH key provided. You'll need to configure this manually."
-    }
-    
+    if (-not $publicKey) { throw "No SSH key provided." }
+
+    $sshDir = "C:\Users\$MonitoringUser\.ssh"
+    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+    $auth = Join-Path $sshDir 'authorized_keys'
+    Set-Content -Path $auth -Value $publicKey -Encoding ASCII -NoNewline
+
+    # Lock down permissions to what Win32-OpenSSH expects
+    icacls $sshDir /inheritance:r | Out-Null
+    icacls $sshDir /grant "$MonitoringUser:(F)" /grant "Administrators:(F)" /grant "SYSTEM:(F)" | Out-Null
+    icacls $auth  /inheritance:r | Out-Null
+    icacls $auth  /grant "$MonitoringUser:(F)" /grant "Administrators:(F)" /grant "SYSTEM:(F)" | Out-Null
+
+    # (optional but nice) make the user the owner of .ssh
+    try {
+        $owner = New-Object System.Security.Principal.NTAccount($MonitoringUser)
+        $acl = Get-Acl $sshDir; $acl.SetOwner($owner); Set-Acl $sshDir $acl
+    } catch {}
+
+    Write-Host "  [OK] SSH key configured" -ForegroundColor Green
 } catch {
     Write-Warning "Failed to setup SSH keys: $_"
 }
+
 
 # Download and install Sysmon
 Write-Host "[4/6] Installing Sysmon..." -ForegroundColor Yellow
