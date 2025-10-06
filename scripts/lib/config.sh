@@ -6,7 +6,7 @@
 
 # Version and project info
 readonly AGENTLESS_VERSION="1.0.0"
-readonly PROJECT_NAME="AgentLess IDS"
+readonly PROJECT_NAME="Agent<"
 
 # Default values for device enrollment
 readonly DEFAULT_REMOTE_USER="ids_monitor"
@@ -160,7 +160,7 @@ validate_config() {
 
 # Print configuration summary
 print_config() {
-    log_info "=== AgentLess IDS Configuration ==="
+    log_info "=== Agent< Config ==="
     log_info "Version: $AGENTLESS_VERSION"
     log_info "Remote User: $(get_config remote_user)"
     log_info "Remote Group: $(get_config remote_group)"
