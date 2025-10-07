@@ -24,7 +24,7 @@ You can catch all syscalls made in a different architecture than the one your en
 -a always,exit -F arch=b32 -S all -k 32bit_abi
 ```
 
-This way you both achieve much better performance and monitor potentially suspicious activity related to [ABI](https://stackoverflow.com/questions/2171177/what-is-an-application-binary-interface-abi) abuse.
+This way you both achieve better performance and monitor potentially suspicious activity related to [ABI](https://stackoverflow.com/questions/2171177/what-is-an-application-binary-interface-abi) abuse.
 
 ## File watch rules vs Syscall rules
 
