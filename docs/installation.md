@@ -25,3 +25,15 @@ This sets up the necessary requirements and builds the application.
 chmod +x setup.sh
 ./setup.sh
 ```
+
+## After installation
+At the end of the `setup.sh` script, a systemd service is created. This allows for easier debugging and log management. To view the status of the web app, simply type:
+```bash
+sudo systemctl status agentless
+```
+If you wish to `restart`, `stop` or `disable` the service, replace the `status` word accordingly.
+
+To view the service log, type:
+```bash
+journalctl -u agentless
+```
