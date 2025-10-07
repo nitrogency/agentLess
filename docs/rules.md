@@ -9,6 +9,8 @@ Various rulesets, including ones that are designed for popular security standard
 
 Audit.conf configuration and how auditd works in general - https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-audit-scenarios.html#sec-audit-scenauconf
 
+For Windows monitoring, the app uses [SwiftOnSecurity's sysmon config](https://github.com/SwiftOnSecurity/sysmon-config). This file is downloaded directly to the Windows endpoint.
+
 ## Architecture
 There are three rulesets in two directories, `x32` and `x64`. These directories are used for sorting rules by 32-bit and 64-bit systems. If you're using a 64-bit system, make sure to use 64-bit rules, and vice versa. By default, the `x64/audit_default.rules` ruleset is loaded. By using rules that exclusively monitor syscalls specific to your system's architecure, [better performance is achieved](https://man7.org/linux/man-pages/man7/audit.rules.7.html).
 
