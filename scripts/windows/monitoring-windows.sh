@@ -81,53 +81,8 @@ log_debug "SSH command: ssh ${SSH_OPTS[*]} $SSH_USER@$IP"
 log_debug "SSH key file: $(ls -la \"$KEY\" 2>&1 || echo 'NOT FOUND')"
 
 # PowerShell command to export Sysmon events in XML format
-# We use Get-WinEvent to query Sysmon logs and export as XML
-REMOTE_CMD='powershell -Command "
-\$lastRecordId = 0;
-\$logFile = \"\$env:TEMP\\sysmon-last-record.txt\";
-
-# Load last record ID if exists
-if (Test-Path \$logFile) {
-    try {
-        \$lastRecordId = [int](Get-Content \$logFile -ErrorAction SilentlyContinue);
-    } catch {
-        \$lastRecordId = 0;
-    }
-}
-
-# Query Sysmon events newer than last record ID
-try {
-    \$filter = @{
-        LogName = \"Microsoft-Windows-Sysmon/Operational\";
-        StartTime = (Get-Date).AddMinutes(-10);
-    };
-    
-    if (\$lastRecordId -gt 0) {
-        # Get events with RecordId greater than last processed
-        \$events = Get-WinEvent -FilterHashtable \$filter -ErrorAction SilentlyContinue | 
-                   Where-Object { \$_.RecordId -gt \$lastRecordId } |
-                   Sort-Object RecordId;
-    } else {
-        # First run, get recent events
-        \$events = Get-WinEvent -FilterHashtable \$filter -MaxEvents 1000 -ErrorAction SilentlyContinue |
-                   Sort-Object RecordId;
-    }
-    
-    if (\$events) {
-        # Export events as XML
-        foreach (\$event in \$events) {
-            \$event.ToXml();
-            \$lastRecordId = \$event.RecordId;
-        }
-        
-        # Save last record ID
-        \$lastRecordId | Out-File -FilePath \$logFile -Force;
-    }
-} catch {
-    Write-Error \"Error querying Sysmon logs: \$_\";
-    exit 1;
-}
-"'
+# Single-line format for better SSH compatibility
+REMOTE_CMD='powershell -Command "\$lastRecordId = 0; \$logFile = \"\$env:TEMP\\sysmon-last-record.txt\"; if (Test-Path \$logFile) { try { \$lastRecordId = [int](Get-Content \$logFile -ErrorAction SilentlyContinue) } catch { \$lastRecordId = 0 } }; \$filter = @{ LogName = \"Microsoft-Windows-Sysmon/Operational\" }; if (\$lastRecordId -gt 0) { \$events = Get-WinEvent -FilterHashtable \$filter -ErrorAction SilentlyContinue | Where-Object { \$_.RecordId -gt \$lastRecordId } | Sort-Object RecordId } else { \$filter[\"StartTime\"] = (Get-Date).AddHours(-1); \$events = Get-WinEvent -FilterHashtable \$filter -MaxEvents 100 -ErrorAction SilentlyContinue | Sort-Object RecordId }; if (\$events) { foreach (\$event in \$events) { \$event.ToXml(); \$lastRecordId = \$event.RecordId } } else { \$latest = Get-WinEvent -FilterHashtable \$filter -MaxEvents 1 -ErrorAction SilentlyContinue; if (\$latest) { \$lastRecordId = \$latest.RecordId } }; if (\$lastRecordId -gt 0) { \$lastRecordId | Out-File -FilePath \$logFile -Force }"'
 
 log_debug "Remote PowerShell command configured"
 
@@ -136,10 +91,11 @@ collect_logs_once() {
     log_debug "Collecting Sysmon logs from $IP..."
     
     # Execute remote command and pipe to Go parser
+    # Use || true to prevent script exit on non-zero return (empty results)
     if [ -x "$BIN_MONITOR_WIN" ]; then
         log_debug "Using compiled Windows monitor binary: $BIN_MONITOR_WIN"
         ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
-            (cd "$PROJECT_ROOT" && "$BIN_MONITOR_WIN" -device "$DEVICE_ID" 2>&1)
+            (cd "$PROJECT_ROOT" && "$BIN_MONITOR_WIN" -device "$DEVICE_ID" 2>&1) || true
     elif [ -f "$BIN_MONITOR_WIN" ]; then
         log_error "Binary exists but is not executable: $BIN_MONITOR_WIN"
         log_info "Run: chmod +x $BIN_MONITOR_WIN"
@@ -150,14 +106,8 @@ collect_logs_once() {
         exit 1
     fi
     
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
-        log_debug "Successfully collected Sysmon logs"
-    else
-        log_error "Failed to collect Sysmon logs (exit code: $exit_code)"
-    fi
-    
-    return $exit_code
+    log_debug "Collection cycle completed"
+    return 0
 }
 
 # Run collection loop with intervals (easier to implement than real-time streaming)
