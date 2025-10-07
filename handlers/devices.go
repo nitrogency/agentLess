@@ -55,7 +55,7 @@ func AddDeviceHandler(c *gin.Context) {
 		randomKeyVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_key")))
 		randomUser := randomUserVal == "on" || randomUserVal == "true" || randomUserVal == "1"
 		randomKey := randomKeyVal == "on" || randomKeyVal == "true" || randomKeyVal == "1"
-		
+
 		// Default to linux if not specified
 		if osType == "" {
 			osType = "linux"
@@ -158,7 +158,7 @@ func AddDeviceHandler(c *gin.Context) {
 			templates.RenderGinTemplate(c, "add-device", data)
 			return
 		}
-		
+
 		// Create device
 		if ipAddress != "" {
 			// Create monitored device with SSH details and OS type
@@ -237,7 +237,7 @@ func EditDeviceHandler(c *gin.Context) {
 		setupPassword := c.PostForm("setup_password")
 		randomUser := c.PostForm("random_user") == "on"
 		randomKey := c.PostForm("random_key") == "on"
-		
+
 		// Default to device's current OS type if not specified
 		if osType == "" {
 			osType = device.OSType
@@ -344,7 +344,7 @@ func EditDeviceHandler(c *gin.Context) {
 		if setupUser == "" {
 			setupUser = "root"
 		}
-		
+
 		// Validate OS type
 		if osType != "linux" && osType != "windows" {
 			data.Error = "Invalid OS type. Must be 'linux' or 'windows'"
@@ -370,6 +370,9 @@ func EditDeviceHandler(c *gin.Context) {
 	}
 
 	// Populate device data for GET request
+	// For templates using top-level .Device
+	data.Device = *device
+	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.FormData["name"] = device.Name
 	data.FormData["type"] = device.Type
@@ -383,6 +386,9 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
 	data.FormData["setup_password"] = device.SetupPassword
+	// Set checkbox states
+	data.RandomUser = device.RandomUser
+	data.RandomKey = device.RandomKey
 
 	templates.RenderGinTemplate(c, "edit-device", data)
 }
@@ -447,12 +453,12 @@ func DeleteDeviceHandler(c *gin.Context) {
 		}
 	}
 
-  // Populate device data
-  // For templates using top-level .Device
-  data.Device = *device
-  // Keep Data map for any legacy references
-  data.Data["Device"] = device
-  templates.RenderGinTemplate(c, "delete-device-confirm", data)
+	// Populate device data
+	// For templates using top-level .Device
+	data.Device = *device
+	// Keep Data map for any legacy references
+	data.Data["Device"] = device
+	templates.RenderGinTemplate(c, "delete-device-confirm", data)
 }
 
 // MonitorDeviceHandler handles device monitoring interface
