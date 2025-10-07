@@ -89,7 +89,7 @@ done
 
 # Install or update the unit template with absolute paths
 UNIT_CONTENT="[Unit]
-Description=AgentLess Monitor for Device %%i
+Description=Agent< Monitor for Device %%i
 After=network-online.target
 Wants=network-online.target
 

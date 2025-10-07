@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# config.sh - Centralized configuration for AgentLess IDS scripts
+# config.sh - Centralized configuration for helper scripts
 # Source this file in other scripts: source "$(dirname "$0")/lib/config.sh"
 #
 

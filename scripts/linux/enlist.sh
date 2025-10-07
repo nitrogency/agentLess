@@ -35,6 +35,8 @@ SUDO_PASSWORD=""
 # Note: generate_random_name(), execute_sqlite(), and command_exists() 
 # are now provided by the shared libraries
 
+log_section "Linux device enrollment"
+
 # Display usage information
 usage() {
     echo "Usage: $0 [options] TARGET_IP"
@@ -502,7 +504,7 @@ register_with_server() {
 }
 
 # Main execution
-log_section "Device Enrollment"
+log_section "Device Info"
 log_info "Target IP: $TARGET_IP"
 log_info "Remote User: $REMOTE_USER"
 log_info "Remote Group: $REMOTE_GROUP"

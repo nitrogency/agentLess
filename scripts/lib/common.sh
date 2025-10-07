@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# common.sh - Shared functions for AgentLess IDS scripts
+# common.sh - Shared functions
 # Source this file in other scripts: source "$(dirname "$0")/lib/common.sh"
 #
 

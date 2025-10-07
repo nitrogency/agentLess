@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# start-monitoring.sh - Unified monitoring launcher for AgentLess IDS
+# start-monitoring.sh - Unified monitoring launcher
 # Detects device OS type and launches appropriate monitoring script
 #
 # Usage: start-monitoring.sh -d <device_id>

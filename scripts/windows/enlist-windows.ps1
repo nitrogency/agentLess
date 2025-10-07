@@ -1,5 +1,5 @@
 # enlist-windows.ps1
-# Windows Device Enrollment Script for AgentLess IDS
+# Windows Device Enrollment Script
 # This script must be run with Administrator privileges on the target Windows machine
 #
 # Usage: .\enlist-windows.ps1 -ServerIP <ids_server_ip> -MonitoringUser <username>
@@ -24,7 +24,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit 1
 }
 
-Write-Host "=== AgentLess IDS - Windows Enrollment ===" -ForegroundColor Cyan
+Write-Host "=== Windows Enrollment ===" -ForegroundColor Cyan
 Write-Host "Server: $ServerIP" -ForegroundColor Green
 Write-Host "Monitoring User: $MonitoringUser" -ForegroundColor Green
 Write-Host ""

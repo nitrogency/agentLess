@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# logging.sh - Standardized logging functions for AgentLess IDS scripts
+# logging.sh - Standardized logging functions for helper scripts
 # Source this file in other scripts: source "$(dirname "$0")/lib/logging.sh"
 #
 
