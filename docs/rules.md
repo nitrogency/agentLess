@@ -1,6 +1,14 @@
 # Default rules
 Audit rules are loaded by the auditd service. These rules are located in `/etc/audit/rules.d/`. You can either make separate rules files and name them by priority (ex. `10-sshconf.rules`, `20-passwd.rules`), or put everything into one `audit.rules` file. The latter is the approach that the app uses. The reason for this is easier rule management - you only need to modify/maintain/check one rule file, and since the app is designed for smaller environments, multiple extensive rule files are not used. You can however, do so manually if you wish.
 
+The rule templates defined here are **VERY general**, and you should, if possible, customize them yourself according to your own environment (you might want to monitor `npm` usage or the `www-data` user if you're running a webserver, for example). These are some excellent sources for audit rules and their creation:
+
+Florian Roth's general auditd ruleset - https://github.com/Neo23x0/auditd
+
+Various rulesets, including ones that are designed for popular security standards - https://github.com/linux-audit/audit-userspace/tree/master/rules
+
+Audit.conf configuration and how auditd works in general - https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-audit-scenarios.html#sec-audit-scenauconf
+
 ## Architecture
 There are three rulesets in two directories, `x32` and `x64`. These directories are used for sorting rules by 32-bit and 64-bit systems. If you're using a 64-bit system, make sure to use 64-bit rules, and vice versa. By default, the `x64/audit_default.rules` ruleset is loaded. By using rules that exclusively monitor syscalls specific to your system's architecure, [better performance is achieved](https://man7.org/linux/man-pages/man7/audit.rules.7.html).
 
