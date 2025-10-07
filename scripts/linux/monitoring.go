@@ -21,6 +21,8 @@ var (
 	reAuid    = regexp.MustCompile(`\bauid=([0-9]+)\b`)
 	reSuccess = regexp.MustCompile(`\bsuccess=(yes|no)\b`)
 	reArg     = regexp.MustCompile(`a[0-9]+="([^"]*)"`)
+
+	reClam = regexp.MustCompile(`\s(/[^:]+):\s+([A-Za-z0-9._-]+)\s+(FOUND|OK)\b`)
 )
 
 type Event struct {
@@ -257,6 +259,27 @@ func flush(curID string, raw []string, host string, deviceID int64) {
 	}
 }
 
+func ingestClam(line, host string, deviceID int64) bool {
+	m := reClam.FindStringSubmatch(line)
+	if len(m) != 4 {
+		return false
+	}
+	path, sig, status := m[1], m[2], m[3]
+	key, level := "clam_ok", "low"
+	msg := "ClamAV OK: " + path
+	if status == "FOUND" {
+		key, level = "clam_found", "high"
+		msg = "ClamAV FOUND " + sig + " in " + path
+	}
+	id := fmt.Sprintf("clamav:%d", time.Now().UnixNano())
+	eventTime := time.Now().UTC().Format("2006-01-02 15:04:05")
+	raw := line
+	if _, err := db.InsertAuditLog(deviceID, eventTime, "clamav", key, msg, raw, level, id); err != nil {
+		fmt.Fprintln(os.Stderr, "insert error:", err)
+	}
+	return true
+}
+
 func main() {
 	host := os.Getenv("HOSTNAME")
 	if host == "" {
@@ -290,6 +313,7 @@ func main() {
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.Contains(line, "msg=audit(") {
+			_ = ingestClam(line, host, *deviceFlag)
 			continue
 		}
 		m := reMsgID.FindStringSubmatch(line)

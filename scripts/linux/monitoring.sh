@@ -16,6 +16,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 PROJECT_ROOT="$(get_repo_root)"
 GO_MONITOR="$PROJECT_ROOT/scripts/linux/monitoring.go"
 BIN_MONITOR="$PROJECT_ROOT/bin/monitor"
+CLAM_LOG_PATH="/var/log/clamav/clamav.log"
 DEVICE_ID=""
 SSH_USER=""
 IP=""
@@ -70,8 +71,18 @@ SSH_OPTS=(
 
 # Remote command: try tail (preferred), fallback to sudo tail, then cat  
 LOG_LIMIT="$(get_config log_limit)"
-REMOTE_CMD="if [ -r $AUDIT_LOG_PATH ]; then tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; \
-else sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; fi"
+
+REMOTE_CMD="{
+  if [ -r $AUDIT_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  else
+    sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
+    sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  fi
+  if [ -r $CLAM_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $CLAM_LOG_PATH
+  fi
+}"
 
 log_debug "Starting monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
 log_debug "SSH options: ${SSH_OPTS[*]}"

@@ -214,9 +214,9 @@ sudo grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || {
     fi
 }
 
-# Configure audit log access
+# Configure audit+clamav log access
 echo "Configuring audit access for $REMOTE_USER..."
-sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log\" > /etc/sudoers.d/$REMOTE_USER"
+sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log\, /usr/bin/tail /var/log/clamav/clamav.log" > /etc/sudoers.d/$REMOTE_USER"
 sudo chmod 440 /etc/sudoers.d/$REMOTE_USER
 
 # Install and configure auditd
@@ -487,9 +487,7 @@ register_with_server() {
     # Get device information
     HOSTNAME=$(eval "$MONITOR_SSH_CMD \"hostname\"")
     OS_INFO=$(eval "$MONITOR_SSH_CMD \"cat /etc/os-release | grep PRETTY_NAME | cut -d '=' -f 2 | tr -d '\\\"'\"")
-    
-    # Here you would typically make an API call to your server to register the device
-    # For demonstration purposes, we'll just echo the information
+
     log_info "Device information:"
     log_info "  IP: $TARGET_IP"
     log_info "  Hostname: $HOSTNAME"
