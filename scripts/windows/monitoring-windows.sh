@@ -80,11 +80,46 @@ log_debug "Starting Windows Sysmon monitoring for device $DEVICE_ID ($SSH_USER@$
 log_debug "SSH command: ssh ${SSH_OPTS[*]} $SSH_USER@$IP"
 log_debug "SSH key file: $(ls -la \"$KEY\" 2>&1 || echo 'NOT FOUND')"
 
-# PowerShell command to export Sysmon events in XML format
-# Single-line format for better SSH compatibility
-REMOTE_CMD='powershell -Command "\$lastRecordId = 0; \$logFile = \"\$env:TEMP\\sysmon-last-record.txt\"; if (Test-Path \$logFile) { try { \$lastRecordId = [int](Get-Content \$logFile -ErrorAction SilentlyContinue) } catch { \$lastRecordId = 0 } }; \$filter = @{ LogName = \"Microsoft-Windows-Sysmon/Operational\" }; if (\$lastRecordId -gt 0) { \$events = Get-WinEvent -FilterHashtable \$filter -ErrorAction SilentlyContinue | Where-Object { \$_.RecordId -gt \$lastRecordId } | Sort-Object RecordId } else { \$filter[\"StartTime\"] = (Get-Date).AddHours(-1); \$events = Get-WinEvent -FilterHashtable \$filter -MaxEvents 100 -ErrorAction SilentlyContinue | Sort-Object RecordId }; if (\$events) { foreach (\$event in \$events) { \$event.ToXml(); \$lastRecordId = \$event.RecordId } } else { \$latest = Get-WinEvent -FilterHashtable \$filter -MaxEvents 1 -ErrorAction SilentlyContinue; if (\$latest) { \$lastRecordId = \$latest.RecordId } }; if (\$lastRecordId -gt 0) { \$lastRecordId | Out-File -FilePath \$logFile -Force }"'
+# PowerShell script content
+read -r -d '' PS_SCRIPT << 'PSEOF' || true
+$lastRecordId = 0
+$logFile = "$env:TEMP\sysmon-last-record.txt"
 
-log_debug "Remote PowerShell command configured"
+if (Test-Path $logFile) {
+    try {
+        $lastRecordId = [int](Get-Content $logFile -ErrorAction SilentlyContinue)
+    } catch {
+        $lastRecordId = 0
+    }
+}
+
+$filter = @{ LogName = "Microsoft-Windows-Sysmon/Operational" }
+
+if ($lastRecordId -gt 0) {
+    $events = Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue | Where-Object { $_.RecordId -gt $lastRecordId } | Sort-Object RecordId
+} else {
+    $filter["StartTime"] = (Get-Date).AddHours(-1)
+    $events = Get-WinEvent -FilterHashtable $filter -MaxEvents 100 -ErrorAction SilentlyContinue | Sort-Object RecordId
+}
+
+if ($events) {
+    foreach ($event in $events) {
+        $event.ToXml()
+        $lastRecordId = $event.RecordId
+    }
+} else {
+    $latest = Get-WinEvent -FilterHashtable $filter -MaxEvents 1 -ErrorAction SilentlyContinue
+    if ($latest) {
+        $lastRecordId = $latest.RecordId
+    }
+}
+
+if ($lastRecordId -gt 0) {
+    $lastRecordId | Out-File -FilePath $logFile -Force
+}
+PSEOF
+
+log_debug "PowerShell script configured"
 
 # Function to collect logs once (for interval-based collection)
 collect_logs_once() {
@@ -94,7 +129,8 @@ collect_logs_once() {
     # Use || true to prevent script exit on non-zero return (empty results)
     if [ -x "$BIN_MONITOR_WIN" ]; then
         log_debug "Using compiled Windows monitor binary: $BIN_MONITOR_WIN"
-        ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
+        # Pass PowerShell script via stdin to avoid quote escaping issues
+        echo "$PS_SCRIPT" | ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" 'powershell -Command -' 2>&1 | \
             (cd "$PROJECT_ROOT" && "$BIN_MONITOR_WIN" -device "$DEVICE_ID" 2>&1) || true
     elif [ -f "$BIN_MONITOR_WIN" ]; then
         log_error "Binary exists but is not executable: $BIN_MONITOR_WIN"
