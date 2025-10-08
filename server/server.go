@@ -142,6 +142,7 @@ func setupRoutes(router *gin.Engine) {
 		protected.GET("/devices/delete/:id", handlers.DeleteDeviceHandler)
 		protected.POST("/devices/delete/:id", handlers.DeleteDeviceHandler)
 		protected.GET("/devices/monitor/:id", handlers.MonitorDeviceHandler)
+		protected.POST("/devices/apply-config/:id", handlers.ApplyDeviceConfigHandler)
 		protected.GET("/devices/logs/:id", handlers.DeviceLogsHandler)
 
 		// Audit logs

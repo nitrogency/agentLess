@@ -17,10 +17,7 @@ setup_cleanup_trap
 REMOTE_USER="${REMOTE_USER:-$(get_config remote_user)}"
 REMOTE_GROUP="${REMOTE_GROUP:-$(get_config remote_group)}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-$(get_config ssh_key_path)}"
-MONITORING_SSH_KEY_PATH="$SSH_KEY_PATH"        # Backwards compatibility
-LOGIN_SSH_KEY_PATH="${LOGIN_SSH_KEY_PATH:-$HOME/.ssh/id_rsa}"  # Default login key
 SSH_PORT="${SSH_PORT:-$(get_config ssh_port)}"
-SERVER_PORT="$SSH_PORT"                        # Backwards compatibility - same as SSH_PORT
 USE_GENERATED_NAME="${USE_GENERATED_NAME:-false}"
 PASSWORD_SUDO="${PASSWORD_SUDO:-false}"
 LOGIN_USER="${LOGIN_USER:-$(get_config login_user)}"
@@ -31,6 +28,8 @@ RANDOM_NAMES=false
 RANDOM_KEY=false
 USE_SUDO_PASSWORD="$PASSWORD_SUDO"
 SUDO_PASSWORD=""
+FIREWALL_MODE="disabled"
+FIREWALL_ALLOWED_IPS=""
 
 # Note: generate_random_name(), execute_sqlite(), and command_exists() 
 # are now provided by the shared libraries
@@ -43,12 +42,13 @@ usage() {
     echo "Options:"
     echo "  -u, --user USERNAME     Remote username to create (default: ids_monitor)"
     echo "  -g, --group GROUPNAME   Remote group to create (default: ids_monitor)"
-    echo "  -k, --key KEY_PATH      Path to monitoring SSH key (default: $MONITORING_SSH_KEY_PATH)"
+    echo "  -k, --key KEY_PATH      Path to SSH key for login and monitoring (default: $SSH_KEY_PATH)"
     echo "  -l, --login USERNAME    Username to login with (default: root)"
-    echo "  -K, --login-key KEY_PATH Path to login SSH key (default: $LOGIN_SSH_KEY_PATH)"
     echo "  -p, --port PORT         SSH port (default: 22)"
     echo "  -r, --random            Generate random user and group names"
     echo "  -R, --random-key        Generate random SSH key if it doesn't exist"
+    echo "  -f, --firewall MODE     Firewall mode: disabled, ssh_all, ssh_restricted (default: disabled)"
+    echo "  -a, --allowed-ips IPS   Comma-separated IPs allowed for ssh_restricted mode"
     echo "  -h, --help              Display this help message"
     exit 1
 }
@@ -65,16 +65,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -k|--key)
-            MONITORING_SSH_KEY_PATH="$2"
-            shift 2
-            ;;
-        -K|--login-key)
-            LOGIN_SSH_KEY_PATH="$2"
+            SSH_KEY_PATH="$2"
             shift 2
             ;;
         -p|--port)
             SSH_PORT="$2"
-            SERVER_PORT="$2"  # Keep both for compatibility
             shift 2
             ;;
         -r|--random)
@@ -87,6 +82,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -l|--login)
             LOGIN_USER="$2"
+            shift 2
+            ;;
+        -f|--firewall)
+            FIREWALL_MODE="$2"
+            shift 2
+            ;;
+        -a|--allowed-ips)
+            FIREWALL_ALLOWED_IPS="$2"
             shift 2
             ;;
         -h|--help)
@@ -105,6 +108,13 @@ if [ -z "$TARGET_IP" ]; then
     usage
 fi
 
+# Validate firewall mode
+if [ "$FIREWALL_MODE" != "disabled" ] && [ "$FIREWALL_MODE" != "ssh_all" ] && [ "$FIREWALL_MODE" != "ssh_restricted" ]; then
+    log_error "Invalid firewall mode: $FIREWALL_MODE"
+    log_info "Valid modes: disabled, ssh_all, ssh_restricted"
+    exit 1
+fi
+
 # Generate random names if requested
 if [ "$RANDOM_NAMES" = true ]; then
     REMOTE_USER=$(generate_random_name)
@@ -113,42 +123,82 @@ if [ "$RANDOM_NAMES" = true ]; then
     log_info "Generated random group: $REMOTE_GROUP"
 fi
 
-# Validate login SSH key
-if [ ! -f "$LOGIN_SSH_KEY_PATH" ]; then
-    log_error "Login SSH key not found at $LOGIN_SSH_KEY_PATH"
-    log_info "Please specify a valid SSH key with -K or --login-key"
+# Validate SSH key
+if [ ! -f "$SSH_KEY_PATH" ]; then
+    log_error "SSH key not found at $SSH_KEY_PATH"
+    log_info "Please specify a valid SSH key with -k or --key"
     exit 1
 fi
 
-# Check if monitoring SSH key exists, if not, generate it
-if [ ! -f "$MONITORING_SSH_KEY_PATH" ]; then
-    log_warn "Monitoring SSH key not found at $MONITORING_SSH_KEY_PATH"
+# Try to load firewall settings from database if not provided via command line
+if [ "$FIREWALL_MODE" = "disabled" ] && [ -z "$FIREWALL_ALLOWED_IPS" ]; then
+    DB_PATH="$(get_config db_path)"
+    # Prepend repo root if path is relative
+    [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
+    if [ -f "$DB_PATH" ]; then
+        # Query database for firewall settings for this device
+        DB_FIREWALL_MODE=$(execute_sqlite "SELECT firewall_mode FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+        DB_FIREWALL_IPS=$(execute_sqlite "SELECT firewall_allowed_ips FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+        
+        if [ -n "$DB_FIREWALL_MODE" ]; then
+            FIREWALL_MODE="$DB_FIREWALL_MODE"
+            log_info "Loaded firewall mode from database: $FIREWALL_MODE"
+        fi
+        
+        if [ -n "$DB_FIREWALL_IPS" ]; then
+            FIREWALL_ALLOWED_IPS="$DB_FIREWALL_IPS"
+            log_info "Loaded allowed IPs from database: $FIREWALL_ALLOWED_IPS"
+        fi
+        
+        # Query audit configuration from database
+        DB_AUDIT_ARCH=$(execute_sqlite "SELECT audit_arch FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+        DB_AUDIT_RULESET=$(execute_sqlite "SELECT audit_ruleset FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+        
+        if [ -n "$DB_AUDIT_ARCH" ]; then
+            AUDIT_ARCH="$DB_AUDIT_ARCH"
+            log_info "Loaded audit architecture from database: $AUDIT_ARCH"
+        fi
+        
+        if [ -n "$DB_AUDIT_RULESET" ]; then
+            AUDIT_RULESET="$DB_AUDIT_RULESET"
+            log_info "Loaded audit ruleset from database: $AUDIT_RULESET"
+        fi
+    fi
+fi
+
+# Set default audit configuration if not specified
+AUDIT_ARCH="${AUDIT_ARCH:-x64}"
+AUDIT_RULESET="${AUDIT_RULESET:-audit_default.rules}"
+
+# Check if SSH key exists, if not, generate it
+if [ ! -f "$SSH_KEY_PATH" ]; then
+    log_warn "SSH key not found at $SSH_KEY_PATH"
     if [ "$RANDOM_KEY" = true ]; then
-        log_progress "Generating a new SSH key pair for monitoring..."
-        ssh-keygen -t rsa -b 4096 -f "$MONITORING_SSH_KEY_PATH" -N "" -C "ids_monitoring_key"
-        log_success "Generated new monitoring SSH key at $MONITORING_SSH_KEY_PATH"
+        log_progress "Generating a new SSH key pair..."
+        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" -C "ids_monitoring_key"
+        log_success "Generated new SSH key at $SSH_KEY_PATH"
     else
         log_error "Please specify a valid SSH key with -k or --key"
         exit 1
     fi
 fi
 
-# Get the monitoring public key
-SSH_PUB_KEY=$(cat "${MONITORING_SSH_KEY_PATH}.pub")
+# Get the public key
+SSH_PUB_KEY=$(cat "${SSH_KEY_PATH}.pub")
 if [ -z "$SSH_PUB_KEY" ]; then
-    handle_error "Could not read public key from ${MONITORING_SSH_KEY_PATH}.pub"
+    handle_error "Could not read public key from ${SSH_KEY_PATH}.pub"
 fi
 
-# Test SSH connection to the target using the login key
+# Test SSH connection to the target
 log_progress "Testing SSH connection to $TARGET_IP..."
-if ! ssh -o StrictHostKeyChecking=no -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$LOGIN_SSH_KEY_PATH" -p "$SERVER_PORT" "$LOGIN_USER@$TARGET_IP" "exit" 2>/dev/null; then
+if ! ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$SSH_KEY_PATH" -p "$SSH_PORT" "$LOGIN_USER@$TARGET_IP" "exit" 2>/dev/null; then
     log_error "Could not connect to $TARGET_IP using SSH"
     log_info "Please ensure that:"
     log_info "  1. The target device is reachable"
     log_info "  2. SSH is enabled on the target"
     log_info "  3. The login user has SSH access"
     log_info "  4. You have copied your SSH key to the target using:"
-    log_info "     ssh-copy-id -i ${LOGIN_SSH_KEY_PATH}.pub $LOGIN_USER@$TARGET_IP"
+    log_info "     ssh-copy-id -i ${SSH_KEY_PATH}.pub $LOGIN_USER@$TARGET_IP"
     exit 1
 fi
 
@@ -598,6 +648,123 @@ else
     sudo auditctl -e 1 || echo "Warning: Could not enable audit logging"
 fi
 
+# Configure firewall based on mode
+FIREWALL_MODE="$FIREWALL_MODE"
+FIREWALL_ALLOWED_IPS="$FIREWALL_ALLOWED_IPS"
+SSH_PORT="$SSH_PORT"
+
+if [ "\$FIREWALL_MODE" != "disabled" ]; then
+    echo "Configuring firewall (mode: \$FIREWALL_MODE)..."
+    
+    # Get monitoring server IP (the IP we're connected from)
+    MONITOR_SERVER_IP=\$(echo \$SSH_CONNECTION | awk '{print \$1}')
+    
+    if [ -z "\$MONITOR_SERVER_IP" ]; then
+        echo "Warning: Could not detect monitoring server IP, skipping firewall configuration"
+    else
+        echo "Detected monitoring server IP: \$MONITOR_SERVER_IP"
+        
+        # Detect available firewall tool
+        if command -v ufw >/dev/null 2>&1; then
+            echo "Using UFW for firewall configuration..."
+            
+            # Reset UFW to default settings
+            sudo ufw --force reset >/dev/null 2>&1
+            
+            # Set default policies
+            sudo ufw default deny incoming
+            sudo ufw default allow outgoing
+            
+            # Configure based on mode
+            if [ "\$FIREWALL_MODE" = "ssh_all" ]; then
+                echo "Allowing SSH from all IPs on port \$SSH_PORT..."
+                sudo ufw allow \$SSH_PORT/tcp comment 'SSH access'
+            elif [ "\$FIREWALL_MODE" = "ssh_restricted" ]; then
+                echo "Allowing SSH only from monitoring server and specified IPs..."
+                
+                # Always allow monitoring server
+                sudo ufw allow from \$MONITOR_SERVER_IP to any port \$SSH_PORT proto tcp comment 'Monitoring server SSH'
+                
+                # Allow additional IPs if provided
+                if [ -n "\$FIREWALL_ALLOWED_IPS" ]; then
+                    IFS=',' read -ra ALLOWED_IP_ARRAY <<< "\$FIREWALL_ALLOWED_IPS"
+                    for ip in "\${ALLOWED_IP_ARRAY[@]}"; do
+                        ip=\$(echo \$ip | xargs)  # Trim whitespace
+                        if [ -n "\$ip" ]; then
+                            echo "Allowing SSH from \$ip..."
+                            sudo ufw allow from \$ip to any port \$SSH_PORT proto tcp comment 'Allowed admin IP'
+                        fi
+                    done
+                fi
+            fi
+            
+            # Enable UFW
+            sudo ufw --force enable
+            echo "UFW firewall enabled successfully"
+            sudo ufw status
+            
+        elif command -v iptables >/dev/null 2>&1; then
+            echo "Using iptables for firewall configuration..."
+            
+            # Flush existing rules
+            sudo iptables -F
+            sudo iptables -X
+            
+            # Set default policies
+            sudo iptables -P INPUT DROP
+            sudo iptables -P FORWARD DROP
+            sudo iptables -P OUTPUT ACCEPT
+            
+            # Allow loopback
+            sudo iptables -A INPUT -i lo -j ACCEPT
+            
+            # Allow established connections
+            sudo iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+            
+            # Configure based on mode
+            if [ "\$FIREWALL_MODE" = "ssh_all" ]; then
+                echo "Allowing SSH from all IPs on port \$SSH_PORT..."
+                sudo iptables -A INPUT -p tcp --dport \$SSH_PORT -j ACCEPT
+            elif [ "\$FIREWALL_MODE" = "ssh_restricted" ]; then
+                echo "Allowing SSH only from monitoring server and specified IPs..."
+                
+                # Always allow monitoring server
+                sudo iptables -A INPUT -p tcp -s \$MONITOR_SERVER_IP --dport \$SSH_PORT -j ACCEPT
+                
+                # Allow additional IPs if provided
+                if [ -n "\$FIREWALL_ALLOWED_IPS" ]; then
+                    IFS=',' read -ra ALLOWED_IP_ARRAY <<< "\$FIREWALL_ALLOWED_IPS"
+                    for ip in "\${ALLOWED_IP_ARRAY[@]}"; do
+                        ip=\$(echo \$ip | xargs)  # Trim whitespace
+                        if [ -n "\$ip" ]; then
+                            echo "Allowing SSH from \$ip..."
+                            sudo iptables -A INPUT -p tcp -s \$ip --dport \$SSH_PORT -j ACCEPT
+                        fi
+                    done
+                fi
+            fi
+            
+            # Save iptables rules (distribution-specific)
+            if command -v iptables-save >/dev/null 2>&1; then
+                if [ -d /etc/iptables ]; then
+                    sudo iptables-save | sudo tee /etc/iptables/rules.v4 >/dev/null
+                elif command -v netfilter-persistent >/dev/null 2>&1; then
+                    sudo netfilter-persistent save
+                elif command -v service >/dev/null 2>&1; then
+                    sudo service iptables save 2>/dev/null || true
+                fi
+            fi
+            
+            echo "iptables firewall configured successfully"
+            sudo iptables -L -n
+        else
+            echo "Warning: Neither UFW nor iptables found, skipping firewall configuration"
+        fi
+    fi
+else
+    echo "Firewall configuration disabled, skipping..."
+fi
+
 echo "Setup completed"
 EOF
     
@@ -605,7 +772,7 @@ EOF
     chmod +x "$TMP_SCRIPT_FILE"
     
     # Copy the script to the target
-    scp -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -P "$SERVER_PORT" "$TMP_SCRIPT_FILE" "$LOGIN_USER@$TARGET_IP:~/setup_ids_monitor.sh"
+    scp -o StrictHostKeyChecking=no -o BatchMode=yes -i "$SSH_KEY_PATH" -P "$SSH_PORT" "$TMP_SCRIPT_FILE" "$LOGIN_USER@$TARGET_IP:~/setup_ids_monitor.sh"
     
     # Create a temporary file with the SSH public key
     SSH_KEY_TMP_FILE=$(create_temp_file "ssh-key")
@@ -613,27 +780,28 @@ EOF
     echo "$SSH_PUB_KEY" > "$SSH_KEY_TMP_FILE"
     
     # Copy the SSH key to the target
-    scp -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -P "$SERVER_PORT" "$SSH_KEY_TMP_FILE" "$LOGIN_USER@$TARGET_IP:~/ids_monitor.pub"
+    scp -o StrictHostKeyChecking=no -o BatchMode=yes -i "$SSH_KEY_PATH" -P "$SSH_PORT" "$SSH_KEY_TMP_FILE" "$LOGIN_USER@$TARGET_IP:~/ids_monitor.pub"
     
-    # Determine the audit rules file path using shared functions
-    AUDIT_RULES_SOURCE="$(get_repo_root)/$(get_config audit_rules_source_path)"
+    # Determine the audit rules file path based on architecture and ruleset
+    AUDIT_RULES_SOURCE="$(get_repo_root)/rulesets/${AUDIT_ARCH}/${AUDIT_RULESET}"
     
     # Check if the audit rules file exists and copy it
     if [ -f "$AUDIT_RULES_SOURCE" ]; then
+        log_info "Using audit ruleset: $AUDIT_RULESET (${AUDIT_ARCH})"
         echo "Copying audit rules file to target..."
-        scp -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -P "$SERVER_PORT" "$AUDIT_RULES_SOURCE" "$LOGIN_USER@$TARGET_IP:/tmp/audit_default.rules"
+        scp -o StrictHostKeyChecking=no -o BatchMode=yes -i "$SSH_KEY_PATH" -P "$SSH_PORT" "$AUDIT_RULES_SOURCE" "$LOGIN_USER@$TARGET_IP:/tmp/audit_default.rules"
     else
-        handle_error "audit_default.rules file not found at $AUDIT_RULES_SOURCE" 1 "Please ensure the rulesets/audit_default.rules file exists in the project directory"
+        handle_error "Audit rules file not found at $AUDIT_RULES_SOURCE" 1 "Please ensure the file exists in the rulesets/${AUDIT_ARCH}/ directory"
     fi
     
     # Run the script on the target with a pseudo-terminal allocation
-    ssh -o StrictHostKeyChecking=no -i "$LOGIN_SSH_KEY_PATH" -t -p "$SERVER_PORT" "$LOGIN_USER@$TARGET_IP" "export USE_SUDO_PASSWORD=\"$USE_SUDO_PASSWORD\"; export SUDO_PASSWORD=\"$SUDO_PASSWORD\"; export SSH_PUB_KEY=\"\$(cat ~/ids_monitor.pub)\"; bash ~/setup_ids_monitor.sh && rm ~/setup_ids_monitor.sh ~/ids_monitor.pub"
+    ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$SSH_KEY_PATH" -t -p "$SSH_PORT" "$LOGIN_USER@$TARGET_IP" "export USE_SUDO_PASSWORD=\"$USE_SUDO_PASSWORD\"; export SUDO_PASSWORD=\"$SUDO_PASSWORD\"; export SSH_PUB_KEY=\"\$(cat ~/ids_monitor.pub)\"; bash ~/setup_ids_monitor.sh && rm ~/setup_ids_monitor.sh ~/ids_monitor.pub"
     
     # Temp files will be cleaned up automatically by trap
     
     # Test connection with the new user
     log_progress "Testing connection with the monitoring user..."
-    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$MONITORING_SSH_KEY_PATH" -p "$SERVER_PORT" -v "$REMOTE_USER@$TARGET_IP" "echo 'SSH connection successful!'; exit" 2>&1 | tee /tmp/ssh_debug.log; then
+    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$SSH_KEY_PATH" -p "$SSH_PORT" -v "$REMOTE_USER@$TARGET_IP" "echo 'SSH connection successful!'; exit" 2>&1 | tee /tmp/ssh_debug.log; then
         log_success "Monitoring user setup successful!"
     else
         log_error "Failed to connect with the monitoring user."
@@ -658,7 +826,9 @@ update_device_in_database() {
     log_progress "Updating device in database with actual generated username and group..."
     
     # Get the correct database path
-    local DB_PATH="$(get_repo_root)/$(get_config db_path)"
+    local DB_PATH="$(get_config db_path)"
+    # Prepend repo root if path is relative
+    [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
     
     # Find the device ID by IP address
     DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH")
@@ -668,8 +838,8 @@ update_device_in_database() {
         return 1
     fi
     
-    # Update the device with the actual generated username and group
-    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO' WHERE id = $DEVICE_ID;" "$DB_PATH"
+    # Update the device with the actual generated username, group, and firewall settings
+    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO', firewall_mode = '$FIREWALL_MODE', firewall_allowed_ips = '$FIREWALL_ALLOWED_IPS' WHERE id = $DEVICE_ID;" "$DB_PATH"
     
     log_success "Device updated in database with actual username: $REMOTE_USER"
     return 0
@@ -680,7 +850,9 @@ clear_device_audit_logs() {
     log_progress "Clearing any existing audit logs for the device from the database..."
     
     # Get the correct database path
-    local DB_PATH="$(get_repo_root)/$(get_config db_path)"
+    local DB_PATH="$(get_config db_path)"
+    # Prepend repo root if path is relative
+    [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
     
     # Find the device ID by IP address
     DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH")
@@ -704,7 +876,7 @@ register_with_server() {
     log_progress "Registering device with IDS server..."
     
     # Prepare SSH command for the monitoring user
-    MONITOR_SSH_CMD="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=\"$(get_config ssh_connect_timeout)\" -i \"$MONITORING_SSH_KEY_PATH\" -p \"$SERVER_PORT\" $REMOTE_USER@\"$TARGET_IP\""
+    MONITOR_SSH_CMD="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=\"$(get_config ssh_connect_timeout)\" -i \"$SSH_KEY_PATH\" -p \"$SSH_PORT\" $REMOTE_USER@\"$TARGET_IP\""
     
     # Get device information
     HOSTNAME=$(eval "$MONITOR_SSH_CMD \"hostname\"")
@@ -728,7 +900,7 @@ log_section "Device Info"
 log_info "Target IP: $TARGET_IP"
 log_info "Remote User: $REMOTE_USER"
 log_info "Remote Group: $REMOTE_GROUP"
-log_info "SSH Key: $MONITORING_SSH_KEY_PATH"
+log_info "SSH Key: $SSH_KEY_PATH"
 
 setup_remote_device
 register_with_server
@@ -741,7 +913,20 @@ log_info "You can now monitor this device through your IDS dashboard."
 log_section "Important Credentials"
 log_info "SSH User: $REMOTE_USER"
 log_info "SSH Group: $REMOTE_GROUP"
-log_info "SSH Key: $MONITORING_SSH_KEY_PATH"
+log_info "SSH Key: $SSH_KEY_PATH"
+log_section "Firewall Configuration"
+log_info "Firewall Mode: $FIREWALL_MODE"
+if [ "$FIREWALL_MODE" = "ssh_restricted" ]; then
+    if [ -n "$FIREWALL_ALLOWED_IPS" ]; then
+        log_info "Allowed IPs: $FIREWALL_ALLOWED_IPS (plus monitoring server IP)"
+    else
+        log_info "Allowed IPs: Monitoring server only"
+    fi
+elif [ "$FIREWALL_MODE" = "ssh_all" ]; then
+    log_info "SSH allowed from all IPs on port $SSH_PORT"
+elif [ "$FIREWALL_MODE" = "disabled" ]; then
+    log_info "No firewall restrictions applied"
+fi
 
 # Set up monitoring services for all enrolled devices
 log_section "Monitoring Services Setup"

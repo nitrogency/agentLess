@@ -12,23 +12,27 @@ import (
 )
 
 type Device struct {
-	ID            int64
-	Name          string
-	Type          string
-	Status        string
-	LastUpdated   time.Time
-	IPAddress     string
-	SSHUser       string
-	SSHKeyPath    string
-	SSHPort       int
-	Hostname      string
-	OSInfo        string
-	OSType        string // "linux" or "windows"
-	SSHGroup      string
-	RandomUser    bool
-	RandomKey     bool
-	SetupUser     string
-	SetupPassword string
+	ID                 int64
+	Name               string
+	Type               string
+	Status             string
+	LastUpdated        time.Time
+	IPAddress          string
+	SSHUser            string
+	SSHKeyPath         string
+	SSHPort            int
+	Hostname           string
+	OSInfo             string
+	OSType             string // "linux" or "windows"
+	SSHGroup           string
+	RandomUser         bool
+	RandomKey          bool
+	SetupUser          string
+	SetupPassword      string
+	FirewallMode       string // "disabled", "ssh_all", "ssh_restricted"
+	FirewallAllowedIPs string // Comma-separated IPs for ssh_restricted mode
+	AuditArch          string // "x32" or "x64"
+	AuditRuleset       string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
 }
 
 // InitDeviceTable initializes the devices table
@@ -51,7 +55,9 @@ func InitDeviceTable() error {
 			random_user INTEGER DEFAULT 0,
 			random_key INTEGER DEFAULT 0,
 			setup_user TEXT DEFAULT 'root',
-			setup_password TEXT
+			setup_password TEXT,
+			firewall_mode TEXT DEFAULT 'disabled',
+			firewall_allowed_ips TEXT
 		)
 	`)
 	if err != nil {
@@ -61,6 +67,16 @@ func InitDeviceTable() error {
 	// Add os_type column if it doesn't exist (for existing databases)
 	_, err = db.Exec(`ALTER TABLE devices ADD COLUMN os_type TEXT DEFAULT 'linux'`)
 	// Ignore error if column already exists
+	
+	// Add firewall columns if they don't exist (for existing databases)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_mode TEXT DEFAULT 'disabled'`)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_allowed_ips TEXT`)
+	// Ignore errors if columns already exist
+	
+	// Add audit ruleset columns if they don't exist (for existing databases)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_arch TEXT DEFAULT 'x64'`)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_ruleset TEXT DEFAULT 'audit_default.rules'`)
+	// Ignore errors if columns already exist
 	
 	return nil
 }
@@ -76,20 +92,21 @@ func CreateDevice(name, deviceType string) error {
 
 // CreateMonitoredDevice creates a new device with SSH monitoring details
 func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword)
+	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "disabled", "", "x64", "audit_default.rules")
 }
 
 // CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
-func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
+func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
 		INSERT INTO devices (
 			name, type, status, last_updated, 
 			ip_address, ssh_user, ssh_key_path, ssh_port, 
 			hostname, os_info, os_type, ssh_group, random_user, random_key,
-			setup_user, setup_password
+			setup_user, setup_password, firewall_mode, firewall_allowed_ips,
+			audit_arch, audit_ruleset
 		)
-		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword)
+		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset)
 	return err
 }
 
@@ -106,7 +123,8 @@ func GetAllDevices() ([]Device, error) {
 	rows, err := db.Query(`
 		SELECT id, name, type, status, last_updated, 
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
-		       ssh_group, random_user, random_key, setup_user, setup_password
+		       ssh_group, random_user, random_key, setup_user, setup_password,
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset
 		FROM devices
 		ORDER BY id DESC
 	`)
@@ -118,13 +136,14 @@ func GetAllDevices() ([]Device, error) {
 	var devices []Device
 	for rows.Next() {
 		var d Device
-		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword sql.NullString
+		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
 		var sshPort, randomUser, randomKey sql.NullInt64
 
 		err := rows.Scan(
 			&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 			&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
+			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset,
 		)
 		if err != nil {
 			return nil, err
@@ -171,6 +190,24 @@ func GetAllDevices() ([]Device, error) {
 		if setupPassword.Valid {
 			d.SetupPassword = setupPassword.String
 		}
+		if firewallMode.Valid {
+			d.FirewallMode = firewallMode.String
+		} else {
+			d.FirewallMode = "disabled" // Default
+		}
+		if firewallAllowedIPs.Valid {
+			d.FirewallAllowedIPs = firewallAllowedIPs.String
+		}
+		if auditArch.Valid {
+			d.AuditArch = auditArch.String
+		} else {
+			d.AuditArch = "x64" // Default
+		}
+		if auditRuleset.Valid {
+			d.AuditRuleset = auditRuleset.String
+		} else {
+			d.AuditRuleset = "audit_default.rules" // Default
+		}
 
 		devices = append(devices, d)
 	}
@@ -180,19 +217,21 @@ func GetAllDevices() ([]Device, error) {
 // GetDeviceByID returns a device by its ID
 func GetDeviceByID(id int64) (*Device, error) {
 	var d Device
-	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword sql.NullString
+	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
 	var sshPort, randomUser, randomKey sql.NullInt64
 
 	err := db.QueryRow(`
 		SELECT id, name, type, status, last_updated,
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
-		       ssh_group, random_user, random_key, setup_user, setup_password
+		       ssh_group, random_user, random_key, setup_user, setup_password,
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset
 		FROM devices
 		WHERE id = ?
 	`, id).Scan(
 		&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 		&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
+		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset,
 	)
 
 	if err == sql.ErrNoRows {
@@ -242,6 +281,24 @@ func GetDeviceByID(id int64) (*Device, error) {
 	}
 	if setupPassword.Valid {
 		d.SetupPassword = setupPassword.String
+	}
+	if firewallMode.Valid {
+		d.FirewallMode = firewallMode.String
+	} else {
+		d.FirewallMode = "disabled" // Default
+	}
+	if firewallAllowedIPs.Valid {
+		d.FirewallAllowedIPs = firewallAllowedIPs.String
+	}
+	if auditArch.Valid {
+		d.AuditArch = auditArch.String
+	} else {
+		d.AuditArch = "x64" // Default
+	}
+	if auditRuleset.Valid {
+		d.AuditRuleset = auditRuleset.String
+	} else {
+		d.AuditRuleset = "audit_default.rules" // Default
 	}
 
 	return &d, nil
@@ -295,19 +352,20 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 
 // UpdateMonitoredDevice updates a monitored device's information
 func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword)
+	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "disabled", "", "x64", "audit_default.rules")
 }
 
 // UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
-func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
+func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
 		UPDATE devices
 		SET name = ?, type = ?, status = ?, last_updated = CURRENT_TIMESTAMP,
 		    ip_address = ?, ssh_user = ?, ssh_key_path = ?, ssh_port = ?,
 		    hostname = ?, os_info = ?, os_type = ?, ssh_group = ?, random_user = ?, random_key = ?,
-		    setup_user = ?, setup_password = ?
+		    setup_user = ?, setup_password = ?, firewall_mode = ?, firewall_allowed_ips = ?,
+		    audit_arch = ?, audit_ruleset = ?
 		WHERE id = ?
-	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, id)
+	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset, id)
 	return err
 }
 

@@ -26,6 +26,9 @@
                 <th>Type</th>
                 <th>Status</th>
                 <th>IP Address</th>
+                <th>OS</th>
+                <th>Ruleset</th>
+                <th>Firewall</th>
                 <th>SSH User</th>
                 <th>Last Updated</th>
                 <th>Actions</th>
@@ -38,7 +41,42 @@
                 <td>{{.Name}}</td>
                 <td>{{.Type}}</td>
                 <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
-                <td>{{if .IPAddress}}{{.IPAddress}}{{else}}-{{end}}</td>
+                <td>{{if .IPAddress}}{{.IPAddress}}{{if ne .SSHPort 22}}:{{.SSHPort}}{{end}}{{else}}-{{end}}</td>
+                <td>
+                    {{if eq .OSType "linux"}}
+                        Linux
+                    {{else if eq .OSType "windows"}}
+                        Windows
+                    {{else}}
+                        -
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .OSType "linux"}}
+                        {{if eq .AuditRuleset "audit_default.rules"}}
+                            <span title="{{.AuditArch}}">Default</span>
+                        {{else if eq .AuditRuleset "audit_high.rules"}}
+                            <span title="{{.AuditArch}}">High</span>
+                        {{else if eq .AuditRuleset "audit_min.rules"}}
+                            <span title="{{.AuditArch}}">Minimal</span>
+                        {{else}}
+                            <span title="{{.AuditArch}}">{{.AuditRuleset}}</span>
+                        {{end}}
+                    {{else}}
+                        <span title="N/A for Windows">-</span>
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .FirewallMode "disabled"}}
+                        <span title="Firewall disabled">Off</span>
+                    {{else if eq .FirewallMode "ssh_all"}}
+                        <span title="SSH allowed from all IPs">SSH All</span>
+                    {{else if eq .FirewallMode "ssh_restricted"}}
+                        <span title="SSH restricted to specific IPs">Restricted</span>
+                    {{else}}
+                        -
+                    {{end}}
+                </td>
                 <td>{{if .SSHUser}}{{.SSHUser}}{{else}}-{{end}}</td>
                 <td>{{.LastUpdated.Format "2006-01-02 15:04:05"}}</td>
                 <td>
@@ -51,7 +89,7 @@
             </tr>
             {{else}}
             <tr>
-                <td colspan="8" class="text-center">No devices found</td>
+                <td colspan="11" class="text-center">No devices found</td>
             </tr>
             {{end}}
         </tbody>

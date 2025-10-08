@@ -60,7 +60,7 @@
             <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{if .FormData.ip_address}}{{.FormData.ip_address}}{{else}}{{.Device.IPAddress}}{{end}}" placeholder="e.g. 192.168.1.100" required>
         </div>
         
-        <fieldset class="form-section">
+        <fieldset class="form-section" id="setup_auth_section">
             <legend>Setup Authentication</legend>
             <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
             
@@ -111,6 +111,51 @@
             <div class="form-group">
                 <label for="ssh_port">SSH Port (default: 22):</label>
                 <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}{{.Device.SSHPort}}{{end}}" min="1" max="65535" required>
+            </div>
+        </fieldset>
+        
+        <fieldset class="form-section" id="audit_config_section">
+            <legend>Audit Configuration</legend>
+            <p class="help-text">Configure auditd rules for Linux devices</p>
+            
+            <div class="form-group">
+                <label for="audit_arch">Architecture:</label>
+                <select id="audit_arch" name="audit_arch" class="form-control {{if .ErrorFields.audit_arch}}input-error{{end}}">
+                    <option value="x64" {{if or (eq .FormData.audit_arch "x64") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x64")) (and (eq .FormData.audit_arch "") (eq .Device.AuditArch ""))}}selected{{end}}>64-bit (x64)</option>
+                    <option value="x32" {{if or (eq .FormData.audit_arch "x32") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x32"))}}selected{{end}}>32-bit (x32)</option>
+                </select>
+                <p class="help-text">Select the CPU architecture of the target device</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="audit_ruleset">Audit Ruleset:</label>
+                <select id="audit_ruleset" name="audit_ruleset" class="form-control {{if .ErrorFields.audit_ruleset}}input-error{{end}}">
+                    <option value="audit_default.rules" {{if or (eq .FormData.audit_ruleset "audit_default.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_default.rules")) (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset ""))}}selected{{end}}>Default (Balanced)</option>
+                    <option value="audit_high.rules" {{if or (eq .FormData.audit_ruleset "audit_high.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_high.rules"))}}selected{{end}}>High (Comprehensive)</option>
+                    <option value="audit_min.rules" {{if or (eq .FormData.audit_ruleset "audit_min.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_min.rules"))}}selected{{end}}>Minimal (Low Overhead)</option>
+                </select>
+                <p class="help-text">Select the audit rule profile based on your security and performance needs</p>
+            </div>
+        </fieldset>
+        
+        <fieldset class="form-section">
+            <legend>Firewall Configuration</legend>
+            <p class="help-text">Configure firewall rules for the target device</p>
+            
+            <div class="form-group">
+                <label for="firewall_mode">Firewall Mode:</label>
+                <select id="firewall_mode" name="firewall_mode" class="form-control {{if .ErrorFields.firewall_mode}}input-error{{end}}">
+                    <option value="disabled" {{if or (eq .FormData.firewall_mode "disabled") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "disabled")) (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode ""))}}selected{{end}}>Disabled (Allow all inbound traffic)</option>
+                    <option value="ssh_all" {{if or (eq .FormData.firewall_mode "ssh_all") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "ssh_all"))}}selected{{end}}>SSH Only (Allow SSH from any IP)</option>
+                    <option value="ssh_restricted" {{if or (eq .FormData.firewall_mode "ssh_restricted") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "ssh_restricted"))}}selected{{end}}>SSH Restricted (Allow SSH from specific IPs only)</option>
+                </select>
+                <p class="help-text">Select the firewall configuration mode for the device</p>
+            </div>
+            
+            <div class="form-group" id="firewall_allowed_ips_group" style="display: none;">
+                <label for="firewall_allowed_ips">Allowed IP Addresses (Optional):</label>
+                <input type="text" class="form-control {{if .ErrorFields.firewall_allowed_ips}}input-error{{end}}" id="firewall_allowed_ips" name="firewall_allowed_ips" value="{{if .FormData.firewall_allowed_ips}}{{.FormData.firewall_allowed_ips}}{{else}}{{.Device.FirewallAllowedIPs}}{{end}}" placeholder="e.g. 192.168.1.100, 10.0.0.5">
+                <p class="help-text">Comma-separated list of additional IP addresses allowed to SSH to this device. Leave empty to allow only the monitoring server.</p>
             </div>
         </fieldset>
         

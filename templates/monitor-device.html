@@ -14,127 +14,140 @@
     <div class="success-message">{{.Success}}</div>
     {{end}}
 
-    <div class="card">
+    <div class="device-config-card">
         <div class="card-header">
-            <h3>Device Information</h3>
+            <h3>Device Configuration</h3>
         </div>
         <div class="card-body">
-            <div class="row">
-                <div class="col">
-                    <p><strong>ID:</strong> {{.Device.ID}}</p>
-                    <p><strong>Name:</strong> {{.Device.Name}}</p>
-                    <p><strong>Type:</strong> {{.Device.Type}}</p>
-                    <p><strong>Status:</strong> <span class="badge badge-{{.Device.Status}}">{{.Device.Status}}</span></p>
-                </div>
-                <div class="col">
-                    <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
-                    <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
-                    <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
-                    <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
-                </div>
-            </div>
-        </div>
-    </div>
-            
-    <div class="card mt-4">
-        <div class="card-header">
-            <h3>Log Entries</h3>
-        </div>
-        <div class="card-body">
-            <!-- Search and page size controls -->
-            <div class="page-controls with-search">
-                <!-- Search bar -->
-                <div class="search-controls">
-                    <form action="" method="GET" class="d-flex align-items-center">
-                        <input type="text" name="search" class="form-control search-input" placeholder="Search logs..." value="{{.Data.SearchTerm}}">
-                        <button class="btn btn-primary me-2" type="submit">Search</button>
-                        {{if .Data.SearchTerm}}
-                        <a href="?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
-                        {{end}}
-                    </form>
-                </div>
-                
-                <!-- Page size controls -->
-                <div class="page-size-controls">
-                    <div class="btn-group" role="group">
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
+            <!-- Basic Information -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Basic Information
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Device Name</span>
+                        <span class="info-value">{{.Device.Name}}</span>
                     </div>
-                    <span>Total: {{.Data.TotalLogs}} logs</span>
+                    <div class="info-item">
+                        <span class="info-label">Device Type</span>
+                        <span class="info-value">{{.Device.Type}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Status</span>
+                        <span class="info-value"><span class="badge badge-{{.Device.Status}}">{{.Device.Status}}</span></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Operating System</span>
+                        <span class="info-value">
+                            {{if eq .Device.OSType "linux"}}
+                                Linux (auditd)
+                            {{else if eq .Device.OSType "windows"}}
+                                Windows (Sysmon)
+                            {{else}}
+                                Unknown
+                            {{end}}
+                        </span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="table-container">
-                <table class="logs-table">
-                    <thead>
-                        <tr>
-                            <th>Event Time</th>
-                            <th>Received Time</th>
-                            <th>Type</th>
-                            <th>Key</th>
-                            <th>Message</th>
-                            <th>Raw Log</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range $log := .Data.AuditLogs}}
-                        <tr>
-                            <td>{{$log.EventTime}}</td>
-                            <td>{{$log.Timestamp.Format "2006-01-02 15:04:05"}}</td>
-                            <td>{{$log.Type}}</td>
-                            <td>{{$log.Key}}</td>
-                            <td><div class="log-message">{{$log.Message}}</div></td>
-                            <td><pre class="raw-log">{{$log.RawLog}}</pre></td>
-                        </tr>
-                        {{else}}
-                        <tr>
-                            <td colspan="6" class="text-center">No audit logs available</td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
+
+            <!-- Connection Information -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Connection
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">IP Address</span>
+                        <span class="info-value">{{.Device.IPAddress}}{{if ne .Device.SSHPort 22}}:{{.Device.SSHPort}}{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH User</span>
+                        <span class="info-value">{{.Device.SSHUser}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Group</span>
+                        <span class="info-value">{{.Device.SSHGroup}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Port</span>
+                        <span class="info-value">{{.Device.SSHPort}}</span>
+                    </div>
+                </div>
             </div>
-            
-            <!-- Pagination controls -->
-            {{if gt .Data.TotalPages 1}}
-            <div class="pagination-container mt-3 text-center">
-                <div class="btn-group" role="group">
-                    <!-- Previous page button -->
-                    <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &laquo;
-                    </a>
-                    
-                    <!-- First page -->
-                    <a href="?page=1&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-primary{{else}}btn-outline-primary{{end}}">1</a>
-                    
-                    <!-- Ellipsis if needed -->
-                    {{if gt .Data.CurrentPage 3}}
-                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
-                    {{end}}
-                    
-                    <!-- Current page (if not first or last) -->
-                    {{if and (gt .Data.CurrentPage 1) (lt .Data.CurrentPage .Data.TotalPages)}}
-                    <a href="?page={{.Data.CurrentPage}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm btn-primary">{{.Data.CurrentPage}}</a>
-                    {{end}}
-                    
-                    <!-- Ellipsis if needed -->
-                    {{if lt .Data.CurrentPage (sub .Data.TotalPages 2)}}
-                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
-                    {{end}}
-                    
-                    <!-- Last page (if not first page) -->
-                    {{if gt .Data.TotalPages 1}}
-                    <a href="?page={{.Data.TotalPages}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-primary{{else}}btn-outline-primary{{end}}">{{.Data.TotalPages}}</a>
-                    {{end}}
-                    
-                    <!-- Next page button -->
-                    <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &raquo;
-                    </a>
+
+            {{if eq .Device.OSType "linux"}}
+            <!-- Audit Configuration -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Audit Configuration
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Architecture</span>
+                        <span class="info-value">
+                            {{if eq .Device.AuditArch "x64"}}
+                                64-bit (x64)
+                            {{else if eq .Device.AuditArch "x32"}}
+                                32-bit (x32)
+                            {{else}}
+                                {{.Device.AuditArch}}
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Ruleset Profile</span>
+                        <span class="info-value">
+                            {{if eq .Device.AuditRuleset "audit_default.rules"}}
+                                Default
+                            {{else if eq .Device.AuditRuleset "audit_high.rules"}}
+                                High
+                            {{else if eq .Device.AuditRuleset "audit_min.rules"}}
+                                Minimal
+                            {{else}}
+                                {{.Device.AuditRuleset}}
+                            {{end}}
+                        </span>
+                    </div>
                 </div>
             </div>
             {{end}}
+
+            <!-- Firewall Configuration -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Firewall
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Mode</span>
+                        <span class="info-value">
+                            {{if eq .Device.FirewallMode "disabled"}}
+                                Disabled
+                            {{else if eq .Device.FirewallMode "ssh_all"}}
+                                SSH Only
+                            {{else if eq .Device.FirewallMode "ssh_restricted"}}
+                                Restricted
+                            {{else}}
+                                Not configured
+                            {{end}}
+                        </span>
+                    </div>
+                    {{if eq .Device.FirewallMode "ssh_restricted"}}
+                    <div class="info-item">
+                        <span class="info-label">Allowed IPs</span>
+                        <span class="info-value">
+                            {{if .Device.FirewallAllowedIPs}}
+                                {{.Device.FirewallAllowedIPs}}
+                            {{else}}
+                                Monitoring server only
+                            {{end}}
+                        </span>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
         </div>
     </div>
 
@@ -189,6 +202,12 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 
     <div class="actions mt-4">
         <a href="/devices/edit/{{.Device.ID}}" class="btn btn-primary">Edit Device</a>
+        <form action="/devices/apply-config/{{.Device.ID}}" method="POST" style="display: inline;">
+            <input type="hidden" name="form_token" value="{{.FormToken}}">
+            <button type="submit" class="btn btn-secondary" onclick="return confirm('Apply the current configuration to the device?\n\nThis will update firewall rules and SSH settings based on the database configuration.');">
+                Apply Configuration
+            </button>
+        </form>
         <a href="/devices/delete/{{.Device.ID}}" class="btn btn-danger">Delete Device</a>
     </div>
 </div>

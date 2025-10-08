@@ -504,6 +504,7 @@ li {
     background-color: var(--primary);
     color: var(--text-primary);
     font-weight: bold;
+    text-align: center;
 }
 
 .users-table tr:hover {
@@ -714,10 +715,13 @@ li {
 }
 
 /* Status badges */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 600; font-size: .85em; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 400; font-size: .85em; }
 .badge-online { background: #13301d; color: #28a745; border: 1px solid #28a745; }
 .badge-offline { background: #3a1318; color: #b01c2e; border: 1px solid #b01c2e; }
 .badge-maintenance { background: #3a2e12; color: #ffc107; border: 1px solid #ffc107; }
+.badge-info { background: rgba(52, 152, 219, 0.15); color: #3498db; border: 1px solid #3498db; }
+.badge-warning { background: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid #ffc107; }
+.badge-success { background: rgba(40, 167, 69, 0.15); color: #28a745; border: 1px solid #28a745; }
 
 /* Input field error styling */
 /* duplicate .input-error removed; unified above */
@@ -1261,4 +1265,100 @@ select.form-control {
 .btn-group .btn:last-child {
     border-top-right-radius: var(--radius-sm);
     border-bottom-right-radius: var(--radius-sm);
+}
+
+/* Device Configuration Card */
+.device-config-card {
+    background: var(--secondary-dark);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--space-6);
+    border: 1px solid var(--border-color);
+}
+
+.device-config-card .card-body {
+    padding: var(--space-6);
+}
+
+/* Configuration Sections */
+.config-section {
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.config-section:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-4) 0;
+    display: flex;
+    align-items: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--space-4);
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.info-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.info-value {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    font-weight: 400;
+}
+
+/* Badge Variants */
+.badge-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Enhanced text muted */
+.text-muted {
+    color: var(--text-muted);
+}
+
+/* Responsive adjustments for config */
+@media (max-width: 768px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .device-config-card .card-body {
+        padding: var(--space-4);
+    }
+    
+    .config-section {
+        margin-bottom: var(--space-4);
+        padding-bottom: var(--space-4);
+    }
 }

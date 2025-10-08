@@ -79,27 +79,59 @@ document.addEventListener('DOMContentLoaded', function() {
         randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
     }
 
-    // Hide setup authentication section when OS type is Windows
+    // Hide setup authentication and audit sections when OS type is Windows
     const osTypeSelect = document.getElementById('os_type');
     const setupAuthSection = document.getElementById('setup_auth_section');
     const setupUserInput = document.getElementById('setup_user');
+    const auditConfigSection = document.getElementById('audit_config_section');
 
     if (osTypeSelect && setupAuthSection && setupUserInput) {
         const originalRequired = setupUserInput.required;
 
-        function toggleSetupAuthSection() {
+        function toggleOSSpecificSections() {
             if (osTypeSelect.value === 'windows') {
                 setupAuthSection.classList.add('hidden');
                 setupUserInput.required = false;
                 setupUserInput.disabled = true;
+                
+                // Hide audit config section for Windows
+                if (auditConfigSection) {
+                    auditConfigSection.style.display = 'none';
+                }
             } else {
                 setupAuthSection.classList.remove('hidden');
                 setupUserInput.disabled = false;
                 setupUserInput.required = originalRequired;
+                
+                // Show audit config section for Linux
+                if (auditConfigSection) {
+                    auditConfigSection.style.display = 'block';
+                }
             }
         }
 
-        toggleSetupAuthSection();
-        osTypeSelect.addEventListener('change', toggleSetupAuthSection);
+        toggleOSSpecificSections();
+        osTypeSelect.addEventListener('change', toggleOSSpecificSections);
+    }
+
+    // Handle firewall mode selection
+    const firewallModeSelect = document.getElementById('firewall_mode');
+    const firewallAllowedIpsGroup = document.getElementById('firewall_allowed_ips_group');
+    const firewallAllowedIpsInput = document.getElementById('firewall_allowed_ips');
+
+    if (firewallModeSelect && firewallAllowedIpsGroup && firewallAllowedIpsInput) {
+        function toggleFirewallAllowedIps() {
+            if (firewallModeSelect.value === 'ssh_restricted') {
+                firewallAllowedIpsGroup.style.display = 'block';
+                firewallAllowedIpsInput.required = false; // Optional field - monitoring server will always be allowed
+            } else {
+                firewallAllowedIpsGroup.style.display = 'none';
+                firewallAllowedIpsInput.required = false;
+            }
+        }
+
+        // Initial setup and event listener
+        toggleFirewallAllowedIps();
+        firewallModeSelect.addEventListener('change', toggleFirewallAllowedIps);
     }
 });
