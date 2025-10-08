@@ -229,6 +229,30 @@ if [ $? -ne 0 ]; then
 fi
 log_success "Application built successfully"
 
+# Build monitoring binaries
+log_progress "Building monitoring binaries..."
+mkdir -p "$APP_DIR/bin"
+
+# Build Linux monitoring binary
+log_progress "Building Linux monitoring binary (bin/monitor)..."
+go build -o "$APP_DIR/bin/monitor" "$APP_DIR/scripts/linux/monitoring.go"
+if [ $? -ne 0 ]; then
+  log_warn "Failed to build Linux monitoring binary"
+else
+  chmod +x "$APP_DIR/bin/monitor"
+  log_success "Linux monitoring binary built successfully"
+fi
+
+# Build Windows monitoring binary
+log_progress "Building Windows monitoring binary (bin/monitor-windows)..."
+go build -o "$APP_DIR/bin/monitor-windows" "$APP_DIR/scripts/windows/monitoring-windows.go"
+if [ $? -ne 0 ]; then
+  log_warn "Failed to build Windows monitoring binary"
+else
+  chmod +x "$APP_DIR/bin/monitor-windows"
+  log_success "Windows monitoring binary built successfully"
+fi
+
 # Set up SSH keys for monitoring if they don't exist
 log_section "SSH Configuration"
 if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then

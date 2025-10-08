@@ -36,6 +36,9 @@ readonly AUDIT_RULES_FILE="audit.rules"
 readonly AUDIT_LOG_PATH="/var/log/audit/audit.log"
 readonly AUDIT_RULES_SOURCE_PATH="rulesets/x64/audit_default.rules"
 
+# ClamAV configuration
+readonly CLAMAV_LOG_PATH="/var/log/clamav/clamav.log"
+
 # Log retention settings
 readonly DEFAULT_RETENTION_DAYS="30"
 readonly DEFAULT_LOG_LIMIT="1000"
@@ -94,6 +97,12 @@ get_config() {
             ;;
         "windows_collection_interval")
             echo "${WINDOWS_COLLECTION_INTERVAL:-$DEFAULT_WINDOWS_COLLECTION_INTERVAL}"
+            ;;
+        "clamav_log_path")
+            echo "$CLAMAV_LOG_PATH"
+            ;;
+        "audit_log_path")
+            echo "$AUDIT_LOG_PATH"
             ;;
         *)
             # Allow custom config values with default

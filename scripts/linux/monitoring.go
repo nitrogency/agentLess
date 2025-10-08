@@ -22,7 +22,7 @@ var (
 	reSuccess = regexp.MustCompile(`\bsuccess=(yes|no)\b`)
 	reArg     = regexp.MustCompile(`a[0-9]+="([^"]*)"`)
 
-	reClam = regexp.MustCompile(`\s(/[^:]+):\s+([A-Za-z0-9._-]+)\s+(FOUND|OK)\b`)
+	reClam = regexp.MustCompile(`\s*(/[^:]+):\s+([A-Za-z0-9._-]+)\s+(FOUND|OK)\b`)
 )
 
 type Event struct {

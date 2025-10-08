@@ -173,7 +173,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
                 <li><strong>Run the enrollment script from your terminal:</strong>
-                    <pre class="code-block">./scripts/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+                    <pre class="code-block">./scripts/linux/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
                 </li>
             </ol>
             {{end}}

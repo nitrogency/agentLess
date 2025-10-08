@@ -215,9 +215,231 @@ sudo grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || {
 }
 
 # Configure audit+clamav log access
-echo "Configuring audit access for $REMOTE_USER..."
-sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log\, /usr/bin/tail /var/log/clamav/clamav.log" > /etc/sudoers.d/$REMOTE_USER"
+echo "Configuring audit and ClamAV log access for $REMOTE_USER..."
+sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log, /usr/bin/tail /var/log/clamav/clamav.log, /usr/bin/cat /var/log/clamav/clamav.log\" > /etc/sudoers.d/$REMOTE_USER"
 sudo chmod 440 /etc/sudoers.d/$REMOTE_USER
+
+# Install and configure ClamAV
+echo "Setting up ClamAV antivirus..."
+CLAMAV_INSTALLED=false
+
+if command -v clamscan >/dev/null 2>&1; then
+    echo "ClamAV already installed"
+    CLAMAV_INSTALLED=true
+else
+    echo "Installing ClamAV..."
+    
+    # Detect OS on remote system
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        REMOTE_OS_ID=\$ID
+    else
+        echo "Warning: Cannot detect remote OS, assuming Debian-based"
+        REMOTE_OS_ID="debian"
+    fi
+    
+    # Install ClamAV based on detected OS
+    case \$REMOTE_OS_ID in
+        ubuntu|debian)
+            echo "Installing ClamAV on Debian/Ubuntu system..."
+            sudo apt-get update -q || echo "Warning: Package update failed"
+            if sudo apt-get install -y clamav clamav-daemon clamav-freshclam; then
+                echo "ClamAV installed"
+                CLAMAV_INSTALLED=true
+            else
+                echo "Failed to install ClamAV"
+                CLAMAV_INSTALLED=false
+            fi
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            echo "Installing ClamAV on RHEL/Fedora/CentOS/Rocky/AlmaLinux system..."
+            # Try dnf first (newer systems), fall back to yum
+            if command -v dnf >/dev/null 2>&1; then
+                # Enable EPEL repository for ClamAV
+                if ! sudo dnf repolist | grep -q epel; then
+                    echo "Enabling EPEL repository..."
+                    sudo dnf install -y epel-release || echo "Warning: Failed to install EPEL"
+                fi
+                if sudo dnf install -y clamav clamav-update clamd; then
+                    echo "ClamAV installed via dnf"
+                    CLAMAV_INSTALLED=true
+                else
+                    echo "Failed to install ClamAV via dnf"
+                    CLAMAV_INSTALLED=false
+                fi
+            elif command -v yum >/dev/null 2>&1; then
+                # Enable EPEL repository for ClamAV
+                if ! sudo yum repolist | grep -q epel; then
+                    echo "Enabling EPEL repository..."
+                    sudo yum install -y epel-release || echo "Warning: Failed to install EPEL"
+                fi
+                if sudo yum install -y clamav clamav-update clamd; then
+                    echo "ClamAV installed via yum"
+                    CLAMAV_INSTALLED=true
+                else
+                    echo "Failed to install ClamAV via yum"
+                    CLAMAV_INSTALLED=false
+                fi
+            else
+                echo "No package manager found (dnf/yum)"
+                CLAMAV_INSTALLED=false
+            fi
+            ;;
+        sles|opensuse*)
+            echo "Installing ClamAV on SUSE system..."
+            if sudo zypper install -y clamav; then
+                echo "ClamAV installed via zypper"
+                CLAMAV_INSTALLED=true
+            else
+                echo "Failed to install ClamAV via zypper"
+                CLAMAV_INSTALLED=false
+            fi
+            ;;
+        *)
+            echo "Unsupported OS for automatic ClamAV installation: \$REMOTE_OS_ID"
+            echo "Please install ClamAV manually on the target system"
+            CLAMAV_INSTALLED=false
+            ;;
+    esac
+    
+    # Configure and start ClamAV services if installation succeeded
+    if [ "\$CLAMAV_INSTALLED" = "true" ]; then
+        echo "Configuring ClamAV..."
+        
+        # Create log directory if it doesn't exist
+        sudo mkdir -p /var/log/clamav
+        
+        # Configure freshclam (disable Example line)
+        if [ -f /etc/clamav/freshclam.conf ]; then
+            # Debian/Ubuntu path
+            sudo sed -i 's/^Example/#Example/' /etc/clamav/freshclam.conf 2>/dev/null || true
+        elif [ -f /etc/freshclam.conf ]; then
+            # RHEL/CentOS path
+            sudo sed -i 's/^Example/#Example/' /etc/freshclam.conf 2>/dev/null || true
+        fi
+        
+        # Configure clamd (disable Example line)
+        if [ -f /etc/clamav/clamd.conf ]; then
+            # Debian/Ubuntu path
+            sudo sed -i 's/^Example/#Example/' /etc/clamav/clamd.conf 2>/dev/null || true
+        elif [ -f /etc/clamd.conf ]; then
+            # RHEL/CentOS path
+            sudo sed -i 's/^Example/#Example/' /etc/clamd.conf 2>/dev/null || true
+        elif [ -f /etc/clamd.d/scan.conf ]; then
+            # Alternative RHEL path
+            sudo sed -i 's/^Example/#Example/' /etc/clamd.d/scan.conf 2>/dev/null || true
+        fi
+        
+        # Stop freshclam service before manual update (avoid log file lock conflict)
+        if sudo systemctl is-active clamav-freshclam >/dev/null 2>&1; then
+            echo "Stopping freshclam service temporarily for initial database update..."
+            sudo systemctl stop clamav-freshclam
+        fi
+        
+        # Update virus definitions (this MUST complete before starting daemon)
+        echo "Updating ClamAV virus definitions (this may take a few minutes)..."
+        if sudo freshclam; then
+            echo "Virus definitions updated successfully"
+        else
+            echo "Warning: freshclam update failed, trying to continue anyway"
+        fi
+        
+        # Wait a moment for files to settle
+        sleep 2
+        
+        # Enable and start freshclam service for automatic updates
+        if sudo systemctl list-unit-files | grep -q clamav-freshclam; then
+            sudo systemctl enable clamav-freshclam 2>/dev/null || true
+            sudo systemctl start clamav-freshclam 2>/dev/null || true
+            echo "Freshclam service enabled for automatic updates"
+        fi
+        
+        # Enable and start ClamAV daemon if available
+        echo "Starting ClamAV daemon..."
+        if sudo systemctl list-unit-files | grep -q clamav-daemon; then
+            sudo systemctl enable clamav-daemon 2>/dev/null || true
+            sudo systemctl start clamav-daemon 2>/dev/null || echo "Warning: clamav-daemon may need manual start after database update completes"
+        elif sudo systemctl list-unit-files | grep -q clamd; then
+            sudo systemctl enable clamd 2>/dev/null || true
+            sudo systemctl start clamd 2>/dev/null || echo "Warning: clamd may need manual start after database update completes"
+        fi
+        
+        # Set up log file permissions
+        if [ -f /var/log/clamav/clamav.log ]; then
+            sudo chmod 644 /var/log/clamav/clamav.log
+        else
+            sudo touch /var/log/clamav/clamav.log
+            sudo chmod 644 /var/log/clamav/clamav.log
+        fi
+        
+        # Add monitoring user to clamav group if it exists
+        if getent group clamav >/dev/null 2>&1; then
+            sudo usermod -a -G clamav $REMOTE_USER || echo "Warning: Could not add user to clamav group"
+        fi
+        
+        # Install cron if not present
+        echo "Ensuring cron is installed..."
+        if ! command -v crontab >/dev/null 2>&1; then
+            case \$REMOTE_OS_ID in
+                ubuntu|debian)
+                    sudo apt-get install -y cron || echo "Warning: Failed to install cron"
+                    ;;
+                fedora|rhel|centos|rocky|almalinux)
+                    if command -v dnf >/dev/null 2>&1; then
+                        sudo dnf install -y cronie || echo "Warning: Failed to install cronie"
+                    elif command -v yum >/dev/null 2>&1; then
+                        sudo yum install -y cronie || echo "Warning: Failed to install cronie"
+                    fi
+                    ;;
+                sles|opensuse*)
+                    sudo zypper install -y cron || echo "Warning: Failed to install cron"
+                    ;;
+            esac
+            
+            # Enable and start cron service
+            if sudo systemctl list-unit-files | grep -q '^cron.service'; then
+                sudo systemctl enable cron || echo "Warning: Failed to enable cron"
+                sudo systemctl start cron || echo "Warning: Failed to start cron"
+            elif sudo systemctl list-unit-files | grep -q '^crond.service'; then
+                sudo systemctl enable crond || echo "Warning: Failed to enable crond"
+                sudo systemctl start crond || echo "Warning: Failed to start crond"
+            fi
+        fi
+        
+        # Create daily ClamAV scan script
+        echo "Configuring daily ClamAV scans..."
+        sudo mkdir -p /etc/cron.daily
+        
+        sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
+#!/bin/bash
+# Daily ClamAV scan - logs malware detections for AgentLess IDS monitoring
+
+SCAN_DIRS="/home /opt /var/www /tmp /var/tmp /usr/local"
+LOG_FILE="/var/log/clamav/clamav.log"
+
+# Ensure log directory exists
+mkdir -p /var/log/clamav
+
+# Run scan and append to log (avoid --log flag due to file locking by clamd)
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting daily scan" >> "\$LOG_FILE"
+
+for dir in \$SCAN_DIRS; do
+    if [ -d "\$dir" ]; then
+        # Scan and append results to log (only show infected files)
+        clamscan -r -i "\$dir" 2>&1 | grep -E "FOUND|-------" >> "\$LOG_FILE" 2>/dev/null || true
+    fi
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Daily scan completed" >> "\$LOG_FILE"
+CRON_EOF
+        
+        sudo chmod 755 /etc/cron.daily/clamav-scan
+        echo "Daily ClamAV scan configured in /etc/cron.daily/clamav-scan"
+        echo "Scans will run daily and log to /var/log/clamav/clamav.log"
+        
+        echo "ClamAV setup completed"
+    fi
+fi
 
 # Install and configure auditd
 echo "Setting up audit daemon..."
@@ -524,7 +746,7 @@ log_info "SSH Key: $MONITORING_SSH_KEY_PATH"
 # Set up monitoring services for all enrolled devices
 log_section "Monitoring Services Setup"
 log_progress "Setting up monitoring services..."
-SETUP_MONITORING_SCRIPT="$SCRIPT_DIR/setup-monitoring.sh"
+SETUP_MONITORING_SCRIPT="$SCRIPT_DIR/../setup-monitoring.sh"
 
 if [ -f "$SETUP_MONITORING_SCRIPT" ]; then
     log_info "Launching setup-monitoring.sh to configure systemd services..."
