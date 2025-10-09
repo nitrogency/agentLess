@@ -3,11 +3,9 @@ package handlers
 import (
 	"log"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
 	"example/go-website/db"
@@ -57,8 +55,6 @@ func AddDeviceHandler(c *gin.Context) {
 		randomKeyVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_key")))
 		randomUser := randomUserVal == "on" || randomUserVal == "true" || randomUserVal == "1"
 		randomKey := randomKeyVal == "on" || randomKeyVal == "true" || randomKeyVal == "1"
-		firewallMode := strings.TrimSpace(c.PostForm("firewall_mode"))
-		firewallAllowedIPs := strings.TrimSpace(c.PostForm("firewall_allowed_ips"))
 		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
 		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
 
@@ -87,8 +83,6 @@ func AddDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
 		data.FormData["setup_password"] = setupPassword
-		data.FormData["firewall_mode"] = firewallMode
-		data.FormData["firewall_allowed_ips"] = firewallAllowedIPs
 		data.FormData["audit_arch"] = auditArch
 		data.FormData["audit_ruleset"] = auditRuleset
 		// Preserve checkbox state in template on validation errors
@@ -176,21 +170,10 @@ func AddDeviceHandler(c *gin.Context) {
 			return
 		}
 
-		// Validate firewall mode
-		if firewallMode == "" {
-			firewallMode = "disabled" // Default
-		}
-		if firewallMode != "disabled" && firewallMode != "ssh_all" && firewallMode != "ssh_restricted" {
-			data.Error = "Invalid firewall mode. Must be 'disabled', 'ssh_all', or 'ssh_restricted'"
-			data.ErrorFields["firewall_mode"] = true
-			templates.RenderGinTemplate(c, "add-device", data)
-			return
-		}
-
 		// Create device
 		if ipAddress != "" {
 			// Create monitored device with SSH details and OS type
-			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset)
+			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, auditArch, auditRuleset)
 		} else {
 			// Create simple device
 			err = db.CreateDevice(name, deviceType)
@@ -265,8 +248,6 @@ func EditDeviceHandler(c *gin.Context) {
 		setupPassword := c.PostForm("setup_password")
 		randomUser := c.PostForm("random_user") == "on"
 		randomKey := c.PostForm("random_key") == "on"
-		firewallMode := strings.TrimSpace(c.PostForm("firewall_mode"))
-		firewallAllowedIPs := strings.TrimSpace(c.PostForm("firewall_allowed_ips"))
 		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
 		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
 
@@ -304,8 +285,6 @@ func EditDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
 		data.FormData["setup_password"] = setupPassword
-		data.FormData["firewall_mode"] = firewallMode
-		data.FormData["firewall_allowed_ips"] = firewallAllowedIPs
 		data.FormData["audit_arch"] = auditArch
 		data.FormData["audit_ruleset"] = auditRuleset
 
@@ -403,20 +382,22 @@ func EditDeviceHandler(c *gin.Context) {
 			return
 		}
 
-		// Validate firewall mode
-		if firewallMode == "" {
-			firewallMode = "disabled" // Default
+		// Check if enrollment-sensitive fields have changed
+		newDevice := &db.Device{
+			SSHPort:            sshPort,
+			SSHUser:            sshUser,
+			SSHKeyPath:         sshKeyPath,
+			SSHGroup:           sshGroup,
+			AuditArch:          auditArch,
+			AuditRuleset:       auditRuleset,
+			FirewallMode:       device.FirewallMode, // Firewall settings come from existing device
+			FirewallAllowedIPs: device.FirewallAllowedIPs,
+			SetupUser:          setupUser,
 		}
-		if firewallMode != "disabled" && firewallMode != "ssh_all" && firewallMode != "ssh_restricted" {
-			data.Error = "Invalid firewall mode. Must be 'disabled', 'ssh_all', or 'ssh_restricted'"
-			data.ErrorFields["firewall_mode"] = true
-			data.Data["Device"] = device
-			templates.RenderGinTemplate(c, "edit-device", data)
-			return
-		}
+		needsReenrollment := db.NeedsReenrollmentChanged(device, newDevice)
 
-		// Update device with OS type
-		err = db.UpdateMonitoredDeviceWithOS(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset)
+		// Update device with OS type and reenrollment flag
+		err = db.UpdateMonitoredDeviceWithOSAndReenrollment(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, auditArch, auditRuleset, needsReenrollment)
 		if err != nil {
 			log.Printf("Error updating device: %v", err)
 			data.Error = "Failed to update device"
@@ -447,8 +428,6 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
 	data.FormData["setup_password"] = device.SetupPassword
-	data.FormData["firewall_mode"] = device.FirewallMode
-	data.FormData["firewall_allowed_ips"] = device.FirewallAllowedIPs
 	// Set checkbox states
 	data.RandomUser = device.RandomUser
 	data.RandomKey = device.RandomKey
@@ -614,47 +593,3 @@ func MonitorDeviceHandler(c *gin.Context) {
 	templates.RenderGinTemplate(c, "monitor-device", data)
 }
 
-// ApplyDeviceConfigHandler applies current database configuration to the device
-func ApplyDeviceConfigHandler(c *gin.Context) {
-	// Get device ID from URL parameter
-	deviceIDStr := c.Param("id")
-	deviceID, err := strconv.ParseInt(deviceIDStr, 10, 64)
-	if err != nil {
-		c.String(http.StatusBadRequest, "Invalid device ID")
-		return
-	}
-
-	// Verify device exists
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		log.Printf("Error getting device %d: %v", deviceID, err)
-		c.String(http.StatusNotFound, "Device not found")
-		return
-	}
-
-	// Run the update-device.sh script
-	log.Printf("Applying configuration to device %d (%s)", deviceID, device.Name)
-	
-	// Execute update script in background
-	cmd := exec.Command("bash", "./scripts/update-device.sh", deviceIDStr)
-	
-	// Capture output
-	output, err := cmd.CombinedOutput()
-	
-	if err != nil {
-		log.Printf("Error applying configuration to device %d: %v\nOutput: %s", deviceID, err, string(output))
-		// Store error in session for display
-		session := sessions.Default(c)
-		session.Set("error", "Failed to apply configuration. Check server logs for details.")
-		session.Save()
-	} else {
-		log.Printf("Successfully applied configuration to device %d (%s)", deviceID, device.Name)
-		// Store success in session for display
-		session := sessions.Default(c)
-		session.Set("success", "Configuration applied successfully to "+device.Name)
-		session.Save()
-	}
-
-	// Redirect back to monitor page
-	c.Redirect(http.StatusFound, "/devices/monitor/"+deviceIDStr)
-}

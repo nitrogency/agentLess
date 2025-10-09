@@ -113,41 +113,6 @@
                 </div>
             </div>
             {{end}}
-
-            <!-- Firewall Configuration -->
-            <div class="config-section">
-                <h4 class="section-title">
-                    Firewall
-                </h4>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="info-label">Mode</span>
-                        <span class="info-value">
-                            {{if eq .Device.FirewallMode "disabled"}}
-                                Disabled
-                            {{else if eq .Device.FirewallMode "ssh_all"}}
-                                SSH Only
-                            {{else if eq .Device.FirewallMode "ssh_restricted"}}
-                                Restricted
-                            {{else}}
-                                Not configured
-                            {{end}}
-                        </span>
-                    </div>
-                    {{if eq .Device.FirewallMode "ssh_restricted"}}
-                    <div class="info-item">
-                        <span class="info-label">Allowed IPs</span>
-                        <span class="info-value">
-                            {{if .Device.FirewallAllowedIPs}}
-                                {{.Device.FirewallAllowedIPs}}
-                            {{else}}
-                                Monitoring server only
-                            {{end}}
-                        </span>
-                    </div>
-                    {{end}}
-                </div>
-            </div>
         </div>
     </div>
 
@@ -202,12 +167,6 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 
     <div class="actions mt-4">
         <a href="/devices/edit/{{.Device.ID}}" class="btn btn-primary">Edit Device</a>
-        <form action="/devices/apply-config/{{.Device.ID}}" method="POST" style="display: inline;">
-            <input type="hidden" name="form_token" value="{{.FormToken}}">
-            <button type="submit" class="btn btn-secondary" onclick="return confirm('Apply the current configuration to the device?\n\nThis will update firewall rules and SSH settings based on the database configuration.');">
-                Apply Configuration
-            </button>
-        </form>
         <a href="/devices/delete/{{.Device.ID}}" class="btn btn-danger">Delete Device</a>
     </div>
 </div>

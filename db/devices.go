@@ -33,6 +33,7 @@ type Device struct {
 	FirewallAllowedIPs string // Comma-separated IPs for ssh_restricted mode
 	AuditArch          string // "x32" or "x64"
 	AuditRuleset       string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
+	NeedsReenrollment  bool   // Flag indicating configuration changes require re-running enlist script
 }
 
 // InitDeviceTable initializes the devices table
@@ -63,21 +64,25 @@ func InitDeviceTable() error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Add os_type column if it doesn't exist (for existing databases)
 	_, err = db.Exec(`ALTER TABLE devices ADD COLUMN os_type TEXT DEFAULT 'linux'`)
 	// Ignore error if column already exists
-	
+
 	// Add firewall columns if they don't exist (for existing databases)
 	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_mode TEXT DEFAULT 'disabled'`)
 	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_allowed_ips TEXT`)
 	// Ignore errors if columns already exist
-	
+
 	// Add audit ruleset columns if they don't exist (for existing databases)
 	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_arch TEXT DEFAULT 'x64'`)
 	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_ruleset TEXT DEFAULT 'audit_default.rules'`)
 	// Ignore errors if columns already exist
-	
+
+	// Add needs_reenrollment column if it doesn't exist (for existing databases)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN needs_reenrollment INTEGER DEFAULT 0`)
+	// Ignore error if column already exists
+
 	return nil
 }
 
@@ -92,11 +97,11 @@ func CreateDevice(name, deviceType string) error {
 
 // CreateMonitoredDevice creates a new device with SSH monitoring details
 func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "disabled", "", "x64", "audit_default.rules")
+	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "x64", "audit_default.rules")
 }
 
 // CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
-func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset string) error {
+func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
 		INSERT INTO devices (
 			name, type, status, last_updated, 
@@ -105,8 +110,8 @@ func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPat
 			setup_user, setup_password, firewall_mode, firewall_allowed_ips,
 			audit_arch, audit_ruleset
 		)
-		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset)
+		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disabled', '', ?, ?)
+	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, auditArch, auditRuleset)
 	return err
 }
 
@@ -124,7 +129,7 @@ func GetAllDevices() ([]Device, error) {
 		SELECT id, name, type, status, last_updated, 
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, random_user, random_key, setup_user, setup_password,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
 		FROM devices
 		ORDER BY id DESC
 	`)
@@ -137,13 +142,13 @@ func GetAllDevices() ([]Device, error) {
 	for rows.Next() {
 		var d Device
 		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
-		var sshPort, randomUser, randomKey sql.NullInt64
+		var sshPort, randomUser, randomKey, needsReenrollment sql.NullInt64
 
 		err := rows.Scan(
 			&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 			&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
-			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset,
+			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
 		)
 		if err != nil {
 			return nil, err
@@ -208,6 +213,9 @@ func GetAllDevices() ([]Device, error) {
 		} else {
 			d.AuditRuleset = "audit_default.rules" // Default
 		}
+		if needsReenrollment.Valid {
+			d.NeedsReenrollment = needsReenrollment.Int64 == 1
+		}
 
 		devices = append(devices, d)
 	}
@@ -218,20 +226,20 @@ func GetAllDevices() ([]Device, error) {
 func GetDeviceByID(id int64) (*Device, error) {
 	var d Device
 	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
-	var sshPort, randomUser, randomKey sql.NullInt64
+	var sshPort, randomUser, randomKey, needsReenrollment sql.NullInt64
 
 	err := db.QueryRow(`
 		SELECT id, name, type, status, last_updated,
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, random_user, random_key, setup_user, setup_password,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
 		FROM devices
 		WHERE id = ?
 	`, id).Scan(
 		&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 		&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
-		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset,
+		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
 	)
 
 	if err == sql.ErrNoRows {
@@ -300,6 +308,9 @@ func GetDeviceByID(id int64) (*Device, error) {
 	} else {
 		d.AuditRuleset = "audit_default.rules" // Default
 	}
+	if needsReenrollment.Valid {
+		d.NeedsReenrollment = needsReenrollment.Int64 == 1
+	}
 
 	return &d, nil
 }
@@ -319,11 +330,11 @@ func GetDeviceNameByID(id int64) string {
 	deviceNameCache.RLock()
 	name, found := deviceNameCache.names[id]
 	deviceNameCache.RUnlock()
-	
+
 	if found {
 		return name
 	}
-	
+
 	// Not in cache, look up in database
 	var deviceName string
 	err := db.QueryRow("SELECT name FROM devices WHERE id = ?", id).Scan(&deviceName)
@@ -331,12 +342,12 @@ func GetDeviceNameByID(id int64) string {
 		// If error, return a formatted string with the ID
 		return fmt.Sprintf("Device %d", id)
 	}
-	
+
 	// Store in cache for future lookups
 	deviceNameCache.Lock()
 	deviceNameCache.names[id] = deviceName
 	deviceNameCache.Unlock()
-	
+
 	return deviceName
 }
 
@@ -352,20 +363,25 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 
 // UpdateMonitoredDevice updates a monitored device's information
 func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "disabled", "", "x64", "audit_default.rules")
+	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "x64", "audit_default.rules")
 }
 
 // UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
-func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset string) error {
+func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string) error {
+	return UpdateMonitoredDeviceWithOSAndReenrollment(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, auditArch, auditRuleset, false)
+}
+
+// UpdateMonitoredDeviceWithOSAndReenrollment updates a monitored device's information including OS type and reenrollment flag
+func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string, needsReenrollment bool) error {
 	_, err := db.Exec(`
 		UPDATE devices
 		SET name = ?, type = ?, status = ?, last_updated = CURRENT_TIMESTAMP,
 		    ip_address = ?, ssh_user = ?, ssh_key_path = ?, ssh_port = ?,
 		    hostname = ?, os_info = ?, os_type = ?, ssh_group = ?, random_user = ?, random_key = ?,
-		    setup_user = ?, setup_password = ?, firewall_mode = ?, firewall_allowed_ips = ?,
-		    audit_arch = ?, audit_ruleset = ?
+		    setup_user = ?, setup_password = ?,
+		    audit_arch = ?, audit_ruleset = ?, needs_reenrollment = ?
 		WHERE id = ?
-	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset, id)
+	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, auditArch, auditRuleset, boolToInt(needsReenrollment), id)
 	return err
 }
 
@@ -458,57 +474,58 @@ func UpdateAllDeviceStatuses() error {
 
 // DeleteDevice performs a HARD delete of a device and its related data.
 // This removes:
-//  - notifications for the device (and those tied to its logs)
-//  - notification_rules scoped to this device
-//  - audit_logs for the device
-//  - the device row itself
+//   - notifications for the device (and those tied to its logs)
+//   - notification_rules scoped to this device
+//   - audit_logs for the device
+//   - the device row itself
+//
 // All operations are executed within a single transaction for consistency.
 func DeleteDevice(id int64) error {
-    tx, err := db.Begin()
-    if err != nil {
-        return err
-    }
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
 
-    // 1) Delete notifications referencing this device or its logs
-    //    We delete by device_id first, then by log_id just in case there
-    //    exist notifications tied to logs for this device.
-    if _, err := tx.Exec(`DELETE FROM notifications WHERE device_id = ?`, id); err != nil {
-        tx.Rollback()
-        return err
-    }
-    if _, err := tx.Exec(`DELETE FROM notifications WHERE log_id IN (SELECT id FROM audit_logs WHERE device_id = ?)`, id); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// 1) Delete notifications referencing this device or its logs
+	//    We delete by device_id first, then by log_id just in case there
+	//    exist notifications tied to logs for this device.
+	if _, err := tx.Exec(`DELETE FROM notifications WHERE device_id = ?`, id); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM notifications WHERE log_id IN (SELECT id FROM audit_logs WHERE device_id = ?)`, id); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    // 2) Delete notification rules scoped to this device
-    if _, err := tx.Exec(`DELETE FROM notification_rules WHERE device_id = ?`, id); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// 2) Delete notification rules scoped to this device
+	if _, err := tx.Exec(`DELETE FROM notification_rules WHERE device_id = ?`, id); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    // 3) Delete audit logs for this device
-    if _, err := tx.Exec(`DELETE FROM audit_logs WHERE device_id = ?`, id); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// 3) Delete audit logs for this device
+	if _, err := tx.Exec(`DELETE FROM audit_logs WHERE device_id = ?`, id); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    // 4) Delete the device itself
-    if _, err := tx.Exec(`DELETE FROM devices WHERE id = ?`, id); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// 4) Delete the device itself
+	if _, err := tx.Exec(`DELETE FROM devices WHERE id = ?`, id); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    if err := tx.Commit(); err != nil {
-        return err
-    }
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 
-    // Remove from device name cache if present
-    deviceNameCache.Lock()
-    delete(deviceNameCache.names, id)
-    deviceNameCache.Unlock()
+	// Remove from device name cache if present
+	deviceNameCache.Lock()
+	delete(deviceNameCache.names, id)
+	deviceNameCache.Unlock()
 
-    return nil
+	return nil
 }
 
 // DeviceExistsByName checks if a device with the given name already exists
@@ -553,4 +570,49 @@ func DeviceExistsByIP(ipAddress string, excludeID int64) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// ClearReenrollmentFlag clears the needs_reenrollment flag for a device
+func ClearReenrollmentFlag(id int64) error {
+	_, err := db.Exec(`
+		UPDATE devices 
+		SET needs_reenrollment = 0, last_updated = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, id)
+	return err
+}
+
+// NeedsReenrollmentChanged checks if enrollment-sensitive fields have changed
+// Returns true if any field that requires re-enrollment has been modified
+func NeedsReenrollmentChanged(oldDevice, newDevice *Device) bool {
+	// Check enrollment-sensitive fields
+	if oldDevice.SSHPort != newDevice.SSHPort {
+		return true
+	}
+	if oldDevice.SSHUser != newDevice.SSHUser {
+		return true
+	}
+	if oldDevice.SSHKeyPath != newDevice.SSHKeyPath {
+		return true
+	}
+	if oldDevice.SSHGroup != newDevice.SSHGroup {
+		return true
+	}
+	if oldDevice.AuditArch != newDevice.AuditArch {
+		return true
+	}
+	if oldDevice.AuditRuleset != newDevice.AuditRuleset {
+		return true
+	}
+	if oldDevice.FirewallMode != newDevice.FirewallMode {
+		return true
+	}
+	if oldDevice.FirewallAllowedIPs != newDevice.FirewallAllowedIPs {
+		return true
+	}
+	if oldDevice.SetupUser != newDevice.SetupUser {
+		return true
+	}
+	// Note: We don't compare SetupPassword directly as it may be masked/empty in forms
+	return false
 }

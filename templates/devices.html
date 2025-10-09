@@ -28,9 +28,9 @@
                 <th>IP Address</th>
                 <th>OS</th>
                 <th>Ruleset</th>
-                <th>Firewall</th>
                 <th>SSH User</th>
                 <th>Last Updated</th>
+                <th>Config</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -66,19 +66,15 @@
                         <span title="N/A for Windows">-</span>
                     {{end}}
                 </td>
-                <td>
-                    {{if eq .FirewallMode "disabled"}}
-                        <span title="Firewall disabled">Off</span>
-                    {{else if eq .FirewallMode "ssh_all"}}
-                        <span title="SSH allowed from all IPs">SSH All</span>
-                    {{else if eq .FirewallMode "ssh_restricted"}}
-                        <span title="SSH restricted to specific IPs">Restricted</span>
-                    {{else}}
-                        -
-                    {{end}}
-                </td>
                 <td>{{if .SSHUser}}{{.SSHUser}}{{else}}-{{end}}</td>
                 <td>{{.LastUpdated.Format "2006-01-02 15:04:05"}}</td>
+                <td>
+                    {{if .NeedsReenrollment}}
+                    <span class="badge badge-warning" title="Configuration changed - re-enrollment required">⚠ Re-enroll</span>
+                    {{else}}
+                    <span class="badge badge-success" title="Configuration up-to-date">✓ OK</span>
+                    {{end}}
+                </td>
                 <td>
                     {{if .IPAddress}}
                     <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>

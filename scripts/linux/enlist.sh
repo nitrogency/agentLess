@@ -28,8 +28,6 @@ RANDOM_NAMES=false
 RANDOM_KEY=false
 USE_SUDO_PASSWORD="$PASSWORD_SUDO"
 SUDO_PASSWORD=""
-FIREWALL_MODE="disabled"
-FIREWALL_ALLOWED_IPS=""
 
 # Note: generate_random_name(), execute_sqlite(), and command_exists() 
 # are now provided by the shared libraries
@@ -47,8 +45,6 @@ usage() {
     echo "  -p, --port PORT         SSH port (default: 22)"
     echo "  -r, --random            Generate random user and group names"
     echo "  -R, --random-key        Generate random SSH key if it doesn't exist"
-    echo "  -f, --firewall MODE     Firewall mode: disabled, ssh_all, ssh_restricted (default: disabled)"
-    echo "  -a, --allowed-ips IPS   Comma-separated IPs allowed for ssh_restricted mode"
     echo "  -h, --help              Display this help message"
     exit 1
 }
@@ -84,14 +80,6 @@ while [[ $# -gt 0 ]]; do
             LOGIN_USER="$2"
             shift 2
             ;;
-        -f|--firewall)
-            FIREWALL_MODE="$2"
-            shift 2
-            ;;
-        -a|--allowed-ips)
-            FIREWALL_ALLOWED_IPS="$2"
-            shift 2
-            ;;
         -h|--help)
             usage
             ;;
@@ -106,13 +94,6 @@ done
 if [ -z "$TARGET_IP" ]; then
     log_error "Target IP address is required"
     usage
-fi
-
-# Validate firewall mode
-if [ "$FIREWALL_MODE" != "disabled" ] && [ "$FIREWALL_MODE" != "ssh_all" ] && [ "$FIREWALL_MODE" != "ssh_restricted" ]; then
-    log_error "Invalid firewall mode: $FIREWALL_MODE"
-    log_info "Valid modes: disabled, ssh_all, ssh_restricted"
-    exit 1
 fi
 
 # Generate random names if requested
@@ -130,39 +111,22 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     exit 1
 fi
 
-# Try to load firewall settings from database if not provided via command line
-if [ "$FIREWALL_MODE" = "disabled" ] && [ -z "$FIREWALL_ALLOWED_IPS" ]; then
-    DB_PATH="$(get_config db_path)"
-    # Prepend repo root if path is relative
-    [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
-    if [ -f "$DB_PATH" ]; then
-        # Query database for firewall settings for this device
-        DB_FIREWALL_MODE=$(execute_sqlite "SELECT firewall_mode FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
-        DB_FIREWALL_IPS=$(execute_sqlite "SELECT firewall_allowed_ips FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
-        
-        if [ -n "$DB_FIREWALL_MODE" ]; then
-            FIREWALL_MODE="$DB_FIREWALL_MODE"
-            log_info "Loaded firewall mode from database: $FIREWALL_MODE"
-        fi
-        
-        if [ -n "$DB_FIREWALL_IPS" ]; then
-            FIREWALL_ALLOWED_IPS="$DB_FIREWALL_IPS"
-            log_info "Loaded allowed IPs from database: $FIREWALL_ALLOWED_IPS"
-        fi
-        
-        # Query audit configuration from database
-        DB_AUDIT_ARCH=$(execute_sqlite "SELECT audit_arch FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
-        DB_AUDIT_RULESET=$(execute_sqlite "SELECT audit_ruleset FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
-        
-        if [ -n "$DB_AUDIT_ARCH" ]; then
-            AUDIT_ARCH="$DB_AUDIT_ARCH"
-            log_info "Loaded audit architecture from database: $AUDIT_ARCH"
-        fi
-        
-        if [ -n "$DB_AUDIT_RULESET" ]; then
-            AUDIT_RULESET="$DB_AUDIT_RULESET"
-            log_info "Loaded audit ruleset from database: $AUDIT_RULESET"
-        fi
+# Try to load audit settings from database if not provided via configuration
+DB_PATH="$(get_config db_path)"
+# Prepend repo root if path is relative
+[[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
+if [ -f "$DB_PATH" ]; then
+    DB_AUDIT_ARCH=$(execute_sqlite "SELECT audit_arch FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+    DB_AUDIT_RULESET=$(execute_sqlite "SELECT audit_ruleset FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+
+    if [ -n "$DB_AUDIT_ARCH" ]; then
+        AUDIT_ARCH="$DB_AUDIT_ARCH"
+        log_info "Loaded audit architecture from database: $AUDIT_ARCH"
+    fi
+
+    if [ -n "$DB_AUDIT_RULESET" ]; then
+        AUDIT_RULESET="$DB_AUDIT_RULESET"
+        log_info "Loaded audit ruleset from database: $AUDIT_RULESET"
     fi
 fi
 
@@ -244,9 +208,21 @@ fi
 
 # Set up the .ssh directory
 sudo mkdir -p /home/$REMOTE_USER/.ssh
-echo "\$SSH_PUB_KEY" | sudo tee /home/$REMOTE_USER/.ssh/authorized_keys > /dev/null
+
+# Add SSH key to authorized_keys (idempotent - won't duplicate)
+AUTHORIZED_KEYS="/home/$REMOTE_USER/.ssh/authorized_keys"
+sudo touch "\$AUTHORIZED_KEYS"
+
+# Check if this specific key is already present
+if ! sudo grep -qF "\$SSH_PUB_KEY" "\$AUTHORIZED_KEYS" 2>/dev/null; then
+    echo "\$SSH_PUB_KEY" | sudo tee -a "\$AUTHORIZED_KEYS" > /dev/null
+    echo "SSH key added to authorized_keys"
+else
+    echo "SSH key already present in authorized_keys"
+fi
+
 sudo chmod 700 /home/$REMOTE_USER/.ssh
-sudo chmod 600 /home/$REMOTE_USER/.ssh/authorized_keys
+sudo chmod 600 "\$AUTHORIZED_KEYS"
 sudo chown -R $REMOTE_USER:$REMOTE_GROUP /home/$REMOTE_USER/.ssh
 
 # Enable SSH key authentication
@@ -648,123 +624,6 @@ else
     sudo auditctl -e 1 || echo "Warning: Could not enable audit logging"
 fi
 
-# Configure firewall based on mode
-FIREWALL_MODE="$FIREWALL_MODE"
-FIREWALL_ALLOWED_IPS="$FIREWALL_ALLOWED_IPS"
-SSH_PORT="$SSH_PORT"
-
-if [ "\$FIREWALL_MODE" != "disabled" ]; then
-    echo "Configuring firewall (mode: \$FIREWALL_MODE)..."
-    
-    # Get monitoring server IP (the IP we're connected from)
-    MONITOR_SERVER_IP=\$(echo \$SSH_CONNECTION | awk '{print \$1}')
-    
-    if [ -z "\$MONITOR_SERVER_IP" ]; then
-        echo "Warning: Could not detect monitoring server IP, skipping firewall configuration"
-    else
-        echo "Detected monitoring server IP: \$MONITOR_SERVER_IP"
-        
-        # Detect available firewall tool
-        if command -v ufw >/dev/null 2>&1; then
-            echo "Using UFW for firewall configuration..."
-            
-            # Reset UFW to default settings
-            sudo ufw --force reset >/dev/null 2>&1
-            
-            # Set default policies
-            sudo ufw default deny incoming
-            sudo ufw default allow outgoing
-            
-            # Configure based on mode
-            if [ "\$FIREWALL_MODE" = "ssh_all" ]; then
-                echo "Allowing SSH from all IPs on port \$SSH_PORT..."
-                sudo ufw allow \$SSH_PORT/tcp comment 'SSH access'
-            elif [ "\$FIREWALL_MODE" = "ssh_restricted" ]; then
-                echo "Allowing SSH only from monitoring server and specified IPs..."
-                
-                # Always allow monitoring server
-                sudo ufw allow from \$MONITOR_SERVER_IP to any port \$SSH_PORT proto tcp comment 'Monitoring server SSH'
-                
-                # Allow additional IPs if provided
-                if [ -n "\$FIREWALL_ALLOWED_IPS" ]; then
-                    IFS=',' read -ra ALLOWED_IP_ARRAY <<< "\$FIREWALL_ALLOWED_IPS"
-                    for ip in "\${ALLOWED_IP_ARRAY[@]}"; do
-                        ip=\$(echo \$ip | xargs)  # Trim whitespace
-                        if [ -n "\$ip" ]; then
-                            echo "Allowing SSH from \$ip..."
-                            sudo ufw allow from \$ip to any port \$SSH_PORT proto tcp comment 'Allowed admin IP'
-                        fi
-                    done
-                fi
-            fi
-            
-            # Enable UFW
-            sudo ufw --force enable
-            echo "UFW firewall enabled successfully"
-            sudo ufw status
-            
-        elif command -v iptables >/dev/null 2>&1; then
-            echo "Using iptables for firewall configuration..."
-            
-            # Flush existing rules
-            sudo iptables -F
-            sudo iptables -X
-            
-            # Set default policies
-            sudo iptables -P INPUT DROP
-            sudo iptables -P FORWARD DROP
-            sudo iptables -P OUTPUT ACCEPT
-            
-            # Allow loopback
-            sudo iptables -A INPUT -i lo -j ACCEPT
-            
-            # Allow established connections
-            sudo iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-            
-            # Configure based on mode
-            if [ "\$FIREWALL_MODE" = "ssh_all" ]; then
-                echo "Allowing SSH from all IPs on port \$SSH_PORT..."
-                sudo iptables -A INPUT -p tcp --dport \$SSH_PORT -j ACCEPT
-            elif [ "\$FIREWALL_MODE" = "ssh_restricted" ]; then
-                echo "Allowing SSH only from monitoring server and specified IPs..."
-                
-                # Always allow monitoring server
-                sudo iptables -A INPUT -p tcp -s \$MONITOR_SERVER_IP --dport \$SSH_PORT -j ACCEPT
-                
-                # Allow additional IPs if provided
-                if [ -n "\$FIREWALL_ALLOWED_IPS" ]; then
-                    IFS=',' read -ra ALLOWED_IP_ARRAY <<< "\$FIREWALL_ALLOWED_IPS"
-                    for ip in "\${ALLOWED_IP_ARRAY[@]}"; do
-                        ip=\$(echo \$ip | xargs)  # Trim whitespace
-                        if [ -n "\$ip" ]; then
-                            echo "Allowing SSH from \$ip..."
-                            sudo iptables -A INPUT -p tcp -s \$ip --dport \$SSH_PORT -j ACCEPT
-                        fi
-                    done
-                fi
-            fi
-            
-            # Save iptables rules (distribution-specific)
-            if command -v iptables-save >/dev/null 2>&1; then
-                if [ -d /etc/iptables ]; then
-                    sudo iptables-save | sudo tee /etc/iptables/rules.v4 >/dev/null
-                elif command -v netfilter-persistent >/dev/null 2>&1; then
-                    sudo netfilter-persistent save
-                elif command -v service >/dev/null 2>&1; then
-                    sudo service iptables save 2>/dev/null || true
-                fi
-            fi
-            
-            echo "iptables firewall configured successfully"
-            sudo iptables -L -n
-        else
-            echo "Warning: Neither UFW nor iptables found, skipping firewall configuration"
-        fi
-    fi
-else
-    echo "Firewall configuration disabled, skipping..."
-fi
-
 echo "Setup completed"
 EOF
     
@@ -838,10 +697,12 @@ update_device_in_database() {
         return 1
     fi
     
-    # Update the device with the actual generated username, group, and firewall settings
-    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO', firewall_mode = '$FIREWALL_MODE', firewall_allowed_ips = '$FIREWALL_ALLOWED_IPS' WHERE id = $DEVICE_ID;" "$DB_PATH"
+    # Update the device with the actual generated username and group
+    # Also clear the needs_reenrollment flag since enrollment is now complete
+    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO', needs_reenrollment = 0 WHERE id = $DEVICE_ID;" "$DB_PATH"
     
     log_success "Device updated in database with actual username: $REMOTE_USER"
+    log_success "Configuration is now up-to-date"
     return 0
 }
 
@@ -914,30 +775,7 @@ log_section "Important Credentials"
 log_info "SSH User: $REMOTE_USER"
 log_info "SSH Group: $REMOTE_GROUP"
 log_info "SSH Key: $SSH_KEY_PATH"
-log_section "Firewall Configuration"
-log_info "Firewall Mode: $FIREWALL_MODE"
-if [ "$FIREWALL_MODE" = "ssh_restricted" ]; then
-    if [ -n "$FIREWALL_ALLOWED_IPS" ]; then
-        log_info "Allowed IPs: $FIREWALL_ALLOWED_IPS (plus monitoring server IP)"
-    else
-        log_info "Allowed IPs: Monitoring server only"
-    fi
-elif [ "$FIREWALL_MODE" = "ssh_all" ]; then
-    log_info "SSH allowed from all IPs on port $SSH_PORT"
-elif [ "$FIREWALL_MODE" = "disabled" ]; then
-    log_info "No firewall restrictions applied"
-fi
 
-# Set up monitoring services for all enrolled devices
-log_section "Monitoring Services Setup"
-log_progress "Setting up monitoring services..."
-SETUP_MONITORING_SCRIPT="$SCRIPT_DIR/../setup-monitoring.sh"
-
-if [ -f "$SETUP_MONITORING_SCRIPT" ]; then
-    log_info "Launching setup-monitoring.sh to configure systemd services..."
-    bash "$SETUP_MONITORING_SCRIPT"
-    log_success "Monitoring setup completed!"
-else
-    log_warn "setup-monitoring.sh not found at $SETUP_MONITORING_SCRIPT"
-    log_info "You may need to run it manually to start monitoring services."
-fi
+# Note: Run setup-monitoring.sh separately to configure systemd services
+log_info ""
+log_info "To start monitoring, run: sudo bash scripts/setup-monitoring.sh"

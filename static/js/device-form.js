@@ -114,24 +114,4 @@ document.addEventListener('DOMContentLoaded', function() {
         osTypeSelect.addEventListener('change', toggleOSSpecificSections);
     }
 
-    // Handle firewall mode selection
-    const firewallModeSelect = document.getElementById('firewall_mode');
-    const firewallAllowedIpsGroup = document.getElementById('firewall_allowed_ips_group');
-    const firewallAllowedIpsInput = document.getElementById('firewall_allowed_ips');
-
-    if (firewallModeSelect && firewallAllowedIpsGroup && firewallAllowedIpsInput) {
-        function toggleFirewallAllowedIps() {
-            if (firewallModeSelect.value === 'ssh_restricted') {
-                firewallAllowedIpsGroup.style.display = 'block';
-                firewallAllowedIpsInput.required = false; // Optional field - monitoring server will always be allowed
-            } else {
-                firewallAllowedIpsGroup.style.display = 'none';
-                firewallAllowedIpsInput.required = false;
-            }
-        }
-
-        // Initial setup and event listener
-        toggleFirewallAllowedIps();
-        firewallModeSelect.addEventListener('change', toggleFirewallAllowedIps);
-    }
 });

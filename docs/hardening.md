@@ -16,6 +16,6 @@ An optional hardening script called `scripts/harden.sh` is provided to apply som
 
 ## Endpoint security
 
-For ensuring better Linux endpoint security, clamav is also automatically installed and configured to periodically update and run daily scans. Logs are also sent to the dashboard from `clamav.log`. If the auditd service is the "behavior-based" detection part of the app, this would be the "signature-based" portion.
+For ensuring better Linux endpoint security, clamav is also automatically installed and configured to periodically update and run daily scans via cron. Logs are also sent to the dashboard from `clamav.log`. If the auditd service is the "behavior-based" detection part of the app, this would be the "signature-based" portion.
 
 Make sure to allow only appropriate IP/port access on your endpoints.
