@@ -37,6 +37,20 @@ func AddDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Add Device"
 
+	// Get available audit rulesets for both architectures
+	x64Rulesets, err := utils.GetAvailableRulesets("x64")
+	if err != nil {
+		log.Printf("Warning: Failed to load x64 rulesets: %v", err)
+		x64Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	x32Rulesets, err := utils.GetAvailableRulesets("x32")
+	if err != nil {
+		log.Printf("Warning: Failed to load x32 rulesets: %v", err)
+		x32Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
+
 	if c.Request.Method == "POST" {
 		// Get form data
 		name := strings.TrimSpace(c.PostForm("name"))
@@ -175,7 +189,6 @@ func AddDeviceHandler(c *gin.Context) {
 		if err != nil {
 			log.Printf("Error creating device: %v", err)
 			data.Error = "Failed to create device"
-			templates.RenderGinTemplate(c, "add-device", data)
 			return
 		}
 
@@ -184,6 +197,10 @@ func AddDeviceHandler(c *gin.Context) {
 		return
 	}
 
+	// Provide rulesets for GET request as well
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
+
 	templates.RenderGinTemplate(c, "add-device", data)
 }
 
@@ -191,6 +208,20 @@ func AddDeviceHandler(c *gin.Context) {
 func EditDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Edit Device"
+
+	// Get available audit rulesets for both architectures
+	x64Rulesets, err := utils.GetAvailableRulesets("x64")
+	if err != nil {
+		log.Printf("Warning: Failed to load x64 rulesets: %v", err)
+		x64Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	x32Rulesets, err := utils.GetAvailableRulesets("x32")
+	if err != nil {
+		log.Printf("Warning: Failed to load x32 rulesets: %v", err)
+		x32Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
 
 	// Get device ID from URL parameter
 	deviceIDStr := c.Param("id")
@@ -201,18 +232,18 @@ func EditDeviceHandler(c *gin.Context) {
 	}
 
 	// Parse device ID
-	deviceID, err := strconv.ParseInt(deviceIDStr, 10, 64)
-	if err != nil {
-		log.Printf("Invalid device ID: %v", err)
+	deviceID, parseErr := strconv.ParseInt(deviceIDStr, 10, 64)
+	if parseErr != nil {
+		log.Printf("Invalid device ID: %v", parseErr)
 		data.Error = "Invalid device ID"
 		templates.RenderGinTemplate(c, "404", data)
 		return
 	}
 
 	// Load device from database
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		log.Printf("Error loading device ID %d: %v", deviceID, err)
+	device, dbErr := db.GetDeviceByID(deviceID)
+	if dbErr != nil {
+		log.Printf("Error loading device ID %d: %v", deviceID, dbErr)
 		data.Error = "Device not found"
 		templates.RenderGinTemplate(c, "404", data)
 		return
@@ -419,6 +450,8 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
 	data.FormData["setup_password"] = device.SetupPassword
+	data.FormData["audit_arch"] = device.AuditArch
+	data.FormData["audit_ruleset"] = device.AuditRuleset
 
 	templates.RenderGinTemplate(c, "edit-device", data)
 }

@@ -1,6 +1,13 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/device-form.js"></script>
+<script>
+    // Ruleset data for dynamic architecture switching
+    window.rulesetData = {
+        x64: {{.Data.X64Rulesets}},
+        x32: {{.Data.X32Rulesets}}
+    };
+</script>
 {{end}}
 
 {{define "content"}}
@@ -107,9 +114,14 @@
             <div class="form-group">
                 <label for="audit_ruleset">Audit Ruleset</label>
                 <select id="audit_ruleset" name="audit_ruleset" class="form-control {{if .ErrorFields.audit_ruleset}}input-error{{end}}">
-                    <option value="audit_default.rules" {{if or (eq .FormData.audit_ruleset "audit_default.rules") (eq .FormData.audit_ruleset "")}}selected{{end}}>Default (Balanced)</option>
-                    <option value="audit_high.rules" {{if eq .FormData.audit_ruleset "audit_high.rules"}}selected{{end}}>High (Comprehensive)</option>
-                    <option value="audit_min.rules" {{if eq .FormData.audit_ruleset "audit_min.rules"}}selected{{end}}>Minimal (Low Overhead)</option>
+                    {{$currentRuleset := .FormData.audit_ruleset}}
+                    {{$rulesets := .Data.X64Rulesets}}
+                    {{if eq .FormData.audit_arch "x32"}}
+                        {{$rulesets = .Data.X32Rulesets}}
+                    {{end}}
+                    {{range $rulesets}}
+                        <option value="{{.Filename}}" {{if or (eq $currentRuleset .Filename) (and (eq $currentRuleset "") .IsDefault)}}selected{{end}}>{{.DisplayName}}</option>
+                    {{end}}
                 </select>
                 <p class="help-text">Select the audit rule profile based on your security and performance needs</p>
             </div>

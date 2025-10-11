@@ -1,4 +1,38 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Dynamic ruleset switching based on architecture
+    const auditArchSelect = document.getElementById('audit_arch');
+    const auditRulesetSelect = document.getElementById('audit_ruleset');
+    
+    if (auditArchSelect && auditRulesetSelect && window.rulesetData) {
+        function updateRulesetOptions() {
+            const selectedArch = auditArchSelect.value || 'x64';
+            const rulesets = window.rulesetData[selectedArch] || [];
+            const currentSelection = auditRulesetSelect.value;
+            
+            // Clear existing options
+            auditRulesetSelect.innerHTML = '';
+            
+            // Add options from the ruleset data
+            rulesets.forEach(function(ruleset) {
+                const option = document.createElement('option');
+                option.value = ruleset.Filename;
+                option.textContent = ruleset.DisplayName;
+                
+                // Preserve selection if it exists in the new architecture
+                if (ruleset.Filename === currentSelection) {
+                    option.selected = true;
+                } else if (!currentSelection && ruleset.IsDefault) {
+                    // Select default if no current selection
+                    option.selected = true;
+                }
+                
+                auditRulesetSelect.appendChild(option);
+            });
+        }
+        
+        // Update rulesets when architecture changes
+        auditArchSelect.addEventListener('change', updateRulesetOptions);
+    }
 
     // Hide setup authentication and audit sections when OS type is Windows
     const osTypeSelect = document.getElementById('os_type');
