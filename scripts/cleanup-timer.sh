@@ -37,8 +37,7 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=$REPO_ROOT
 ExecStart=/usr/bin/env bash -lc '$REPO_ROOT/scripts/clean.sh $RETENTION_DAYS'
-# Allow access to files under /home (tighten if you relocate DB or run as dedicated user)
-ProtectHome=false
+# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

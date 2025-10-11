@@ -116,21 +116,21 @@ log_success "Firewall enabled."
 
 log_info "Configuring Fail2ban..."
 
-# Get the app directory (assume we're in the AgentLess directory or detect it)
-APP_DIR="${PWD}"
-if [ ! -f "${APP_DIR}/main.go" ]; then
-    # Try to find the agentless directory
-    APP_DIR=$(find /home -name "agentLess" -type d 2>/dev/null | head -1)
-    if [ -z "$APP_DIR" ]; then
-        APP_DIR="/opt/agentless"  # Fallback
-    fi
+# App directory is always /opt/agentless (standard installation location)
+APP_DIR="/opt/agentless"
+LOG_DIR="/var/log/agentless"
+
+if [ ! -d "$APP_DIR" ]; then
+    log_error "AgentLess IDS not found at $APP_DIR"
+    log_error "Please run setup.sh first to install the application"
+    exit 1
 fi
 
 # Create logs directory and ensure permissions
-mkdir -p "${APP_DIR}/logs"
-chmod 755 "${APP_DIR}/logs"
-touch "${APP_DIR}/logs/agentless-security.log"
-chmod 644 "${APP_DIR}/logs/agentless-security.log"
+sudo mkdir -p "$LOG_DIR"
+sudo chmod 755 "$LOG_DIR"
+sudo touch "$LOG_DIR/security.log"
+sudo chmod 644 "$LOG_DIR/security.log"
 
 log_info "Creating Fail2ban configuration..."
 cat > /etc/fail2ban/jail.local << EOF
@@ -152,7 +152,7 @@ bantime = 3600
 enabled = true
 port = 8443
 filter = agentless-web
-logpath = ${APP_DIR}/logs/agentless-security.log
+logpath = ${LOG_DIR}/security.log
 maxretry = 5
 bantime = 1800
 EOF

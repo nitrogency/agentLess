@@ -20,20 +20,16 @@ import (
 var securityLogger *log.Logger
 
 func init() {
-	// Get the current working directory (app directory)
-	appDir, err := os.Getwd()
-	if err != nil {
-		appDir = "."
-	}
+	// Use system log directory
+	logsDir := "/var/log/agentless"
 	
 	// Create logs directory if it doesn't exist
-	logsDir := filepath.Join(appDir, "logs")
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		log.Printf("Warning: Could not create logs directory %s: %v", logsDir, err)
 	}
 	
-	// Create or open security log file for fail2ban in app directory
-	securityLogFile := filepath.Join(logsDir, "agentless-security.log")
+	// Create or open security log file for fail2ban
+	securityLogFile := filepath.Join(logsDir, "security.log")
 
 	// Try to create/open the log file
 	logFile, err := os.OpenFile(securityLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)

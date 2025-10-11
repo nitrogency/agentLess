@@ -31,6 +31,56 @@ readonly LOG_LEVEL_ERROR=3
 # Default log level (can be overridden by LOG_LEVEL environment variable)
 CURRENT_LOG_LEVEL="${LOG_LEVEL:-$LOG_LEVEL_INFO}"
 
+# Log file configuration
+readonly LOG_DIR="/var/log/agentless"
+LOG_FILE=""
+LOG_TO_FILE="${LOG_TO_FILE:-true}"  # Enable file logging by default
+
+# Determine script-specific log file
+_init_log_file() {
+    local script_name="$(basename "${BASH_SOURCE[-1]}" .sh)"
+    
+    # Set log file based on script name
+    case "$script_name" in
+        enlist)
+            LOG_FILE="$LOG_DIR/enlist.log"
+            ;;
+        monitoring|start-monitoring)
+            LOG_FILE="$LOG_DIR/monitoring.log"
+            ;;
+        setup-monitoring)
+            LOG_FILE="$LOG_DIR/monitoring-setup.log"
+            ;;
+        clean|cleanup-timer)
+            LOG_FILE="$LOG_DIR/cleanup.log"
+            ;;
+        rotate-secrets|setup-rotation-timer)
+            LOG_FILE="$LOG_DIR/secrets.log"
+            ;;
+        harden)
+            LOG_FILE="$LOG_DIR/harden.log"
+            ;;
+        setup)
+            LOG_FILE="$LOG_DIR/setup.log"
+            ;;
+        *)
+            # Default log file for unknown scripts
+            LOG_FILE="$LOG_DIR/scripts.log"
+            ;;
+    esac
+    
+    # Create log directory if it doesn't exist
+    if [ "$LOG_TO_FILE" = "true" ] && [ ! -d "$LOG_DIR" ]; then
+        # Try to create with sudo if current user can't
+        if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+            if command -v sudo >/dev/null 2>&1; then
+                sudo mkdir -p "$LOG_DIR" 2>/dev/null || true
+                sudo chmod 755 "$LOG_DIR" 2>/dev/null || true
+            fi
+        fi
+    fi
+}
+
 # Enable/disable colored output (auto-detect if terminal supports it)
 if [ -t 1 ] && [ "${TERM:-}" != "dumb" ] && command -v tput >/dev/null 2>&1 && tput colors >/dev/null 2>&1; then
     USE_COLORS="${USE_COLORS:-true}"
@@ -54,19 +104,35 @@ _log() {
     # Generate timestamp
     timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
     
-    # Format message
-    local formatted_message
+    # Format message for console (with colors)
+    local formatted_message_console
     if [ "$USE_COLORS" = "true" ]; then
-        formatted_message="${color}[$(printf "%-5s" "${level_name}")${COLOR_RESET} ${timestamp}] ${symbol} ${message}"
+        formatted_message_console="${color}[$(printf "%-5s" "${level_name}")${COLOR_RESET} ${timestamp}] ${symbol} ${message}"
     else
-        formatted_message="[$(printf "%-5s" "${level_name}") ${timestamp}] ${message}"
+        formatted_message_console="[$(printf "%-5s" "${level_name}") ${timestamp}] ${message}"
     fi
+    
+    # Format message for file (no colors)
+    local formatted_message_file="[$(printf "%-5s" "${level_name}") ${timestamp}] ${message}"
     
     # Output to appropriate stream
     if [ "$level" -ge "$LOG_LEVEL_ERROR" ]; then
-        echo -e "$formatted_message" >&2
+        echo -e "$formatted_message_console" >&2
     else
-        echo -e "$formatted_message"
+        echo -e "$formatted_message_console"
+    fi
+    
+    # Also write to log file if enabled
+    if [ "$LOG_TO_FILE" = "true" ] && [ -n "$LOG_FILE" ]; then
+        # Try to write to log file (redirect stderr to suppress permission errors)
+        if { echo "$formatted_message_file" >> "$LOG_FILE"; } 2>/dev/null; then
+            : # Successfully wrote to file
+        else
+            # If we can't write, try with sudo
+            if command -v sudo >/dev/null 2>&1; then
+                echo "$formatted_message_file" | sudo tee -a "$LOG_FILE" >/dev/null 2>&1 || true
+            fi
+        fi
     fi
 }
 
@@ -241,6 +307,9 @@ get_log_level() {
 
 # Initialize logging from environment
 init_logging() {
+    # Initialize log file
+    _init_log_file
+    
     # Set log level from environment
     if [ -n "${LOG_LEVEL:-}" ]; then
         set_log_level "$LOG_LEVEL"
@@ -249,6 +318,11 @@ init_logging() {
     # Disable colors if requested
     if [ "${NO_COLOR:-}" = "1" ] || [ "${NO_COLOR:-}" = "true" ]; then
         USE_COLORS="false"
+    fi
+    
+    # Disable file logging if requested
+    if [ "${NO_FILE_LOG:-}" = "1" ] || [ "${NO_FILE_LOG:-}" = "true" ]; then
+        LOG_TO_FILE="false"
     fi
     
     # Enable debug logging if DEBUG environment variable is set

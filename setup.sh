@@ -15,16 +15,42 @@ command_exists() {
 }
 
 # Configuration
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="/opt/agentless"
+APP_DIR="$INSTALL_DIR"
 DATA_DIR="$APP_DIR/data"
-LOG_DIR="$APP_DIR/logs"
 SCRIPT_DIR="$APP_DIR/scripts"
+
+# Install to /opt/agentless
+if [ "$SOURCE_DIR" != "$INSTALL_DIR" ]; then
+  log_progress "Installing to system directory: $INSTALL_DIR"
+  
+  # Create installation directory
+  sudo mkdir -p "$INSTALL_DIR"
+  
+  # Copy all files to installation directory
+  log_progress "Copying application files..."
+  sudo cp -r "$SOURCE_DIR"/* "$INSTALL_DIR"/
+  
+  # Set ownership to current user for build process
+  sudo chown -R $(whoami):$(whoami) "$INSTALL_DIR"
+  
+  log_success "Files copied to $INSTALL_DIR"
+else
+  log_info "Already in installation directory: $INSTALL_DIR"
+fi
 
 # Create necessary directories
 log_progress "Creating required directories..."
 mkdir -p "$DATA_DIR"
-mkdir -p "$LOG_DIR"
 mkdir -p "$APP_DIR/tmp"
+mkdir -p "$APP_DIR/bin"
+
+# Create system-wide log directory
+log_progress "Creating system log directory..."
+sudo mkdir -p /var/log/agentless
+sudo chmod 755 /var/log/agentless
+sudo chown $(whoami):$(whoami) /var/log/agentless
 log_success "Directories created successfully"
 
 # Check if running as root
@@ -168,31 +194,83 @@ if [ -z "$GOPATH" ]; then
   fi
 fi
 
-# Create .env file if it doesn't exist
-log_section "Application Configuration"
-if [ ! -f "$APP_DIR/.env" ]; then
-  log_progress "Creating default .env file..."
+# Create systemd environment file for secrets
+log_section "Secret Management"
+SECRETS_DIR="/etc/agentless"
+SECRETS_FILE="$SECRETS_DIR/secrets.env"
+
+if [ ! -f "$SECRETS_FILE" ]; then
+  log_progress "Creating systemd environment file for secrets..."
   
-  # Generate a secure random key for session
+  # Create directory with restricted permissions
+  sudo mkdir -p "$SECRETS_DIR"
+  sudo chmod 700 "$SECRETS_DIR"
+  
+  # Generate a secure random key for session (64 characters)
   SESSION_KEY=$(openssl rand -hex 32)
   
-  # Generate a secure random key for database encryption
+  # Generate a secure random key for database encryption (64 characters)
   DB_KEY=$(openssl rand -hex 32)
   
-  cat > "$APP_DIR/.env" << EOF
-# Agent< Web config
-PORT=8443
-CERT_FILE=certs/server.crt
-KEY_FILE=certs/server.key
-DB_PATH=data/site.db
-DB_ENCRYPTION_KEY=$DB_KEY
+  # Generate INGEST_TOKEN for monitoring scripts (64 characters)
+  INGEST_TOKEN=$(openssl rand -hex 32)
+  
+  # Create secrets file with proper permissions
+  sudo bash -c "cat > '$SECRETS_FILE' << EOF
+# Agent< Secrets - Generated on $(date)
+# Do not share this file or commit to version control
+# Managed by systemd - file permissions: 600 (root:root)
+
+# Session secret for cookie encryption (64 chars)
 SESSION_SECRET=$SESSION_KEY
+
+# Database encryption key (64 chars) - DO NOT CHANGE after first use
+DB_ENCRYPTION_KEY=$DB_KEY
+
+# Ingest token for monitoring script authentication (64 chars)
+INGEST_TOKEN=$INGEST_TOKEN
+
+# Admin credentials (change after first login)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
-EOF
-  log_success "Created .env file with secure random keys"
-  log_warn "Please change the default admin password in the .env file"
+EOF"
+  
+  # Set restrictive permissions (root only)
+  sudo chmod 600 "$SECRETS_FILE"
+  sudo chown root:root "$SECRETS_FILE"
+  
+  log_success "Systemd secrets file created: $SECRETS_FILE"
+  log_info "Secrets are stored securely with 600 permissions (root:root)"
+  log_warn "DB_ENCRYPTION_KEY should NEVER be rotated after first use"
+  log_warn "Please change ADMIN_PASSWORD after first login"
+else
+  log_info "Secrets file already exists: $SECRETS_FILE"
 fi
+
+# Create .env file for non-secret configuration
+log_progress "Creating application configuration file..."
+cat > "$APP_DIR/.env" << EOF
+# AgentLess IDS Configuration
+# Secrets are managed in $SECRETS_FILE
+
+# Server configuration
+PORT=8443
+GO_ENV=production
+
+# SSL/TLS certificates
+CERT_FILE=certs/server.crt
+KEY_FILE=certs/server.key
+
+# Database path
+DB_PATH=data/site.db
+
+# Monitoring configuration
+USE_HTTP_INGEST=true
+INGEST_URL=http://127.0.0.1:8443/internal/audit-logs/bulk
+EOF
+
+chmod 644 "$APP_DIR/.env"
+log_success "Configuration file created: $APP_DIR/.env"
 
 # Initialize the database directory
 if [ ! -f "$DATA_DIR/site.db" ]; then
@@ -264,7 +342,6 @@ if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then
 fi
 
 # Set up HTTPS certificates if they don't exist
-log_section "SSL Certificate Generation"
 CERT_DIR="$APP_DIR/certs"
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   log_progress "Generating self-signed SSL certificates for HTTPS..."
@@ -354,23 +431,46 @@ if [ -d "/etc/systemd/system" ]; then
     sudo rm -f "/etc/systemd/system/agentless.service"
   fi
   
-  # Create new service file
+  # Create new service file with systemd secret management
   sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
 [Unit]
-Description=Agent< Web Application
+Description=AgentLess IDS Web Application
 After=network.target
+Documentation=https://github.com/your-repo/agentless
 
 [Service]
 Type=simple
 User=$(whoami)
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/bash -c 'set -a; source $APP_DIR/.env; set +a; $APP_DIR/agentless'
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal+console
-StandardError=journal+console
+
+# Load secrets from systemd environment file
+EnvironmentFile=$SECRETS_FILE
+
+# Load non-secret configuration
+EnvironmentFile=$APP_DIR/.env
+
+# Additional environment variables
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=GOPATH=$GOPATH
+
+# Execute application
+ExecStart=$APP_DIR/agentless
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# ProtectHome removed - not needed for /opt installation
+ReadWritePaths=$APP_DIR/data $APP_DIR/tmp /var/log/agentless
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agentless-ids
 
 [Install]
 WantedBy=multi-user.target
@@ -397,11 +497,32 @@ EOF"
   fi
 fi
 
-log_section "Setup Complete"
 log_success "Setup completed successfully!"
 log_info ""
+log_success "AgentLess IDS installed to: $INSTALL_DIR"
 log_success "The Agent< IDS service is now running!"
 log_info ""
+
+# Clean up source directory if different from install directory
+if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
+  log_section "Cleanup"
+  log_info "Removing source directory to avoid confusion..."
+  log_warn "Source directory: $SOURCE_DIR"
+  log_info "This will be deleted in 3 seconds. Press Ctrl+C to cancel."
+  sleep 3
+  
+  # Remove source directory
+  if rm -rf "$SOURCE_DIR"; then
+    log_success "Source directory removed successfully"
+    log_info "Only the installation at $INSTALL_DIR remains"
+  else
+    log_warn "Could not remove source directory: $SOURCE_DIR"
+    log_warn "You may need to remove it manually with: rm -rf $SOURCE_DIR"
+  fi
+  log_info ""
+fi
+
+
 log_info "Access the web interface: https://localhost:8443"
 log_warn "Your browser will show a security warning for the self-signed certificate."
 log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
@@ -412,8 +533,19 @@ log_info "  - View logs: sudo journalctl -u agentless -f"
 log_info "  - Restart: sudo systemctl restart agentless"
 log_info "  - Stop: sudo systemctl stop agentless"
 log_info ""
+log_info "Important locations:"
+log_info "  - Installation: $INSTALL_DIR"
+log_info "  - Secrets: /etc/agentless/secrets.env (root only)"
+log_info "  - Config: $INSTALL_DIR/.env"
+log_info "  - Database: $INSTALL_DIR/data/site.db"
+log_info "  - Logs: /var/log/agentless/"
+log_info ""
 log_info "For monitoring setup:"
 log_info "  - Add devices through the web interface"
-log_info "  - Use the enlist.sh script to enroll devices"
-log_info "  - Check logs in the data directory"
+log_info "  - Use: sudo bash $INSTALL_DIR/scripts/enlist.sh"
+log_info "  - Setup monitoring: sudo bash $INSTALL_DIR/scripts/setup-monitoring.sh"
+log_info ""
+log_warn "Note: If you moved from a previous installation, you may need to:"
+log_warn "  - Re-run device enrollment for existing devices"
+log_warn "  - Update any custom scripts with new paths"
 log_info ""
