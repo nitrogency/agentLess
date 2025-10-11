@@ -1,6 +1,13 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/device-form.js"></script>
+<script>
+    // Ruleset data for dynamic architecture switching
+    window.rulesetData = {
+        x64: {{.Data.X64Rulesets}},
+        x32: {{.Data.X32Rulesets}}
+    };
+</script>
 {{end}}
 
 {{define "content"}}
@@ -35,16 +42,6 @@
                 <option value="network" {{if or (eq .FormData.type "network") (and (eq .FormData.type "") (eq .Device.Type "network"))}}selected{{end}}>Network Device</option>
                 <option value="iot" {{if or (eq .FormData.type "iot") (and (eq .FormData.type "") (eq .Device.Type "iot"))}}selected{{end}}>IoT Device</option>
                 <option value="other" {{if or (eq .FormData.type "other") (and (eq .FormData.type "") (eq .Device.Type "other"))}}selected{{end}}>Other</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label for="status">Status:</label>
-            <select class="form-control {{if .ErrorFields.status}}input-error{{end}}" id="status" name="status" required>
-                <option value="" {{if and (eq .FormData.status "") (eq .Device.Status "")}}selected{{end}}>Select status</option>
-                <option value="online" {{if or (eq .FormData.status "online") (and (eq .FormData.status "") (eq .Device.Status "online"))}}selected{{end}}>Online</option>
-                <option value="offline" {{if or (eq .FormData.status "offline") (and (eq .FormData.status "") (eq .Device.Status "offline"))}}selected{{end}}>Offline</option>
-                <option value="maintenance" {{if or (eq .FormData.status "maintenance") (and (eq .FormData.status "") (eq .Device.Status "maintenance"))}}selected{{end}}>Maintenance</option>
             </select>
         </div>
         
@@ -117,9 +114,17 @@
             <div class="form-group">
                 <label for="audit_ruleset">Audit Ruleset:</label>
                 <select id="audit_ruleset" name="audit_ruleset" class="form-control {{if .ErrorFields.audit_ruleset}}input-error{{end}}">
-                    <option value="audit_default.rules" {{if or (eq .FormData.audit_ruleset "audit_default.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_default.rules")) (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset ""))}}selected{{end}}>Default (Balanced)</option>
-                    <option value="audit_high.rules" {{if or (eq .FormData.audit_ruleset "audit_high.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_high.rules"))}}selected{{end}}>High (Comprehensive)</option>
-                    <option value="audit_min.rules" {{if or (eq .FormData.audit_ruleset "audit_min.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_min.rules"))}}selected{{end}}>Minimal (Low Overhead)</option>
+                    {{$currentRuleset := .FormData.audit_ruleset}}
+                    {{if eq $currentRuleset ""}}{{$currentRuleset = .Device.AuditRuleset}}{{end}}
+                    {{$currentArch := .FormData.audit_arch}}
+                    {{if eq $currentArch ""}}{{$currentArch = .Device.AuditArch}}{{end}}
+                    {{$rulesets := .Data.X64Rulesets}}
+                    {{if eq $currentArch "x32"}}
+                        {{$rulesets = .Data.X32Rulesets}}
+                    {{end}}
+                    {{range $rulesets}}
+                        <option value="{{.Filename}}" {{if eq $currentRuleset .Filename}}selected{{end}}>{{.DisplayName}}</option>
+                    {{end}}
                 </select>
                 <p class="help-text" style="color: #856404;">⚠ Changing audit rules requires re-running the enlist script</p>
             </div>
