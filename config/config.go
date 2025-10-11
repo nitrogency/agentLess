@@ -54,7 +54,7 @@ func Load() (*Config, error) {
 	config.Session.Name = getEnv("SESSION_NAME", "session-name")
 	config.Session.Secure = getEnv("SESSION_SECURE", "true") == "true"
 	config.Session.HttpOnly = getEnv("SESSION_HTTP_ONLY", "true") == "true"
-	config.Session.SameSite = getEnv("SESSION_SAME_SITE", "Lax")
+	config.Session.SameSite = getEnv("SESSION_SAME_SITE", "Strict")
 	config.Session.IdleTimeout = 30 * time.Minute
 	config.Session.AbsoluteTimeout = 24 * time.Hour
 

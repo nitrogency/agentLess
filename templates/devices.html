@@ -104,6 +104,7 @@
     <!-- Edit Device Form -->
     <form id="editDeviceForm" method="POST" action="/devices" class="device-form hidden">
         <h3>Edit Device</h3>
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" id="editDeviceId" name="deviceId">
         <div class="form-group">

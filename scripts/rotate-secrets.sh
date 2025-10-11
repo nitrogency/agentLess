@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # AgentLess IDS Secret Rotation Script
-# Rotates SESSION_SECRET and INGEST_TOKEN while preserving DB_ENCRYPTION_KEY
+# Rotates SESSION_SECRET while preserving DB_ENCRYPTION_KEY
 # WARNING: DB_ENCRYPTION_KEY must NEVER be rotated as it encrypts existing data
 
 set -e
@@ -21,7 +21,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 log_section "AgentLess IDS Secret Rotation"
-log_warn "This will rotate SESSION_SECRET and INGEST_TOKEN"
+log_warn "This will rotate SESSION_SECRET"
 log_warn "All active sessions will be invalidated"
 log_info "DB_ENCRYPTION_KEY will NOT be changed (must never change)"
 echo ""
@@ -74,10 +74,9 @@ if [ -z "$OLD_DB_KEY" ]; then
 fi
 
 # Generate new secrets
-log_progress "Generating new secrets..."
+log_progress "Generating new secret..."
 NEW_SESSION_SECRET=$(openssl rand -hex 32)
-NEW_INGEST_TOKEN=$(openssl rand -hex 32)
-log_success "New secrets generated"
+log_success "New secret generated"
 
 # Write new secrets file
 log_progress "Writing new secrets file..."
@@ -91,9 +90,6 @@ SESSION_SECRET=$NEW_SESSION_SECRET
 
 # Database encryption key (PRESERVED - never rotated)
 DB_ENCRYPTION_KEY=$OLD_DB_KEY
-
-# Ingest token for monitoring script authentication (ROTATED)
-INGEST_TOKEN=$NEW_INGEST_TOKEN
 
 # Admin credentials (preserved)
 ADMIN_USERNAME=$OLD_ADMIN_USER
@@ -152,7 +148,6 @@ log_success "Secrets rotated successfully!"
 log_info ""
 log_info "Changes made:"
 log_info "  ✓ SESSION_SECRET: Rotated (all sessions invalidated)"
-log_info "  ✓ INGEST_TOKEN: Rotated (monitoring scripts will use new token)"
 log_info "  ✓ DB_ENCRYPTION_KEY: Preserved (unchanged)"
 log_info ""
 log_info "Backup location: $BACKUP_FILE"
@@ -160,7 +155,6 @@ log_info "Rotation log: $LOG_FILE"
 log_info ""
 log_warn "Action required:"
 log_warn "  - Users must log in again (sessions invalidated)"
-log_warn "  - Monitoring scripts automatically use new INGEST_TOKEN"
 log_info ""
 log_info "To verify service status:"
 log_info "  sudo systemctl status $APP_SERVICE"

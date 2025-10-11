@@ -212,9 +212,6 @@ if [ ! -f "$SECRETS_FILE" ]; then
   # Generate a secure random key for database encryption (64 characters)
   DB_KEY=$(openssl rand -hex 32)
   
-  # Generate INGEST_TOKEN for monitoring scripts (64 characters)
-  INGEST_TOKEN=$(openssl rand -hex 32)
-  
   # Create secrets file with proper permissions
   sudo bash -c "cat > '$SECRETS_FILE' << EOF
 # Agent< Secrets - Generated on $(date)
@@ -226,9 +223,6 @@ SESSION_SECRET=$SESSION_KEY
 
 # Database encryption key (64 chars) - DO NOT CHANGE after first use
 DB_ENCRYPTION_KEY=$DB_KEY
-
-# Ingest token for monitoring script authentication (64 chars)
-INGEST_TOKEN=$INGEST_TOKEN
 
 # Admin credentials (change after first login)
 ADMIN_USERNAME=admin
@@ -264,9 +258,6 @@ KEY_FILE=certs/server.key
 # Database path
 DB_PATH=data/site.db
 
-# Monitoring configuration
-USE_HTTP_INGEST=true
-INGEST_URL=http://127.0.0.1:8443/internal/audit-logs/bulk
 EOF
 
 chmod 644 "$APP_DIR/.env"

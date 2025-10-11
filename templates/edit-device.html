@@ -25,7 +25,7 @@
     {{end}}
     
     <form action="/devices/edit/{{.Device.ID}}" method="post" class="device-form">
-        <input type="hidden" name="form_token" value="{{.FormToken}}">
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         <div class="form-group">
             <label for="name">Device Name:</label>
             <input type="text" class="form-control {{if .ErrorFields.name}}input-error{{end}}" id="name" name="name" value="{{if .FormData.name}}{{.FormData.name}}{{else}}{{.Device.Name}}{{end}}" required>

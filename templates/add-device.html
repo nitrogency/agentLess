@@ -23,7 +23,7 @@
     {{end}}
 
     <form method="POST" action="/devices/add" class="device-form">
-        <input type="hidden" name="form_token" value="{{.FormToken}}">
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         
         <div class="form-group">
             <label for="name">Device Name</label>

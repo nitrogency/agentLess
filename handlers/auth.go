@@ -130,12 +130,21 @@ func LoginHandler(c *gin.Context) {
 			return
 		}
 
-		// Create session
+		// Clear any existing session (prevents session fixation)
+		oldSession := sessions.Default(c)
+		oldSession.Clear()
+		oldSession.Options(sessions.Options{MaxAge: -1})
+		oldSession.Save()
+
+		// Create new session with fresh ID
 		session := sessions.Default(c)
+		now := time.Now().Unix()
+
 		session.Set("username", user.Username)
 		session.Set("user_id", user.ID)
 		session.Set("authenticated", true)
-		session.Set("login_time", time.Now().Format(time.RFC3339))
+		session.Set("login_time", now)
+		session.Set("last_activity", now)
 
 		if err := session.Save(); err != nil {
 			// Log security event for fail2ban
@@ -228,11 +237,26 @@ func SignupHandler(c *gin.Context) {
 			return
 		}
 
-		// Create session
+		// Clear any existing session (prevents session fixation)
+		oldSession := sessions.Default(c)
+		oldSession.Clear()
+		oldSession.Options(sessions.Options{MaxAge: -1})
+		oldSession.Save()
+
+		// Create new session with fresh ID
 		session := sessions.Default(c)
+		now := time.Now().Unix()
+
+		// Get user ID
+		user, _ := db.GetUserByUsername(username)
+		if user != nil {
+			session.Set("user_id", user.ID)
+		}
+
 		session.Set("username", username)
 		session.Set("authenticated", true)
-		session.Set("login_time", time.Now().Format(time.RFC3339))
+		session.Set("login_time", now)
+		session.Set("last_activity", now)
 
 		if err := session.Save(); err != nil {
 			log.Printf("Session save error: %v", err)
