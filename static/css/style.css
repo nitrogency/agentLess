@@ -528,7 +528,7 @@ li {
     background-color: var(--primary);
     color: var(--text-primary);
     font-weight: bold;
-    text-align: center;
+    text-align: left;
 }
 
 .users-table tr:hover {
@@ -592,6 +592,7 @@ li {
     background-color: var(--primary);
     color: var(--text-primary);
     font-weight: bold;
+    text-align: left;
 }
 
 .devices-table tr:hover {
