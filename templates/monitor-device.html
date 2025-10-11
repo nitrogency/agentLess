@@ -7,9 +7,9 @@
     <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
         <h2 style="margin: 0;">Device Monitoring: {{.Device.Name}}</h2>
         {{if .Device.NeedsReenrollment}}
-        <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">⚠ Re-enrollment Required</span>
+        <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">Re-enrollment Required</span>
         {{else}}
-        <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">✓ Config OK</span>
+        <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">Config OK</span>
         {{end}}
     </div>
     
@@ -93,6 +93,45 @@
                     <div class="info-item">
                         <span class="info-label">SSH Port</span>
                         <span class="info-value">{{.Device.SSHPort}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Connection Status
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">ICMP Response</span>
+                        <span class="info-value">
+                            {{if eq .Device.ICMPStatus "ok"}}
+                                <span class="badge badge-success">OK</span>
+                            {{else if eq .Device.ICMPStatus "none"}}
+                                <span class="badge badge-danger">No Response</span>
+                            {{else}}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Connection</span>
+                        <span class="info-value">
+                            {{if eq .Device.SSHStatus "ok"}}
+                                <span class="badge badge-success">OK</span>
+                            {{else if eq .Device.SSHStatus "failed"}}
+                                <span class="badge badge-danger">Failed</span>
+                            {{else}}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Last Ping</span>
+                        <span class="info-value">{{.Device.LastUpdated.Format "2006-01-02 15:04:05"}}</span>
+                    </div>
+                    <div class="info-item">
                     </div>
                 </div>
             </div>

@@ -32,6 +32,8 @@ type Device struct {
 	AuditArch          string // "x32" or "x64"
 	AuditRuleset       string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
 	NeedsReenrollment  bool   // Flag indicating configuration changes require re-running enlist script
+	ICMPStatus         string // "ok", "none", or "unknown"
+	SSHStatus          string // "ok", "failed", or "unknown"
 }
 
 // InitDeviceTable initializes the devices table
@@ -79,6 +81,11 @@ func InitDeviceTable() error {
 	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN needs_reenrollment INTEGER DEFAULT 0`)
 	// Ignore error if column already exists
 
+	// Add status columns for ICMP and SSH checks
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN icmp_status TEXT DEFAULT 'unknown'`)
+	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN ssh_status TEXT DEFAULT 'unknown'`)
+	// Ignore errors if columns already exist
+
 	return nil
 }
 
@@ -125,7 +132,8 @@ func GetAllDevices() ([]Device, error) {
 		SELECT id, name, type, status, last_updated, 
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, setup_user, setup_password,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment,
+		       COALESCE(icmp_status, 'unknown'), COALESCE(ssh_status, 'unknown')
 		FROM devices
 		ORDER BY id DESC
 	`)
@@ -145,6 +153,7 @@ func GetAllDevices() ([]Device, error) {
 			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 			&sshGroup, &setupUser, &setupPassword,
 			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
+			&d.ICMPStatus, &d.SSHStatus,
 		)
 		if err != nil {
 			return nil, err
@@ -222,7 +231,8 @@ func GetDeviceByID(id int64) (*Device, error) {
 		SELECT id, name, type, status, last_updated,
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, setup_user, setup_password,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
+		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment,
+		       COALESCE(icmp_status, 'unknown'), COALESCE(ssh_status, 'unknown')
 		FROM devices
 		WHERE id = ?
 	`, id).Scan(
@@ -230,6 +240,7 @@ func GetDeviceByID(id int64) (*Device, error) {
 		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 		&sshGroup, &setupUser, &setupPassword,
 		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
+		&d.ICMPStatus, &d.SSHStatus,
 	)
 
 	if err == sql.ErrNoRows {
@@ -412,11 +423,47 @@ func CheckDeviceStatus(ipAddress string) (bool, error) {
 	return err == nil, nil
 }
 
+// CheckSSHConnection attempts to establish an SSH connection to verify connectivity
+func CheckSSHConnection(ipAddress, sshUser, sshKeyPath string, sshPort int) (bool, error) {
+	// Validate inputs
+	if net.ParseIP(ipAddress) == nil {
+		return false, errors.New("invalid IP address format")
+	}
+	if sshUser == "" || sshKeyPath == "" {
+		return false, errors.New("SSH user and key path are required")
+	}
+
+	// Build SSH command with timeout and connection options
+	// We use SSH's built-in timeout and connection test
+	portStr := fmt.Sprintf("%d", sshPort)
+	cmd := exec.Command(
+		"ssh",
+		"-i", sshKeyPath,
+		"-p", portStr,
+		"-o", "ConnectTimeout=5",
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		fmt.Sprintf("%s@%s", sshUser, ipAddress),
+		"exit 0",
+	)
+
+	// Capture output but don't display it
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	err := cmd.Run()
+
+	// If the command executed successfully, SSH connection is working
+	return err == nil, nil
+}
+
 // UpdateAllDeviceStatuses checks and updates the status of all devices with IP addresses
 func UpdateAllDeviceStatuses() error {
-	// Get all devices with IP addresses
+	// Get all devices with IP addresses and SSH configuration
 	rows, err := db.Query(`
-		SELECT id, ip_address 
+		SELECT id, ip_address, ssh_user, ssh_key_path, ssh_port
 		FROM devices 
 		WHERE ip_address IS NOT NULL AND ip_address != '' AND status != 'deleted'
 	`)
@@ -428,32 +475,66 @@ func UpdateAllDeviceStatuses() error {
 	for rows.Next() {
 		var id int64
 		var ipAddress string
+		var sshUser, sshKeyPath sql.NullString
+		var sshPort sql.NullInt64
 
-		if err := rows.Scan(&id, &ipAddress); err != nil {
+		if err := rows.Scan(&id, &ipAddress, &sshUser, &sshKeyPath, &sshPort); err != nil {
 			return err
 		}
 
-		// Check if the device is online
-		online, err := CheckDeviceStatus(ipAddress)
-		if err != nil {
-			// Log the error but continue with other devices
-			log.Printf("Error checking status for device %d: %v", id, err)
-			continue
+		// Check ICMP (ping) status
+		icmpStatus := "none"
+		if pingOk, err := CheckDeviceStatus(ipAddress); err == nil && pingOk {
+			icmpStatus = "ok"
+		} else if err != nil {
+			log.Printf("Error checking ICMP for device %d: %v", id, err)
+			icmpStatus = "unknown"
 		}
 
-		// Update the device status
+		// Check SSH status if SSH is configured
+		sshStatus := "unknown"
+		if sshUser.Valid && sshKeyPath.Valid && sshUser.String != "" && sshKeyPath.String != "" {
+			port := 22
+			if sshPort.Valid {
+				port = int(sshPort.Int64)
+			}
+			if sshOk, err := CheckSSHConnection(ipAddress, sshUser.String, sshKeyPath.String, port); err == nil && sshOk {
+				sshStatus = "ok"
+			} else {
+				if err != nil {
+					log.Printf("Error checking SSH for device %d: %v", id, err)
+				}
+				sshStatus = "failed"
+			}
+		}
+
+		// Determine overall device status based on SSH (primary) or ICMP (fallback)
 		status := "offline"
-		if online {
+		if sshStatus == "ok" {
+			status = "online"
+		} else if sshStatus == "unknown" && icmpStatus == "ok" {
+			// If SSH not configured, fall back to ICMP
 			status = "online"
 		}
 
-		if err := UpdateDeviceStatus(id, status); err != nil {
+		// Update the device status with both ICMP and SSH status
+		if err := UpdateDeviceStatusWithDetails(id, status, icmpStatus, sshStatus); err != nil {
 			// Log the error but continue with other devices
 			log.Printf("Error updating status for device %d: %v", id, err)
 		}
 	}
 
 	return rows.Err()
+}
+
+// UpdateDeviceStatusWithDetails updates device status along with ICMP and SSH status details
+func UpdateDeviceStatusWithDetails(id int64, status, icmpStatus, sshStatus string) error {
+	_, err := db.Exec(`
+		UPDATE devices 
+		SET status = ?, icmp_status = ?, ssh_status = ?, last_updated = CURRENT_TIMESTAMP
+		WHERE id = ? AND status != 'deleted'
+	`, status, icmpStatus, sshStatus, id)
+	return err
 }
 
 // DeleteDevice performs a HARD delete of a device and its related data.

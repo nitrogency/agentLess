@@ -24,7 +24,7 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Status</th>
+                <th>SSH Status</th>
                 <th>IP Address</th>
                 <th>OS</th>
                 <th>Ruleset</th>
@@ -40,7 +40,17 @@
                 <td>{{.ID}}</td>
                 <td>{{.Name}}</td>
                 <td>{{.Type}}</td>
-                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td>
+                    {{if eq .SSHStatus "ok"}}
+                        <span class="badge badge-success" title="SSH connection: OK">Connected</span>
+                    {{else if eq .SSHStatus "failed"}}
+                        <span class="badge badge-danger" title="SSH connection: Failed">Failed</span>
+                    {{else if eq .SSHStatus "unknown"}}
+                        <span class="badge badge-secondary" title="SSH not configured">Unknown</span>
+                    {{else}}
+                        <span class="badge badge-secondary">{{.SSHStatus}}</span>
+                    {{end}}
+                </td>
                 <td>{{if .IPAddress}}{{.IPAddress}}{{if ne .SSHPort 22}}:{{.SSHPort}}{{end}}{{else}}-{{end}}</td>
                 <td>
                     {{if eq .OSType "linux"}}
