@@ -70,9 +70,9 @@
                 <td>{{.LastUpdated.Format "2006-01-02 15:04:05"}}</td>
                 <td>
                     {{if .NeedsReenrollment}}
-                    <span class="badge badge-warning" title="Configuration changed - re-enrollment required">⚠ Re-enroll</span>
+                    <span class="badge badge-warning" title="Configuration changed - re-enrollment required">Changed</span>
                     {{else}}
-                    <span class="badge badge-success" title="Configuration up-to-date">✓ OK</span>
+                    <span class="badge badge-success" title="Configuration up-to-date">OK</span>
                     {{end}}
                 </td>
                 <td>

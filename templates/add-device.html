@@ -71,36 +71,18 @@
             
             <div class="form-group">
                 <label for="ssh_user">Monitoring Username</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" placeholder="e.g. ids-monitor" required>
             </div>
             
             <div class="form-group">
                 <label for="ssh_group">Monitoring Group</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random Monitoring Username
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" placeholder="e.g. ids-monitor" required>
             </div>
             
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /home/user/.ssh/ids_key" {{if not .RandomKey}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /home/user/.ssh/ids_key" required>
                 <p class="help-text">This is the private SSH key that will be used for monitoring connections after the initial SSH connection.</p>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
             </div>
             
             <div class="form-group">

@@ -4,7 +4,14 @@
 
 {{define "content"}}
 <div class="container-wide">
-    <h2>Device Monitoring: {{.Device.Name}}</h2>
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Device Monitoring: {{.Device.Name}}</h2>
+        {{if .Device.NeedsReenrollment}}
+        <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">⚠ Re-enrollment Required</span>
+        {{else}}
+        <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">✓ Config OK</span>
+        {{end}}
+    </div>
     
     {{if .Error}}
     <div class="error-message">{{.Error}}</div>
@@ -12,6 +19,19 @@
     
     {{if .Success}}
     <div class="success-message">{{.Success}}</div>
+    {{end}}
+    
+    {{if .Device.NeedsReenrollment}}
+    <div class="alert alert-warning" style="margin-bottom: 20px;">
+        <strong>Configuration Update Required</strong><br>
+        This device has configuration changes that require re-enrollment. Please run the enlist script to apply changes:<br><br>
+        {{if eq .Device.OSType "linux"}}
+        <pre class="code-block" style="margin: 10px 0 0 0;">./scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+        {{else if eq .Device.OSType "windows"}}
+        <p style="margin: 10px 0 0 0;">On the Windows target, run in PowerShell as Administrator:<br>
+        <code>Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process; .\enlist-windows.ps1</code></p>
+        {{end}}
+    </div>
     {{end}}
 
     <div class="device-config-card">
@@ -151,17 +171,10 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
                 <li><strong>Run the enrollment script from your terminal:</strong>
-                    <pre class="code-block">./scripts/linux/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+                    <pre class="code-block">./scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
                 </li>
             </ol>
             {{end}}
-            
-            <div class="alert alert-info mt-3">
-                <h4>Important!</h4>
-                <p>After enrolling the device, run the monitoring setup script to start automatic monitoring (may require sudo):</p>
-                <pre class="code-block">./scripts/setup-monitoring.sh</pre>
-                <p>This will create a systemd service for each device and start log collection automatically.</p>
-            </div>
         </div>
     </div>
 

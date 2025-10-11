@@ -190,17 +190,6 @@ add_user_to_group() {
     fi
 }
 
-# Generate random name from wordlists
-generate_random_name() {
-    local adjectives=("silent" "hidden" "secure" "vigilant" "watchful" "alert" "sentinel" "guardian" "monitor" "observer")
-    local nouns=("hawk" "eagle" "falcon" "owl" "raven" "phoenix" "griffin" "dragon" "tiger" "lion")
-    
-    local adj_index=$((RANDOM % ${#adjectives[@]}))
-    local noun_index=$((RANDOM % ${#nouns[@]}))
-    
-    echo "${adjectives[$adj_index]}_${nouns[$noun_index]}"
-}
-
 # Cleanup function for trap handling
 cleanup_temp_files() {
     if [ -n "${TEMP_FILES:-}" ]; then

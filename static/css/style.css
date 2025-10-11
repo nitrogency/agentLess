@@ -349,6 +349,30 @@ tbody tr:nth-child(odd) {
     margin-bottom: 1rem;
 }
 
+/* Alert styles (similar to messages but for persistent notifications) */
+.alert {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+}
+
+.alert-warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+    color: #ffc107;
+}
+
+.alert-info {
+    background-color: rgba(52, 152, 219, 0.1);
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.alert strong {
+    font-weight: 600;
+}
+
 /* Footer */
 footer {
     background-color: var(--secondary-dark);
@@ -716,7 +740,7 @@ li {
 
 /* Status badges */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 400; font-size: .85em; }
-.badge-online { background: #13301d; color: #28a745; border: 1px solid #28a745; }
+.badge-online { background: rgba(40, 167, 69, 0.15); color: #28a745; border: 1px solid #28a745; }
 .badge-offline { background: #3a1318; color: #b01c2e; border: 1px solid #b01c2e; }
 .badge-maintenance { background: #3a2e12; color: #ffc107; border: 1px solid #ffc107; }
 .badge-info { background: rgba(52, 152, 219, 0.15); color: #3498db; border: 1px solid #3498db; }

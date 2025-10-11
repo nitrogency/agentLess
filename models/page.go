@@ -15,8 +15,6 @@ type PageData struct {
 	Devices             []db.Device
 	User                *db.User
 	Device              db.Device
-	RandomUser          bool
-	RandomKey           bool
 	FormToken           string
 	FormData            map[string]string
 	ErrorFields         map[string]bool

@@ -25,8 +25,6 @@ type Device struct {
 	OSInfo             string
 	OSType             string // "linux" or "windows"
 	SSHGroup           string
-	RandomUser         bool
-	RandomKey          bool
 	SetupUser          string
 	SetupPassword      string
 	FirewallMode       string // "disabled", "ssh_all", "ssh_restricted"
@@ -53,8 +51,6 @@ func InitDeviceTable() error {
 			os_info TEXT,
 			os_type TEXT DEFAULT 'linux',
 			ssh_group TEXT,
-			random_user INTEGER DEFAULT 0,
-			random_key INTEGER DEFAULT 0,
 			setup_user TEXT DEFAULT 'root',
 			setup_password TEXT,
 			firewall_mode TEXT DEFAULT 'disabled',
@@ -96,22 +92,22 @@ func CreateDevice(name, deviceType string) error {
 }
 
 // CreateMonitoredDevice creates a new device with SSH monitoring details
-func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "x64", "audit_default.rules")
+func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, setupUser, setupPassword string) error {
+	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, setupPassword, "x64", "audit_default.rules")
 }
 
 // CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
-func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string) error {
+func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, setupUser, setupPassword, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
 		INSERT INTO devices (
 			name, type, status, last_updated, 
 			ip_address, ssh_user, ssh_key_path, ssh_port, 
-			hostname, os_info, os_type, ssh_group, random_user, random_key,
+			hostname, os_info, os_type, ssh_group,
 			setup_user, setup_password, firewall_mode, firewall_allowed_ips,
 			audit_arch, audit_ruleset
 		)
-		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disabled', '', ?, ?)
-	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, auditArch, auditRuleset)
+		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disabled', '', ?, ?)
+	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, auditArch, auditRuleset)
 	return err
 }
 
@@ -128,7 +124,7 @@ func GetAllDevices() ([]Device, error) {
 	rows, err := db.Query(`
 		SELECT id, name, type, status, last_updated, 
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
-		       ssh_group, random_user, random_key, setup_user, setup_password,
+		       ssh_group, setup_user, setup_password,
 		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
 		FROM devices
 		ORDER BY id DESC
@@ -142,12 +138,12 @@ func GetAllDevices() ([]Device, error) {
 	for rows.Next() {
 		var d Device
 		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
-		var sshPort, randomUser, randomKey, needsReenrollment sql.NullInt64
+		var sshPort, needsReenrollment sql.NullInt64
 
 		err := rows.Scan(
 			&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
-			&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
+			&sshGroup, &setupUser, &setupPassword,
 			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
 		)
 		if err != nil {
@@ -182,12 +178,6 @@ func GetAllDevices() ([]Device, error) {
 		}
 		if sshGroup.Valid {
 			d.SSHGroup = sshGroup.String
-		}
-		if randomUser.Valid {
-			d.RandomUser = randomUser.Int64 == 1
-		}
-		if randomKey.Valid {
-			d.RandomKey = randomKey.Int64 == 1
 		}
 		if setupUser.Valid {
 			d.SetupUser = setupUser.String
@@ -226,19 +216,19 @@ func GetAllDevices() ([]Device, error) {
 func GetDeviceByID(id int64) (*Device, error) {
 	var d Device
 	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
-	var sshPort, randomUser, randomKey, needsReenrollment sql.NullInt64
+	var sshPort, needsReenrollment sql.NullInt64
 
 	err := db.QueryRow(`
 		SELECT id, name, type, status, last_updated,
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
-		       ssh_group, random_user, random_key, setup_user, setup_password,
+		       ssh_group, setup_user, setup_password,
 		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment
 		FROM devices
 		WHERE id = ?
 	`, id).Scan(
 		&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
-		&sshGroup, &randomUser, &randomKey, &setupUser, &setupPassword,
+		&sshGroup, &setupUser, &setupPassword,
 		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
 	)
 
@@ -277,12 +267,6 @@ func GetDeviceByID(id int64) (*Device, error) {
 	}
 	if sshGroup.Valid {
 		d.SSHGroup = sshGroup.String
-	}
-	if randomUser.Valid {
-		d.RandomUser = randomUser.Int64 == 1
-	}
-	if randomKey.Valid {
-		d.RandomKey = randomKey.Int64 == 1
 	}
 	if setupUser.Valid {
 		d.SetupUser = setupUser.String
@@ -362,26 +346,26 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 }
 
 // UpdateMonitoredDevice updates a monitored device's information
-func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword string) error {
-	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, randomUser, randomKey, setupUser, setupPassword, "x64", "audit_default.rules")
+func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, setupUser, setupPassword string) error {
+	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, setupPassword, "x64", "audit_default.rules")
 }
 
 // UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
-func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string) error {
-	return UpdateMonitoredDeviceWithOSAndReenrollment(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, randomUser, randomKey, setupUser, setupPassword, auditArch, auditRuleset, false)
+func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, setupPassword, auditArch, auditRuleset string) error {
+	return UpdateMonitoredDeviceWithOSAndReenrollment(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, auditArch, auditRuleset, false)
 }
 
 // UpdateMonitoredDeviceWithOSAndReenrollment updates a monitored device's information including OS type and reenrollment flag
-func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, randomUser bool, randomKey bool, setupUser, setupPassword, auditArch, auditRuleset string, needsReenrollment bool) error {
+func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, setupPassword, auditArch, auditRuleset string, needsReenrollment bool) error {
 	_, err := db.Exec(`
 		UPDATE devices
 		SET name = ?, type = ?, status = ?, last_updated = CURRENT_TIMESTAMP,
 		    ip_address = ?, ssh_user = ?, ssh_key_path = ?, ssh_port = ?,
-		    hostname = ?, os_info = ?, os_type = ?, ssh_group = ?, random_user = ?, random_key = ?,
+		    hostname = ?, os_info = ?, os_type = ?, ssh_group = ?,
 		    setup_user = ?, setup_password = ?,
 		    audit_arch = ?, audit_ruleset = ?, needs_reenrollment = ?
 		WHERE id = ?
-	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, boolToInt(randomUser), boolToInt(randomKey), setupUser, setupPassword, auditArch, auditRuleset, boolToInt(needsReenrollment), id)
+	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, auditArch, auditRuleset, boolToInt(needsReenrollment), id)
 	return err
 }
 

@@ -24,13 +24,10 @@ LOGIN_USER="${LOGIN_USER:-$(get_config login_user)}"
 
 # Initialize optional variables
 TARGET_IP=""
-RANDOM_NAMES=false
-RANDOM_KEY=false
 USE_SUDO_PASSWORD="$PASSWORD_SUDO"
 SUDO_PASSWORD=""
 
-# Note: generate_random_name(), execute_sqlite(), and command_exists() 
-# are now provided by the shared libraries
+# Note: execute_sqlite() and command_exists() are provided by the shared libraries
 
 log_section "Linux device enrollment"
 
@@ -43,8 +40,6 @@ usage() {
     echo "  -k, --key KEY_PATH      Path to SSH key for login and monitoring (default: $SSH_KEY_PATH)"
     echo "  -l, --login USERNAME    Username to login with (default: root)"
     echo "  -p, --port PORT         SSH port (default: 22)"
-    echo "  -r, --random            Generate random user and group names"
-    echo "  -R, --random-key        Generate random SSH key if it doesn't exist"
     echo "  -h, --help              Display this help message"
     exit 1
 }
@@ -68,14 +63,6 @@ while [[ $# -gt 0 ]]; do
             SSH_PORT="$2"
             shift 2
             ;;
-        -r|--random)
-            RANDOM_NAMES=true
-            shift
-            ;;
-        -R|--random-key)
-            RANDOM_KEY=true
-            shift
-            ;;
         -l|--login)
             LOGIN_USER="$2"
             shift 2
@@ -94,14 +81,6 @@ done
 if [ -z "$TARGET_IP" ]; then
     log_error "Target IP address is required"
     usage
-fi
-
-# Generate random names if requested
-if [ "$RANDOM_NAMES" = true ]; then
-    REMOTE_USER=$(generate_random_name)
-    REMOTE_GROUP=$(generate_random_name)
-    log_info "Generated random user: $REMOTE_USER"
-    log_info "Generated random group: $REMOTE_GROUP"
 fi
 
 # Validate SSH key
@@ -706,33 +685,6 @@ update_device_in_database() {
     return 0
 }
 
-# Clear any audit logs in the database for this device
-clear_device_audit_logs() {
-    log_progress "Clearing any existing audit logs for the device from the database..."
-    
-    # Get the correct database path
-    local DB_PATH="$(get_config db_path)"
-    # Prepend repo root if path is relative
-    [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
-    
-    # Find the device ID by IP address
-    DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH")
-    
-    if [ -z "$DEVICE_ID" ]; then
-        log_warn "Device with IP $TARGET_IP not found in the database"
-        return 1
-    fi
-    
-    # Count how many logs will be deleted
-    LOG_COUNT=$(execute_sqlite "SELECT COUNT(*) FROM audit_logs WHERE device_id = $DEVICE_ID;" "$DB_PATH")
-    
-    # Delete all audit logs for this device
-    execute_sqlite "DELETE FROM audit_logs WHERE device_id = $DEVICE_ID;" "$DB_PATH"
-    
-    log_success "Cleared $LOG_COUNT audit logs for device ID: $DEVICE_ID"
-    return 0
-}
-
 register_with_server() {
     log_progress "Registering device with IDS server..."
     
@@ -766,8 +718,41 @@ log_info "SSH Key: $SSH_KEY_PATH"
 setup_remote_device
 register_with_server
 
-# Clear any audit logs generated during setup
-clear_device_audit_logs
+# Ensure monitoring service is configured and running for this device
+# Determine device ID from database to target the right service instance
+DB_PATH="$(get_config db_path)"
+[[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
+DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
+
+if [ -n "$DEVICE_ID" ]; then
+    SERVICE_NAME="agentless-monitor@${DEVICE_ID}.service"
+    SETUP_MONITORING_SCRIPT="$SCRIPT_DIR/../setup-monitoring.sh"
+
+    # If the service instance is already enabled or active, restart it to pick up changes
+    if systemctl is-enabled "$SERVICE_NAME" >/dev/null 2>&1 || systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        log_info "Restarting monitoring service: $SERVICE_NAME"
+        if sudo systemctl restart "$SERVICE_NAME"; then
+            log_success "Monitoring service restarted"
+        else
+            log_warn "Failed to restart $SERVICE_NAME"
+        fi
+    else
+        # Otherwise, run setup-monitoring.sh to create/enable the service
+        if [ -f "$SETUP_MONITORING_SCRIPT" ]; then
+            log_info "Monitoring service not found; running setup-monitoring.sh"
+            if sudo bash "$SETUP_MONITORING_SCRIPT"; then
+                log_success "Monitoring services configured"
+            else
+                log_warn "setup-monitoring.sh encountered errors"
+            fi
+        else
+            log_warn "setup-monitoring.sh not found at $SETUP_MONITORING_SCRIPT"
+            log_info "You may need to run it manually to start monitoring services."
+        fi
+    fi
+else
+    log_warn "Could not determine device ID; skipping monitoring service restart/setup"
+fi
 
 log_success "Device enrollment completed successfully!"
 log_info "You can now monitor this device through your IDS dashboard."
@@ -776,6 +761,4 @@ log_info "SSH User: $REMOTE_USER"
 log_info "SSH Group: $REMOTE_GROUP"
 log_info "SSH Key: $SSH_KEY_PATH"
 
-# Note: Run setup-monitoring.sh separately to configure systemd services
-log_info ""
-log_info "To start monitoring, run: sudo bash scripts/setup-monitoring.sh"
+# Note: setup-monitoring.sh will be run automatically if needed above

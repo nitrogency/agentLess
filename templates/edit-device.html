@@ -5,7 +5,9 @@
 
 {{define "content"}}
 <div class="devices-container">
-    <h2>Edit Device</h2>
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Edit Device</h2>
+    </div>
     
     {{if .Error}}
     <div class="error-message">{{.Error}}</div>
@@ -76,41 +78,26 @@
             
             <div class="form-group">
                 <label for="ssh_user">SSH Username:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{if .FormData.ssh_user}}{{.FormData.ssh_user}}{{else}}{{.Device.SSHUser}}{{end}}" placeholder="e.g. monitor-user" {{if not .RandomUser}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{if .FormData.ssh_user}}{{.FormData.ssh_user}}{{else}}{{.Device.SSHUser}}{{end}}" placeholder="e.g. monitor-user" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_group">SSH Group:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{if .FormData.ssh_group}}{{.FormData.ssh_group}}{{else}}{{.Device.SSHGroup}}{{end}}" placeholder="e.g. monitor-group" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random SSH Username
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{if .FormData.ssh_group}}{{.FormData.ssh_group}}{{else}}{{.Device.SSHGroup}}{{end}}" placeholder="e.g. monitor-group" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" {{if not .RandomKey}}required{{end}}>
-                <p class="help-text">Using system default SSH key. The public key must be manually copied to the target device.</p>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_port">SSH Port (default: 22):</label>
                 <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}{{.Device.SSHPort}}{{end}}" min="1" max="65535" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
         </fieldset>
         
@@ -124,7 +111,7 @@
                     <option value="x64" {{if or (eq .FormData.audit_arch "x64") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x64")) (and (eq .FormData.audit_arch "") (eq .Device.AuditArch ""))}}selected{{end}}>64-bit (x64)</option>
                     <option value="x32" {{if or (eq .FormData.audit_arch "x32") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x32"))}}selected{{end}}>32-bit (x32)</option>
                 </select>
-                <p class="help-text">Select the CPU architecture of the target device</p>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
@@ -134,28 +121,7 @@
                     <option value="audit_high.rules" {{if or (eq .FormData.audit_ruleset "audit_high.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_high.rules"))}}selected{{end}}>High (Comprehensive)</option>
                     <option value="audit_min.rules" {{if or (eq .FormData.audit_ruleset "audit_min.rules") (and (eq .FormData.audit_ruleset "") (eq .Device.AuditRuleset "audit_min.rules"))}}selected{{end}}>Minimal (Low Overhead)</option>
                 </select>
-                <p class="help-text">Select the audit rule profile based on your security and performance needs</p>
-            </div>
-        </fieldset>
-        
-        <fieldset class="form-section">
-            <legend>Firewall Configuration</legend>
-            <p class="help-text">Configure firewall rules for the target device</p>
-            
-            <div class="form-group">
-                <label for="firewall_mode">Firewall Mode:</label>
-                <select id="firewall_mode" name="firewall_mode" class="form-control {{if .ErrorFields.firewall_mode}}input-error{{end}}">
-                    <option value="disabled" {{if or (eq .FormData.firewall_mode "disabled") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "disabled")) (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode ""))}}selected{{end}}>Disabled (Allow all inbound traffic)</option>
-                    <option value="ssh_all" {{if or (eq .FormData.firewall_mode "ssh_all") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "ssh_all"))}}selected{{end}}>SSH Only (Allow SSH from any IP)</option>
-                    <option value="ssh_restricted" {{if or (eq .FormData.firewall_mode "ssh_restricted") (and (eq .FormData.firewall_mode "") (eq .Device.FirewallMode "ssh_restricted"))}}selected{{end}}>SSH Restricted (Allow SSH from specific IPs only)</option>
-                </select>
-                <p class="help-text">Select the firewall configuration mode for the device</p>
-            </div>
-            
-            <div class="form-group" id="firewall_allowed_ips_group" style="display: none;">
-                <label for="firewall_allowed_ips">Allowed IP Addresses (Optional):</label>
-                <input type="text" class="form-control {{if .ErrorFields.firewall_allowed_ips}}input-error{{end}}" id="firewall_allowed_ips" name="firewall_allowed_ips" value="{{if .FormData.firewall_allowed_ips}}{{.FormData.firewall_allowed_ips}}{{else}}{{.Device.FirewallAllowedIPs}}{{end}}" placeholder="e.g. 192.168.1.100, 10.0.0.5">
-                <p class="help-text">Comma-separated list of additional IP addresses allowed to SSH to this device. Leave empty to allow only the monitoring server.</p>
+                <p class="help-text" style="color: #856404;">⚠ Changing audit rules requires re-running the enlist script</p>
             </div>
         </fieldset>
         
