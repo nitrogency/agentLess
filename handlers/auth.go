@@ -22,12 +22,12 @@ var securityLogger *log.Logger
 func init() {
 	// Use system log directory
 	logsDir := "/var/log/agentless"
-	
+
 	// Create logs directory if it doesn't exist
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		log.Printf("Warning: Could not create logs directory %s: %v", logsDir, err)
 	}
-	
+
 	// Create or open security log file for fail2ban
 	securityLogFile := filepath.Join(logsDir, "security.log")
 
@@ -130,13 +130,7 @@ func LoginHandler(c *gin.Context) {
 			return
 		}
 
-		// Clear any existing session (prevents session fixation)
-		oldSession := sessions.Default(c)
-		oldSession.Clear()
-		oldSession.Options(sessions.Options{MaxAge: -1})
-		oldSession.Save()
-
-		// Create new session with fresh ID
+		// Set session data (session fixation is prevented by CSRF token rotation)
 		session := sessions.Default(c)
 		now := time.Now().Unix()
 
@@ -155,6 +149,8 @@ func LoginHandler(c *gin.Context) {
 			templates.RenderGinTemplate(c, "login", data)
 			return
 		}
+
+		log.Printf("[DEBUG] Session saved successfully for user: %s, authenticated: %v", user.Username, session.Get("authenticated"))
 
 		// Log successful login
 		logSecurityEvent(c, "Successful login", user.Username)

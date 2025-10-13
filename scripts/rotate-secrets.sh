@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# AgentLess IDS Secret Rotation Script
+# Agent< Secret Rotation Script
 # Rotates SESSION_SECRET while preserving DB_ENCRYPTION_KEY
-# WARNING: DB_ENCRYPTION_KEY must NEVER be rotated as it encrypts existing data
 
 set -e
 
@@ -20,7 +19,7 @@ if [ "$EUID" -ne 0 ]; then
   handle_error "This script must be run as root or with sudo" 1
 fi
 
-log_section "AgentLess IDS Secret Rotation"
+log_section "Agent< Secret Rotation"
 log_warn "This will rotate SESSION_SECRET"
 log_warn "All active sessions will be invalidated"
 log_info "DB_ENCRYPTION_KEY will NOT be changed (must never change)"
@@ -64,7 +63,7 @@ log_success "Backup created"
 log_progress "Reading current configuration..."
 source "$SECRETS_FILE"
 
-# Store DB_ENCRYPTION_KEY and ADMIN credentials (DO NOT ROTATE)
+# Store DB_ENCRYPTION_KEY and ADMIN credentials
 OLD_DB_KEY="$DB_ENCRYPTION_KEY"
 OLD_ADMIN_USER="$ADMIN_USERNAME"
 OLD_ADMIN_PASS="$ADMIN_PASSWORD"
@@ -81,7 +80,7 @@ log_success "New secret generated"
 # Write new secrets file
 log_progress "Writing new secrets file..."
 cat > "$SECRETS_FILE" << EOF
-# AgentLess IDS Secrets - Rotated on $(date)
+# Agent< Secrets - Rotated on $(date)
 # Previous backup: $BACKUP_FILE
 # Do not share this file or commit to version control
 
@@ -104,7 +103,7 @@ log_success "New secrets file written"
 log_section "Restarting Services"
 
 # Restart main application
-log_progress "Restarting AgentLess IDS service..."
+log_progress "Restarting Agent< service..."
 if systemctl is-active --quiet "$APP_SERVICE"; then
   systemctl restart "$APP_SERVICE"
   sleep 2

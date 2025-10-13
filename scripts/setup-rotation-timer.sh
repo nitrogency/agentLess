@@ -15,7 +15,7 @@ ROTATION_SCRIPT="$REPO_ROOT/scripts/rotate-secrets.sh"
 ROTATION_SERVICE="/etc/systemd/system/agentless-rotate-secrets.service"
 ROTATION_TIMER="/etc/systemd/system/agentless-rotate-secrets.timer"
 
-log_section "AgentLess IDS Secret Rotation Timer Setup"
+log_section "Agent< Secret Rotation Timer Setup"
 
 # Check if running as root
 check_root
@@ -38,8 +38,8 @@ fi
 log_progress "Creating rotation service..."
 sudo tee "$ROTATION_SERVICE" > /dev/null << EOF
 [Unit]
-Description=AgentLess IDS Secret Rotation Service
-Documentation=https://github.com/your-repo/agentless
+Description=Agent< Secret Rotation Service
+Documentation=https://github.com/nitrogency/agentLess
 
 [Service]
 Type=oneshot
@@ -62,8 +62,8 @@ log_success "Service created: $ROTATION_SERVICE"
 log_progress "Creating rotation timer (runs every 90 days)..."
 sudo tee "$ROTATION_TIMER" > /dev/null << EOF
 [Unit]
-Description=AgentLess IDS Secret Rotation Timer
-Documentation=https://github.com/your-repo/agentless
+Description=Agent< Secret Rotation Timer
+Documentation=https://github.com/nitrogency/agentLess
 Requires=agentless-rotate-secrets.service
 
 [Timer]

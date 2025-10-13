@@ -12,6 +12,12 @@ source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/common.sh"
 
+# Load database encryption key
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+fi
+
 PROJECT_ROOT="$(get_repo_root)"
 DB_PATH="$PROJECT_ROOT/$(get_config db_path)"
 

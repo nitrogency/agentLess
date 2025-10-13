@@ -12,6 +12,13 @@ source "$SCRIPT_DIR/../lib/logging.sh"
 source "$SCRIPT_DIR/../lib/config.sh"
 source "$SCRIPT_DIR/../lib/common.sh"
 
+# Load database encryption key and export for Go binary
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+    export DB_ENCRYPTION_KEY
+fi
+
 # Configuration
 PROJECT_ROOT="$(get_repo_root)"
 GO_MONITOR="$PROJECT_ROOT/scripts/linux/monitoring.go"

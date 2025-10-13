@@ -52,13 +52,49 @@ execute_sqlite() {
         return 1
     fi
     
-    # Use SQLCipher with the encryption key
-    # Suppress output for INSERT/UPDATE operations, preserve for SELECT
+    # Use SQLCipher with the encryption key and timeout
     if [[ "$query" =~ ^[[:space:]]*(INSERT|UPDATE|DELETE) ]]; then
-        sqlcipher "$db_path" "PRAGMA key = '$encryption_key'; $query" > /dev/null 2>&1
+        local result
+        result=$(printf "%s\n%s\n" "PRAGMA key = '$encryption_key';" "$query" | timeout 10 sqlcipher "$db_path" 2>&1)
+        local exit_code=$?
+        
+        if [ $exit_code -eq 124 ]; then
+            log_error "Database write timed out"
+            return 1
+        fi
+        
+        if [ $exit_code -ne 0 ] || echo "$result" | grep -qi "error"; then
+            log_error "Database write failed: $result"
+            return 1
+        fi
+        return 0
     else
-        # For SELECT queries, filter out the 'ok' output
-        sqlcipher "$db_path" "PRAGMA key = '$encryption_key'; $query" 2>/dev/null | grep -v '^ok$'
+        echo "[EXEC_SQL DEBUG] Running SELECT query" >&2
+        echo "[EXEC_SQL DEBUG] encryption_key=${encryption_key:0:10}..." >&2
+        echo "[EXEC_SQL DEBUG] db_path=$db_path" >&2
+        
+        local result
+        echo "[EXEC_SQL DEBUG] About to run printf | timeout | sqlcipher..." >&2
+        result=$(printf "%s\n%s\n" "PRAGMA key = '$encryption_key';" "$query" | timeout 10 sqlcipher "$db_path" 2>&1)
+        local exit_code=$?
+        echo "[EXEC_SQL DEBUG] Command completed with exit code: $exit_code" >&2
+        
+        if [ $exit_code -eq 124 ]; then
+            log_error "Database read timed out"
+            return 1
+        fi
+        
+        if [ $exit_code -ne 0 ] || echo "$result" | grep -qi "error"; then
+            log_error "Database read failed: $result"
+            return 1
+        fi
+        
+        # Filter out PRAGMA 'ok' response, keep actual query results
+        while IFS= read -r line; do
+            if [[ "$line" != "ok" ]]; then
+                echo "$line"
+            fi
+        done <<< "$result"
     fi
 }
 

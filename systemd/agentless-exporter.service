@@ -1,0 +1,36 @@
+[Unit]
+Description=Agent< Log Exporter
+Documentation=https://github.com/nitrogency/agentLess
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/agentless
+
+# Load environment variables from .env file
+EnvironmentFile=/opt/agentless/.env
+
+# Run the exporter
+ExecStart=/opt/agentless/bin/exporter -config /opt/agentless/.env
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/agentless-export /var/lib/agentless
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agentless-exporter
+
+# Resource limits
+TimeoutSec=300
+CPUQuota=25%
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

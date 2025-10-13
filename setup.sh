@@ -21,6 +21,41 @@ APP_DIR="$INSTALL_DIR"
 DATA_DIR="$APP_DIR/data"
 SCRIPT_DIR="$APP_DIR/scripts"
 
+# Create agentless system user
+log_progress "Creating agentless system user..."
+if ! id agentless &>/dev/null; then
+  sudo useradd -r -s /bin/bash -d /opt/agentless -M agentless
+  log_success "User 'agentless' created"
+else
+  log_info "User 'agentless' already exists"
+fi
+
+# Configure passwordless sudo for agentless user
+log_progress "Configuring passwordless sudo for agentless user..."
+sudo bash -c 'cat > /etc/sudoers.d/agentless << "EOF"
+# Allow agentless user to manage its own services and run enrollment scripts
+agentless ALL=(root) NOPASSWD: /bin/systemctl start agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl stop agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl restart agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl enable agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl disable agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl daemon-reload
+agentless ALL=(root) NOPASSWD: /bin/systemctl reload
+agentless ALL=(root) NOPASSWD: /bin/systemctl is-enabled agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl is-active agentless-monitor@*
+agentless ALL=(root) NOPASSWD: /bin/systemctl list-units
+agentless ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/system/agentless-monitor@.service
+agentless ALL=(root) NOPASSWD: /opt/agentless/scripts/setup-monitoring.sh
+EOF'
+sudo chmod 440 /etc/sudoers.d/agentless
+# Verify sudoers syntax
+if sudo visudo -c; then
+  log_success "Passwordless sudo configured for agentless user"
+else
+  log_error "Sudoers configuration syntax error"
+  exit 1
+fi
+
 # Install to /opt/agentless
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ]; then
   log_progress "Installing to system directory: $INSTALL_DIR"
@@ -50,12 +85,13 @@ mkdir -p "$APP_DIR/bin"
 log_progress "Creating system log directory..."
 sudo mkdir -p /var/log/agentless
 sudo chmod 755 /var/log/agentless
-sudo chown $(whoami):$(whoami) /var/log/agentless
+sudo chown agentless:agentless /var/log/agentless
 log_success "Directories created successfully"
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-  log_warn "Running as root. Consider running as a regular user with sudo privileges."
+  log_warn "Running as root. Please run as a regular user with sudo privileges."
+  exit 1
 fi
 
 # Detect OS
@@ -202,8 +238,9 @@ SECRETS_FILE="$SECRETS_DIR/secrets.env"
 if [ ! -f "$SECRETS_FILE" ]; then
   log_progress "Creating systemd environment file for secrets..."
   
-  # Create directory with restricted permissions
+  # Create directory owned by agentless user
   sudo mkdir -p "$SECRETS_DIR"
+  sudo chown agentless:agentless "$SECRETS_DIR"
   sudo chmod 700 "$SECRETS_DIR"
   
   # Generate a secure random key for session (64 characters)
@@ -221,7 +258,7 @@ if [ ! -f "$SECRETS_FILE" ]; then
 # Session secret for cookie encryption (64 chars)
 SESSION_SECRET=$SESSION_KEY
 
-# Database encryption key (64 chars) - DO NOT CHANGE after first use
+# Database encryption key (64 chars)
 DB_ENCRYPTION_KEY=$DB_KEY
 
 # Admin credentials (change after first login)
@@ -229,14 +266,12 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
 EOF"
   
-  # Set restrictive permissions (root only)
-  sudo chmod 600 "$SECRETS_FILE"
-  sudo chown root:root "$SECRETS_FILE"
+  # Set restrictive permissions (agentless user only)
+  sudo chmod 400 "$SECRETS_FILE"
+  sudo chown agentless:agentless "$SECRETS_FILE"
   
   log_success "Systemd secrets file created: $SECRETS_FILE"
-  log_info "Secrets are stored securely with 600 permissions (root:root)"
-  log_warn "DB_ENCRYPTION_KEY should NEVER be rotated after first use"
-  log_warn "Please change ADMIN_PASSWORD after first login"
+  log_info "Secrets are stored securely with 400 permissions (agentless:agentless)"
 else
   log_info "Secrets file already exists: $SECRETS_FILE"
 fi
@@ -244,8 +279,7 @@ fi
 # Create .env file for non-secret configuration
 log_progress "Creating application configuration file..."
 cat > "$APP_DIR/.env" << EOF
-# AgentLess IDS Configuration
-# Secrets are managed in $SECRETS_FILE
+# Agent< Configuration
 
 # Server configuration
 PORT=8443
@@ -322,15 +356,35 @@ else
   log_success "Windows monitoring binary built successfully"
 fi
 
-# Set up SSH keys for monitoring if they don't exist
+# Set ownership of all application files to agentless user
+log_progress "Changing ownership of all application files to agentless user..."
+sudo chown -R agentless:agentless "$INSTALL_DIR"
+sudo chown agentless:agentless /var/log/agentless
+log_success "All application files now owned by agentless user"
+
+# Set up SSH keys for agentless user
 log_section "SSH Configuration"
-if [ ! -f "$HOME/.ssh/ids_monitoring_key" ]; then
-  log_progress "Generating SSH keys for monitoring..."
-  ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/ids_monitoring_key" -N "" -C "ids_monitoring"
-  chmod 600 "$HOME/.ssh/ids_monitoring_key"
-  chmod 644 "$HOME/.ssh/ids_monitoring_key.pub"
-  log_success "SSH keys generated successfully"
+
+# Create .ssh directory for agentless user
+log_progress "Creating SSH directory for agentless user..."
+sudo mkdir -p /opt/agentless/.ssh
+sudo chown agentless:agentless /opt/agentless/.ssh
+sudo chmod 700 /opt/agentless/.ssh
+
+# Generate SSH keys for monitoring if they don't exist
+if [ ! -f "/opt/agentless/.ssh/ids_monitoring_key" ]; then
+  log_progress "Generating SSH keys for agentless user..."
+  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /opt/agentless/.ssh/ids_monitoring_key -N "" -C "ids_monitoring"
+  sudo chmod 600 /opt/agentless/.ssh/ids_monitoring_key
+  sudo chmod 644 /opt/agentless/.ssh/ids_monitoring_key.pub
+  log_success "SSH keys generated at /opt/agentless/.ssh/ids_monitoring_key"
+else
+  log_info "SSH keys already exist at /opt/agentless/.ssh/ids_monitoring_key"
 fi
+
+# Display public key for user reference
+log_info "Public key for device enrollment:"
+sudo cat /opt/agentless/.ssh/ids_monitoring_key.pub
 
 # Set up HTTPS certificates if they don't exist
 CERT_DIR="$APP_DIR/certs"
@@ -425,13 +479,14 @@ if [ -d "/etc/systemd/system" ]; then
   # Create new service file with systemd secret management
   sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
 [Unit]
-Description=AgentLess IDS Web Application
+Description=Agent< Web Application
 After=network.target
-Documentation=https://github.com/your-repo/agentless
+Documentation=https://github.com/nitrogency/agentLess
 
 [Service]
 Type=simple
-User=$(whoami)
+User=agentless
+Group=agentless
 WorkingDirectory=$APP_DIR
 
 # Load secrets from systemd environment file
@@ -488,20 +543,50 @@ EOF"
   fi
 fi
 
+# Ask about export mode installation
+log_section "Log Export Configuration"
+log_info "The log exporter allows you to export audit logs to external log aggregation"
+log_info "platforms (Elasticsearch, OpenSearch, Splunk, etc.) in JSON Lines format."
+log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
+log_info "ONLY USE THIS IF YOU DON'T INTEND TO USE THE BUILT-IN WEB DASHBOARD FOR LOG VIEWING!"
+read -p "Do you want to install the log exporter? (y/n): " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  log_info "Running in export mode. Setting up exporter..."
+  EXPORTER_INSTALLED=true
+  if [ -f "$INSTALL_DIR/scripts/setup-exporter.sh" ]; then
+    sudo bash "$INSTALL_DIR/scripts/setup-exporter.sh"
+  else
+    log_error "Export setup script not found at $INSTALL_DIR/scripts/setup-exporter.sh"
+    EXPORTER_INSTALLED=false
+  fi
+else
+  EXPORTER_INSTALLED=false
+  log_info "Running in regular mode."
+  log_progress "Removing export-related files..."
+  
+  # Remove export-related files and directories
+  sudo rm -rf "$INSTALL_DIR/cmd/exporter" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.service" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.timer" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/scripts/setup-exporter.sh" 2>/dev/null || true
+  
+  log_success "Export-related files removed"
+fi
+log_info ""
+
 log_success "Setup completed successfully!"
 log_info ""
-log_success "AgentLess IDS installed to: $INSTALL_DIR"
-log_success "The Agent< IDS service is now running!"
+log_success "Agent< installed to: $INSTALL_DIR"
+log_success "The service is now running!"
 log_info ""
 
 # Clean up source directory if different from install directory
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
   log_section "Cleanup"
-  log_info "Removing source directory to avoid confusion..."
-  log_warn "Source directory: $SOURCE_DIR"
-  log_info "This will be deleted in 3 seconds. Press Ctrl+C to cancel."
-  sleep 3
-  
+  log_info "Removing source directory..."
+
   # Remove source directory
   if rm -rf "$SOURCE_DIR"; then
     log_success "Source directory removed successfully"
@@ -515,7 +600,7 @@ fi
 
 
 log_info "Access the web interface: https://localhost:8443"
-log_warn "Your browser will show a security warning for the self-signed certificate."
+log_info "Your browser will show a security warning for the self-signed certificate."
 log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
 log_info ""
 log_info "Service Management:"
@@ -525,18 +610,22 @@ log_info "  - Restart: sudo systemctl restart agentless"
 log_info "  - Stop: sudo systemctl stop agentless"
 log_info ""
 log_info "Important locations:"
-log_info "  - Installation: $INSTALL_DIR"
-log_info "  - Secrets: /etc/agentless/secrets.env (root only)"
+log_info "  - Installation: $INSTALL_DIR (owned by agentless)"
+log_info "  - Secrets: /etc/agentless/secrets.env (agentless:agentless 400)"
 log_info "  - Config: $INSTALL_DIR/.env"
 log_info "  - Database: $INSTALL_DIR/data/site.db"
 log_info "  - Logs: /var/log/agentless/"
 log_info ""
 log_info "For monitoring setup:"
 log_info "  - Add devices through the web interface"
-log_info "  - Use: sudo bash $INSTALL_DIR/scripts/enlist.sh"
+log_info "  - Enroll device: sudo -u agentless bash $INSTALL_DIR/scripts/linux/enlist.sh [options]"
 log_info "  - Setup monitoring: sudo bash $INSTALL_DIR/scripts/setup-monitoring.sh"
 log_info ""
-log_warn "Note: If you moved from a previous installation, you may need to:"
-log_warn "  - Re-run device enrollment for existing devices"
-log_warn "  - Update any custom scripts with new paths"
-log_info ""
+
+if [ "$EXPORTER_INSTALLED" = "true" ]; then
+  log_info "Log Exporter:"
+  log_info "  - Status: systemctl status agentless-exporter.timer"
+  log_info "  - Logs: journalctl -u agentless-exporter -f"
+  log_info "  - Export directory: /var/log/agentless-export/"
+  log_info ""
+fi

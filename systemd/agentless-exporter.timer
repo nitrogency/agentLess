@@ -1,0 +1,18 @@
+[Unit]
+Description=Agent< Log Exporter Timer
+Documentation=https://github.com/nitrogency/agentLess
+Requires=agentless-exporter.service
+
+[Timer]
+# Run every 5 minutes
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+# Randomize startup by up to 30 seconds to avoid load spikes
+RandomizedDelaySec=30
+
+# Ensure timer runs even if previous run took too long
+Persistent=true
+
+[Install]
+WantedBy=timers.target

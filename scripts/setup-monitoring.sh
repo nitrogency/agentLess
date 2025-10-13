@@ -18,6 +18,12 @@ source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/common.sh"
 
+# Load database encryption key
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+fi
+
 # Setup cleanup trap
 setup_cleanup_trap
 
@@ -95,8 +101,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=agentless
+Group=agentless
 WorkingDirectory=%s
-Environment=HOME=/root
+Environment=HOME=/opt/agentless
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=%s -d %%i
 Restart=always

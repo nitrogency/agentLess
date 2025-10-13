@@ -121,7 +121,7 @@ APP_DIR="/opt/agentless"
 LOG_DIR="/var/log/agentless"
 
 if [ ! -d "$APP_DIR" ]; then
-    log_error "AgentLess IDS not found at $APP_DIR"
+    log_error "Agent< not found at $APP_DIR"
     log_error "Please run setup.sh first to install the application"
     exit 1
 fi

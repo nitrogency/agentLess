@@ -3,10 +3,14 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"log"
 	"net/http"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	
+	"example/go-website/models"
+	"example/go-website/templates"
 )
 
 const csrfTokenKey = "csrf_token"
@@ -38,29 +42,65 @@ func CSRFMiddleware() gin.HandlerFunc {
 			// Get token from session
 			sessionToken := session.Get(csrfTokenKey)
 			
+			// Debug logging
+			log.Printf("[CSRF] Method: %s, Path: %s", c.Request.Method, c.Request.URL.Path)
+			log.Printf("[CSRF] Form token: '%s' (len=%d)", formToken, len(formToken))
+			log.Printf("[CSRF] Session token: '%v' (type=%T)", sessionToken, sessionToken)
+			
 			// Validate token
 			if formToken == "" || sessionToken == nil || formToken != sessionToken.(string) {
-				c.HTML(http.StatusForbidden, "error", gin.H{
-					"Title": "Security Error",
-					"Error": "Invalid or missing CSRF token. Please try again.",
+				log.Printf("[CSRF] VALIDATION FAILED - formEmpty=%v, sessionNil=%v, match=%v", 
+					formToken == "", sessionToken == nil, formToken == sessionToken)
+				templates.RenderGinTemplate(c, "error", models.PageData{
+					Title: "Security Error",
+					Error: "Invalid or missing CSRF token. Please try again.",
 				})
 				c.Abort()
 				return
 			}
-		}
-		
-		// Generate new token for GET requests or after successful validation
-		token, err := GenerateCSRFToken()
-		if err != nil {
-			c.AbortWithStatus(http.StatusInternalServerError)
+			log.Printf("[CSRF] Validation SUCCESS")
+			
+			// After successful validation, generate new token (token rotation)
+			token, err := GenerateCSRFToken()
+			if err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			session.Set(csrfTokenKey, token)
+			if err := session.Save(); err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			c.Set(csrfTokenKey, token)
+			
+			c.Next()
 			return
 		}
 		
-		// Store in session
-		session.Set(csrfTokenKey, token)
-		if err := session.Save(); err != nil {
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
+		// For GET requests: check if token exists, generate only if missing
+		existingToken := session.Get(csrfTokenKey)
+		var token string
+		
+		if existingToken == nil {
+			// No token exists, generate new one
+			log.Printf("[CSRF] No token in session, generating new one for %s", c.Request.URL.Path)
+			newToken, err := GenerateCSRFToken()
+			if err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			token = newToken
+			
+			// Store in session
+			session.Set(csrfTokenKey, token)
+			if err := session.Save(); err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Use existing token
+			token = existingToken.(string)
+			log.Printf("[CSRF] Using existing token for %s: '%s'", c.Request.URL.Path, token[:20]+"...")
 		}
 		
 		// Make token available to templates

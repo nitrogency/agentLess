@@ -63,7 +63,6 @@ func AddDeviceHandler(c *gin.Context) {
 		osInfo := strings.TrimSpace(c.PostForm("os_info"))
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
-		setupPassword := c.PostForm("setup_password")
 		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
 		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
 		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
@@ -92,7 +91,6 @@ func AddDeviceHandler(c *gin.Context) {
 		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
-		data.FormData["setup_password"] = setupPassword
 		data.FormData["audit_arch"] = auditArch
 		data.FormData["audit_ruleset"] = auditRuleset
 
@@ -180,7 +178,7 @@ func AddDeviceHandler(c *gin.Context) {
 		// Create device
 		if ipAddress != "" {
 			// Create monitored device with SSH details and OS type
-			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, auditArch, auditRuleset)
+			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset)
 		} else {
 			// Create simple device
 			err = db.CreateDevice(name, deviceType)
@@ -269,7 +267,6 @@ func EditDeviceHandler(c *gin.Context) {
 		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
-		setupPassword := c.PostForm("setup_password")
 		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
 		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
 
@@ -306,7 +303,6 @@ func EditDeviceHandler(c *gin.Context) {
 		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
-		data.FormData["setup_password"] = setupPassword
 		data.FormData["audit_arch"] = auditArch
 		data.FormData["audit_ruleset"] = auditRuleset
 
@@ -419,7 +415,7 @@ func EditDeviceHandler(c *gin.Context) {
 		needsReenrollment := db.NeedsReenrollmentChanged(device, newDevice)
 
 		// Update device with OS type and reenrollment flag
-		err = db.UpdateMonitoredDeviceWithOSAndReenrollment(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, setupPassword, auditArch, auditRuleset, needsReenrollment)
+		err = db.UpdateMonitoredDeviceWithOSAndReenrollment(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset, needsReenrollment)
 		if err != nil {
 			log.Printf("Error updating device: %v", err)
 			data.Error = "Failed to update device"
@@ -449,7 +445,6 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["os_type"] = device.OSType
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
-	data.FormData["setup_password"] = device.SetupPassword
 	data.FormData["audit_arch"] = device.AuditArch
 	data.FormData["audit_ruleset"] = device.AuditRuleset
 

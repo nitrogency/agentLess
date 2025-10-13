@@ -26,7 +26,7 @@
         <strong>Configuration Update Required</strong><br>
         This device has configuration changes that require re-enrollment. Please run the enlist script to apply changes:<br><br>
         {{if eq .Device.OSType "linux"}}
-        <pre class="code-block" style="margin: 10px 0 0 0;">./scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+        <pre class="code-block" style="margin: 10px 0 0 0;">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
         {{else if eq .Device.OSType "windows"}}
         <p style="margin: 10px 0 0 0;">On the Windows target, run in PowerShell as Administrator:<br>
         <code>Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process; .\enlist-windows.ps1</code></p>
@@ -93,6 +93,10 @@
                     <div class="info-item">
                         <span class="info-label">SSH Port</span>
                         <span class="info-value">{{.Device.SSHPort}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Key Path</span>
+                        <span class="info-value"><code>{{.Device.SSHKeyPath}}</code></span>
                     </div>
                 </div>
             </div>
@@ -210,7 +214,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
                 <li><strong>Run the enrollment script from your terminal:</strong>
-                    <pre class="code-block">./scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
+                    <pre class="code-block">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
                 </li>
             </ol>
             {{end}}

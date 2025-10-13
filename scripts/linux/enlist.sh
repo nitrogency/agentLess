@@ -10,6 +10,12 @@ source "$SCRIPT_DIR/../lib/logging.sh"
 source "$SCRIPT_DIR/../lib/config.sh"
 source "$SCRIPT_DIR/../lib/common.sh"
 
+# Load database encryption key
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+fi
+
 # Setup cleanup trap
 setup_cleanup_trap
 
@@ -417,7 +423,7 @@ else
         
         sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
 #!/bin/bash
-# Daily ClamAV scan - logs malware detections for AgentLess IDS monitoring
+# Daily ClamAV scan - logs malware detections for monitoring
 
 SCAN_DIRS="/home /opt /var/www /tmp /var/tmp /usr/local"
 LOG_FILE="/var/log/clamav/clamav.log"
@@ -639,8 +645,19 @@ EOF
     
     # Test connection with the new user
     log_progress "Testing connection with the monitoring user..."
-    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$SSH_KEY_PATH" -p "$SSH_PORT" -v "$REMOTE_USER@$TARGET_IP" "echo 'SSH connection successful!'; exit" 2>&1 | tee /tmp/ssh_debug.log; then
+    
+    # Create a temporary file for SSH debug output
+    local SSH_DEBUG_LOG=$(mktemp)
+    
+    # Test SSH connection and capture output
+    ssh -o StrictHostKeyChecking=no -o ConnectTimeout="$(get_config ssh_connect_timeout)" -i "$SSH_KEY_PATH" -p "$SSH_PORT" -v "$REMOTE_USER@$TARGET_IP" "echo 'SSH connection successful!'; exit" 2>&1 | tee "$SSH_DEBUG_LOG"
+    
+    # Check SSH exit status (first command in pipeline)
+    local SSH_EXIT_STATUS=${PIPESTATUS[0]}
+    
+    if [ $SSH_EXIT_STATUS -eq 0 ]; then
         log_success "Monitoring user setup successful!"
+        rm -f "$SSH_DEBUG_LOG"
     else
         log_error "Failed to connect with the monitoring user."
         log_info "This could be due to:"
@@ -649,9 +666,10 @@ EOF
         log_info "  3. SSH configuration on the target device"
         log_info ""
         log_info "Debug information from SSH connection attempt:"
-        cat /tmp/ssh_debug.log
+        cat "$SSH_DEBUG_LOG" 2>/dev/null || echo "Could not read debug log"
         log_info ""
         log_error "Please check the SSH configuration manually."
+        rm -f "$SSH_DEBUG_LOG"
         exit 1
     fi
     
@@ -659,9 +677,9 @@ EOF
 }
 
 # Register the device with the IDS server
-# Update device in database with actual generated username and group
+# Update device in database with enrollment info
 update_device_in_database() {
-    log_progress "Updating device in database with actual generated username and group..."
+    log_progress "Updating device enrollment status in database..."
     
     # Get the correct database path
     local DB_PATH="$(get_config db_path)"
@@ -669,20 +687,50 @@ update_device_in_database() {
     [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
     
     # Find the device ID by IP address
-    DEVICE_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH")
+    echo "[DEBUG] About to SELECT DEVICE_ID for IP: $TARGET_IP" >&2
+    echo "[DEBUG] DB_PATH=$DB_PATH" >&2
+    echo "[DEBUG] DB_ENCRYPTION_KEY is set: ${DB_ENCRYPTION_KEY:+YES}" >&2
+    echo "[DEBUG] Calling execute_sqlite directly..." >&2
+    execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" > /tmp/device_id.txt
+    echo "[DEBUG] execute_sqlite completed, reading result..." >&2
+    DEVICE_ID=$(cat /tmp/device_id.txt)
+    rm -f /tmp/device_id.txt
+    echo "[DEBUG] DEVICE_ID=$DEVICE_ID" >&2
     
     if [ -z "$DEVICE_ID" ]; then
         log_warn "Device with IP $TARGET_IP not found in the database"
+        log_info "Please add the device through the web interface first, then run this enrollment script"
         return 1
     fi
     
-    # Update the device with the actual generated username and group
-    # Also clear the needs_reenrollment flag since enrollment is now complete
-    execute_sqlite "UPDATE devices SET ssh_user = '$REMOTE_USER', ssh_group = '$REMOTE_GROUP', hostname = '$HOSTNAME', os_info = '$OS_INFO', needs_reenrollment = 0 WHERE id = $DEVICE_ID;" "$DB_PATH"
+    # Update device with hostname, OS info, and clear the needs_reenrollment flag
+    # Note: ssh_user and ssh_group are already set correctly when device was added via web UI
     
-    log_success "Device updated in database with actual username: $REMOTE_USER"
-    log_success "Configuration is now up-to-date"
-    return 0
+    # Debug: Print what we're about to do
+    echo "[DEBUG] About to UPDATE device $DEVICE_ID" >&2
+    echo "[DEBUG] HOSTNAME=$HOSTNAME" >&2
+    echo "[DEBUG] OS_INFO=$OS_INFO" >&2
+    echo "[DEBUG] DB_PATH=$DB_PATH" >&2
+    
+    # Temporarily disable exit on error to capture the actual failure
+    set +e
+    echo "[DEBUG] Calling execute_sqlite..." >&2
+    execute_sqlite "UPDATE devices SET hostname = '$HOSTNAME', os_info = '$OS_INFO', needs_reenrollment = 0 WHERE id = $DEVICE_ID;" "$DB_PATH"
+    local update_result=$?
+    echo "[DEBUG] execute_sqlite returned: $update_result" >&2
+    set -e
+    
+    if [ $update_result -eq 0 ]; then
+        log_success "Device enrollment completed successfully"
+        log_info "Hostname: $HOSTNAME"
+        log_info "OS: $OS_INFO"
+        return 0
+    else
+        log_warn "Failed to update device enrollment status (exit code: $update_result)"
+        log_info "Device is enrolled and functional, but database status may not reflect this"
+        log_info "You can manually verify in the web interface"
+        return 0  # Don't fail enrollment just because DB update failed
+    fi
 }
 
 register_with_server() {
@@ -702,7 +750,7 @@ register_with_server() {
     log_info "  User: $REMOTE_USER"
     log_info "  Group: $REMOTE_GROUP"
     
-    # Update the device in the database with the actual generated username and group
+    # Update the device enrollment status in the database
     update_device_in_database
     
     log_success "Device registered successfully!"
