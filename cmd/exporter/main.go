@@ -154,7 +154,7 @@ func loadConfig() error {
 
 // initDatabase initializes the SQLite database connection with encryption
 func initDatabase() error {
-	connectionString := fmt.Sprintf("%s?_pragma_key=x'%s'&_pragma_cipher_page_size=4096",
+	connectionString := fmt.Sprintf("%s?_pragma_key=%s",
 		config.DatabasePath, config.EncryptionKey)
 
 	var err error

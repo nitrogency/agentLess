@@ -289,8 +289,8 @@ GO_ENV=production
 CERT_FILE=certs/server.crt
 KEY_FILE=certs/server.key
 
-# Database path
-DB_PATH=data/site.db
+# Database path (absolute path required for services)
+DATABASE_PATH=$APP_DIR/data/site.db
 
 EOF
 
