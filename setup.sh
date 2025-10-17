@@ -476,51 +476,17 @@ if [ -d "/etc/systemd/system" ]; then
     sudo rm -f "/etc/systemd/system/agentless.service"
   fi
   
-  # Create new service file with systemd secret management
-  sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
-[Unit]
-Description=Agent< Web Application
-After=network.target
-Documentation=https://github.com/nitrogency/agentLess
-
-[Service]
-Type=simple
-User=agentless
-Group=agentless
-WorkingDirectory=$APP_DIR
-
-# Load secrets from systemd environment file
-EnvironmentFile=$SECRETS_FILE
-
-# Load non-secret configuration
-EnvironmentFile=$APP_DIR/.env
-
-# Additional environment variables
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=GOPATH=$GOPATH
-
-# Execute application
-ExecStart=$APP_DIR/agentless
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-# ProtectHome removed - not needed for /opt installation
-ReadWritePaths=$APP_DIR/data $APP_DIR/tmp /var/log/agentless
-
-# Restart policy
-Restart=on-failure
-RestartSec=10
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=agentless-ids
-
-[Install]
-WantedBy=multi-user.target
-EOF"
+  # Create new service file from template with systemd secret management
+  TEMPLATE_FILE="$INSTALL_DIR/systemd/agentless.service.template"
+  if [ ! -f "$TEMPLATE_FILE" ]; then
+    handle_error "Template file not found: $TEMPLATE_FILE"
+  fi
+  
+  # Substitute variables in template and install service file
+  sed -e "s|__APP_DIR__|$APP_DIR|g" \
+      -e "s|__SECRETS_FILE__|$SECRETS_FILE|g" \
+      -e "s|__GOPATH__|$GOPATH|g" \
+      "$TEMPLATE_FILE" | sudo tee /etc/systemd/system/agentless.service > /dev/null
 
   log_progress "Reloading systemd..."
   sudo systemctl daemon-reload
