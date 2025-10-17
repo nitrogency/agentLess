@@ -377,73 +377,73 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel 
 
 // SecurityLevelFromString converts a string security level to the SecurityLevel type
 func SecurityLevelFromString(level string) SecurityLevel {
-    switch strings.ToLower(level) {
-    case "high":
-        return HighSecurity
-    case "medium":
-        return MediumSecurity
-    default:
-        return LowSecurity
-    }
+	switch strings.ToLower(level) {
+	case "high":
+		return HighSecurity
+	case "medium":
+		return MediumSecurity
+	default:
+		return LowSecurity
+	}
 }
 
 // InsertAuditLog inserts a new audit log entry with the provided security level
 func InsertAuditLog(deviceID int64, eventTime, logType, key, message, rawLog, securityLevel, auditID string) (int64, error) {
-    // Use INSERT OR IGNORE to atomically avoid duplicates based on the unique index
-    result, err := db.Exec(`
+	// Use INSERT OR IGNORE to atomically avoid duplicates based on the unique index
+	result, err := db.Exec(`
 		INSERT OR IGNORE INTO audit_logs 
 		(device_id, event_time, type, key, message, raw_log, security_level, audit_id) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, deviceID, eventTime, logType, key, message, rawLog, securityLevel, auditID)
 
-    if err != nil {
-        return 0, fmt.Errorf("error inserting audit log: %w", err)
-    }
+	if err != nil {
+		return 0, fmt.Errorf("error inserting audit log: %w", err)
+	}
 
-    // If ignored due to duplicate, RowsAffected will be 0
-    if ra, _ := result.RowsAffected(); ra == 0 {
-        return 0, nil
-    }
+	// If ignored due to duplicate, RowsAffected will be 0
+	if ra, _ := result.RowsAffected(); ra == 0 {
+		return 0, nil
+	}
 
-    insertedID, err := result.LastInsertId()
-    if err != nil {
-        return 0, err
-    }
+	insertedID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
 
-    // Build a minimal AuditLog to evaluate notification rules
-    logEntry := AuditLog{
-        ID:            insertedID,
-        DeviceID:      deviceID,
-        EventTime:     eventTime,
-        Type:          logType,
-        Key:           key,
-        Message:       message,
-        RawLog:        rawLog,
-        SecurityLevel: SecurityLevel(strings.ToLower(securityLevel)),
-        AuditID:       auditID,
-    }
+	// Build a minimal AuditLog to evaluate notification rules
+	logEntry := AuditLog{
+		ID:            insertedID,
+		DeviceID:      deviceID,
+		EventTime:     eventTime,
+		Type:          logType,
+		Key:           key,
+		Message:       message,
+		RawLog:        rawLog,
+		SecurityLevel: SecurityLevel(strings.ToLower(securityLevel)),
+		AuditID:       auditID,
+	}
 
-    // Best-effort: evaluate rules; do not fail the log insertion if notification creation fails
-    if err := evaluateRulesAndCreateNotifications(logEntry, insertedID); err != nil {
-        fmt.Printf("Warning: notification evaluation failed for log %d: %v\n", insertedID, err)
-    }
+	// Best-effort: evaluate rules; do not fail the log insertion if notification creation fails
+	if err := evaluateRulesAndCreateNotifications(logEntry, insertedID); err != nil {
+		fmt.Printf("Warning: notification evaluation failed for log %d: %v\n", insertedID, err)
+	}
 
-    return insertedID, nil
+	return insertedID, nil
 }
 
 // DeleteOldAuditLogs deletes audit logs older than the specified number of days
 func DeleteOldAuditLogs(retentionDays int) (int64, error) {
-    // Compute cutoff as an absolute timestamp string to avoid concatenation issues
-    cutoff := time.Now().AddDate(0, 0, -retentionDays).Format("2006-01-02 15:04:05")
+	// Compute cutoff as an absolute timestamp string to avoid concatenation issues
+	cutoff := time.Now().AddDate(0, 0, -retentionDays).Format("2006-01-02 15:04:05")
 
-    result, err := db.Exec(`
+	result, err := db.Exec(`
         DELETE FROM audit_logs 
         WHERE timestamp < ?
     `, cutoff)
 
-    if err != nil {
-        return 0, err
-    }
+	if err != nil {
+		return 0, err
+	}
 
-    return result.RowsAffected()
+	return result.RowsAffected()
 }

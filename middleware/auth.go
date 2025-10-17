@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-contrib/sessions"
@@ -18,7 +19,11 @@ func RequireAuth() gin.HandlerFunc {
 		authenticated := session.Get("authenticated")
 		username := session.Get("username")
 		
+		log.Printf("[DEBUG] RequireAuth for %s: authenticated=%v (type=%T), username=%v", 
+			c.Request.URL.Path, authenticated, authenticated, username)
+		
 		if authenticated == nil || authenticated != true || username == nil {
+			log.Printf("[DEBUG] Auth check failed, redirecting to /login")
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return

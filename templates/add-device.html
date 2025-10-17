@@ -1,6 +1,13 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/device-form.js"></script>
+<script>
+    // Ruleset data for dynamic architecture switching
+    window.rulesetData = {
+        x64: {{.Data.X64Rulesets}},
+        x32: {{.Data.X32Rulesets}}
+    };
+</script>
 {{end}}
 
 {{define "content"}}
@@ -16,7 +23,7 @@
     {{end}}
 
     <form method="POST" action="/devices/add" class="device-form">
-        <input type="hidden" name="form_token" value="{{.FormToken}}">
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         
         <div class="form-group">
             <label for="name">Device Name</label>
@@ -42,11 +49,20 @@
         </div>
         
         <div class="form-group">
+            <label for="os_type">Operating System</label>
+            <select id="os_type" name="os_type" class="form-control {{if .ErrorFields.os_type}}input-error{{end}}" required>
+                <option value="linux" {{if eq .FormData.os_type "linux"}}selected{{else if eq .FormData.os_type ""}}selected{{end}}>Linux (auditd)</option>
+                <option value="windows" {{if eq .FormData.os_type "windows"}}selected{{end}}>Windows (Sysmon)</option>
+            </select>
+            <p class="help-text">Select the operating system for appropriate log collection method</p>
+        </div>
+        
+        <div class="form-group">
             <label for="ip_address">IP Address</label>
             <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{.FormData.ip_address}}" placeholder="e.g. 192.168.1.100" required>
         </div>
         
-        <fieldset class="form-section">
+        <fieldset class="form-section" id="setup_auth_section">
             <legend>Setup Authentication</legend>
             <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
             
@@ -62,41 +78,52 @@
             
             <div class="form-group">
                 <label for="ssh_user">Monitoring Username</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{.FormData.ssh_user}}" placeholder="e.g. ids-monitor" required>
             </div>
             
             <div class="form-group">
                 <label for="ssh_group">Monitoring Group</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" placeholder="e.g. ids-monitor" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random Monitoring Username
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{.FormData.ssh_group}}" placeholder="e.g. ids-monitor" required>
             </div>
             
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /home/user/.ssh/ids_key" {{if not .RandomKey}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /home/user/.ssh/ids_key" required>
                 <p class="help-text">This is the private SSH key that will be used for monitoring connections after the initial SSH connection.</p>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_port">SSH Port (default: 22)</label>
                 <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}22{{end}}" min="1" max="65535">
+            </div>
+        </fieldset>
+        
+        <fieldset class="form-section" id="audit_config_section">
+            <legend>Audit Configuration</legend>
+            <p class="help-text">Configure auditd rules for Linux devices</p>
+            
+            <div class="form-group">
+                <label for="audit_arch">Architecture</label>
+                <select id="audit_arch" name="audit_arch" class="form-control {{if .ErrorFields.audit_arch}}input-error{{end}}">
+                    <option value="x64" {{if or (eq .FormData.audit_arch "x64") (eq .FormData.audit_arch "")}}selected{{end}}>64-bit (x64)</option>
+                    <option value="x32" {{if eq .FormData.audit_arch "x32"}}selected{{end}}>32-bit (x32)</option>
+                </select>
+                <p class="help-text">Select the CPU architecture of the target device</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="audit_ruleset">Audit Ruleset</label>
+                <select id="audit_ruleset" name="audit_ruleset" class="form-control {{if .ErrorFields.audit_ruleset}}input-error{{end}}">
+                    {{$currentRuleset := .FormData.audit_ruleset}}
+                    {{$rulesets := .Data.X64Rulesets}}
+                    {{if eq .FormData.audit_arch "x32"}}
+                        {{$rulesets = .Data.X32Rulesets}}
+                    {{end}}
+                    {{range $rulesets}}
+                        <option value="{{.Filename}}" {{if or (eq $currentRuleset .Filename) (and (eq $currentRuleset "") .IsDefault)}}selected{{end}}>{{.DisplayName}}</option>
+                    {{end}}
+                </select>
+                <p class="help-text">Select the audit rule profile based on your security and performance needs</p>
             </div>
         </fieldset>
         

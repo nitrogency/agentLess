@@ -34,7 +34,7 @@ func main() {
 	// Setup router with all routes and middleware
 	router := server.SetupRouter(cfg)
 
-	// Create server
+	// Create HTTPS server
 	srv := server.CreateServer(router, cfg)
 
 	// Start monitoring in background
@@ -44,13 +44,15 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start server in a goroutine
+	// Start HTTPS server
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+		log.Printf("HTTPS Server starting on port %s", cfg.Server.Port)
+		if err := srv.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTPS Server failed to start: %v", err)
 		}
 	}()
+
+	log.Printf("Access the application at: https://localhost:%s", cfg.Server.Port)
 
 	// Wait for interrupt signal
 	<-c

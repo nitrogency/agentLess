@@ -24,10 +24,13 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Status</th>
+                <th>SSH Status</th>
                 <th>IP Address</th>
+                <th>OS</th>
+                <th>Ruleset</th>
                 <th>SSH User</th>
                 <th>Last Updated</th>
+                <th>Config</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -37,10 +40,51 @@
                 <td>{{.ID}}</td>
                 <td>{{.Name}}</td>
                 <td>{{.Type}}</td>
-                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
-                <td>{{if .IPAddress}}{{.IPAddress}}{{else}}-{{end}}</td>
+                <td>
+                    {{if eq .SSHStatus "ok"}}
+                        <span class="badge badge-success" title="SSH connection: OK">Connected</span>
+                    {{else if eq .SSHStatus "failed"}}
+                        <span class="badge badge-danger" title="SSH connection: Failed">Failed</span>
+                    {{else if eq .SSHStatus "unknown"}}
+                        <span class="badge badge-secondary" title="SSH not configured">Unknown</span>
+                    {{else}}
+                        <span class="badge badge-secondary">{{.SSHStatus}}</span>
+                    {{end}}
+                </td>
+                <td>{{if .IPAddress}}{{.IPAddress}}{{if ne .SSHPort 22}}:{{.SSHPort}}{{end}}{{else}}-{{end}}</td>
+                <td>
+                    {{if eq .OSType "linux"}}
+                        Linux
+                    {{else if eq .OSType "windows"}}
+                        Windows
+                    {{else}}
+                        -
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .OSType "linux"}}
+                        {{if eq .AuditRuleset "audit_default.rules"}}
+                            <span title="{{.AuditArch}}">Default</span>
+                        {{else if eq .AuditRuleset "audit_high.rules"}}
+                            <span title="{{.AuditArch}}">High</span>
+                        {{else if eq .AuditRuleset "audit_min.rules"}}
+                            <span title="{{.AuditArch}}">Minimal</span>
+                        {{else}}
+                            <span title="{{.AuditArch}}">{{.AuditRuleset}}</span>
+                        {{end}}
+                    {{else}}
+                        <span title="N/A for Windows">-</span>
+                    {{end}}
+                </td>
                 <td>{{if .SSHUser}}{{.SSHUser}}{{else}}-{{end}}</td>
                 <td>{{.LastUpdated.Format "2006-01-02 15:04:05"}}</td>
+                <td>
+                    {{if .NeedsReenrollment}}
+                    <span class="badge badge-warning" title="Configuration changed - re-enrollment required">Changed</span>
+                    {{else}}
+                    <span class="badge badge-success" title="Configuration up-to-date">OK</span>
+                    {{end}}
+                </td>
                 <td>
                     {{if .IPAddress}}
                     <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>
@@ -51,7 +95,7 @@
             </tr>
             {{else}}
             <tr>
-                <td colspan="8" class="text-center">No devices found</td>
+                <td colspan="11" class="text-center">No devices found</td>
             </tr>
             {{end}}
         </tbody>
@@ -60,6 +104,7 @@
     <!-- Edit Device Form -->
     <form id="editDeviceForm" method="POST" action="/devices" class="device-form hidden">
         <h3>Edit Device</h3>
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" id="editDeviceId" name="deviceId">
         <div class="form-group">

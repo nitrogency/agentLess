@@ -75,6 +75,13 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 		FormData:    make(map[string]string),
 		ErrorFields: make(map[string]bool),
 	}
+	
+	// Get CSRF token from context (set by middleware)
+	if token, exists := c.Get("csrf_token"); exists {
+		if tokenStr, ok := token.(string); ok {
+			data.FormToken = tokenStr
+		}
+	}
 
 	// Check if user is authenticated
 	authenticated := session.Get("authenticated")

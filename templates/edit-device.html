@@ -1,11 +1,20 @@
 {{define "page_resources"}}
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/device-form.js"></script>
+<script>
+    // Ruleset data for dynamic architecture switching
+    window.rulesetData = {
+        x64: {{.Data.X64Rulesets}},
+        x32: {{.Data.X32Rulesets}}
+    };
+</script>
 {{end}}
 
 {{define "content"}}
 <div class="devices-container">
-    <h2>Edit Device</h2>
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Edit Device</h2>
+    </div>
     
     {{if .Error}}
     <div class="error-message">{{.Error}}</div>
@@ -16,7 +25,7 @@
     {{end}}
     
     <form action="/devices/edit/{{.Device.ID}}" method="post" class="device-form">
-        <input type="hidden" name="form_token" value="{{.FormToken}}">
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         <div class="form-group">
             <label for="name">Device Name:</label>
             <input type="text" class="form-control {{if .ErrorFields.name}}input-error{{end}}" id="name" name="name" value="{{if .FormData.name}}{{.FormData.name}}{{else}}{{.Device.Name}}{{end}}" required>
@@ -37,13 +46,12 @@
         </div>
         
         <div class="form-group">
-            <label for="status">Status:</label>
-            <select class="form-control {{if .ErrorFields.status}}input-error{{end}}" id="status" name="status" required>
-                <option value="" {{if and (eq .FormData.status "") (eq .Device.Status "")}}selected{{end}}>Select status</option>
-                <option value="online" {{if or (eq .FormData.status "online") (and (eq .FormData.status "") (eq .Device.Status "online"))}}selected{{end}}>Online</option>
-                <option value="offline" {{if or (eq .FormData.status "offline") (and (eq .FormData.status "") (eq .Device.Status "offline"))}}selected{{end}}>Offline</option>
-                <option value="maintenance" {{if or (eq .FormData.status "maintenance") (and (eq .FormData.status "") (eq .Device.Status "maintenance"))}}selected{{end}}>Maintenance</option>
+            <label for="os_type">Operating System:</label>
+            <select class="form-control {{if .ErrorFields.os_type}}input-error{{end}}" id="os_type" name="os_type" required>
+                <option value="linux" {{if or (eq .FormData.os_type "linux") (and (eq .FormData.os_type "") (eq .Device.OSType "linux")) (and (eq .FormData.os_type "") (eq .Device.OSType ""))}}selected{{end}}>Linux (auditd)</option>
+                <option value="windows" {{if or (eq .FormData.os_type "windows") (and (eq .FormData.os_type "") (eq .Device.OSType "windows"))}}selected{{end}}>Windows (Sysmon)</option>
             </select>
+            <p class="help-text">Change OS type will affect how logs are collected</p>
         </div>
         
         <div class="form-group">
@@ -51,7 +59,7 @@
             <input type="text" class="form-control {{if .ErrorFields.ip_address}}input-error{{end}}" id="ip_address" name="ip_address" value="{{if .FormData.ip_address}}{{.FormData.ip_address}}{{else}}{{.Device.IPAddress}}{{end}}" placeholder="e.g. 192.168.1.100" required>
         </div>
         
-        <fieldset class="form-section">
+        <fieldset class="form-section" id="setup_auth_section">
             <legend>Setup Authentication</legend>
             <p class="help-text">This username will be used for the initial SSH connection to set up the monitoring user</p>
             
@@ -67,41 +75,58 @@
             
             <div class="form-group">
                 <label for="ssh_user">SSH Username:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{if .FormData.ssh_user}}{{.FormData.ssh_user}}{{else}}{{.Device.SSHUser}}{{end}}" placeholder="e.g. monitor-user" {{if not .RandomUser}}required{{end}}>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_user}}input-error{{end}}" id="ssh_user" name="ssh_user" value="{{if .FormData.ssh_user}}{{.FormData.ssh_user}}{{else}}{{.Device.SSHUser}}{{end}}" placeholder="e.g. monitor-user" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_group">SSH Group:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{if .FormData.ssh_group}}{{.FormData.ssh_group}}{{else}}{{.Device.SSHGroup}}{{end}}" placeholder="e.g. monitor-group" {{if not .RandomUser}}required{{end}}>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_user" name="random_user" value="true" {{if .RandomUser}}checked{{end}}> Generate Random SSH Username
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate random names from a wordlist for better security</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_group}}input-error{{end}}" id="ssh_group" name="ssh_group" value="{{if .FormData.ssh_group}}{{.FormData.ssh_group}}{{else}}{{.Device.SSHGroup}}{{end}}" placeholder="e.g. monitor-group" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path:</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" {{if not .RandomKey}}required{{end}}>
-                <p class="help-text">Using system default SSH key. The public key must be manually copied to the target device.</p>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="random_key" name="random_key" value="true" {{if .RandomKey}}checked{{end}}> Generate Random SSH Key
-                    </label>
-                </div>
-                <p class="help-text">When enabled, the system will generate a new SSH key if the specified key doesn't exist</p>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{if .FormData.ssh_key_path}}{{.FormData.ssh_key_path}}{{else}}{{.Device.SSHKeyPath}}{{end}}" placeholder="Default: $HOME/.ssh/id_rsa" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
             </div>
             
             <div class="form-group">
                 <label for="ssh_port">SSH Port (default: 22):</label>
                 <input type="number" class="form-control {{if .ErrorFields.ssh_port}}input-error{{end}}" id="ssh_port" name="ssh_port" value="{{if .FormData.ssh_port}}{{.FormData.ssh_port}}{{else}}{{.Device.SSHPort}}{{end}}" min="1" max="65535" required>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
+            </div>
+        </fieldset>
+        
+        <fieldset class="form-section" id="audit_config_section">
+            <legend>Audit Configuration</legend>
+            <p class="help-text">Configure auditd rules for Linux devices</p>
+            
+            <div class="form-group">
+                <label for="audit_arch">Architecture:</label>
+                <select id="audit_arch" name="audit_arch" class="form-control {{if .ErrorFields.audit_arch}}input-error{{end}}">
+                    <option value="x64" {{if or (eq .FormData.audit_arch "x64") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x64")) (and (eq .FormData.audit_arch "") (eq .Device.AuditArch ""))}}selected{{end}}>64-bit (x64)</option>
+                    <option value="x32" {{if or (eq .FormData.audit_arch "x32") (and (eq .FormData.audit_arch "") (eq .Device.AuditArch "x32"))}}selected{{end}}>32-bit (x32)</option>
+                </select>
+                <p class="help-text" style="color: #856404;">⚠ Changing this requires re-running the enlist script</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="audit_ruleset">Audit Ruleset:</label>
+                <select id="audit_ruleset" name="audit_ruleset" class="form-control {{if .ErrorFields.audit_ruleset}}input-error{{end}}">
+                    {{$currentRuleset := .FormData.audit_ruleset}}
+                    {{if eq $currentRuleset ""}}{{$currentRuleset = .Device.AuditRuleset}}{{end}}
+                    {{$currentArch := .FormData.audit_arch}}
+                    {{if eq $currentArch ""}}{{$currentArch = .Device.AuditArch}}{{end}}
+                    {{$rulesets := .Data.X64Rulesets}}
+                    {{if eq $currentArch "x32"}}
+                        {{$rulesets = .Data.X32Rulesets}}
+                    {{end}}
+                    {{range $rulesets}}
+                        <option value="{{.Filename}}" {{if eq $currentRuleset .Filename}}selected{{end}}>{{.DisplayName}}</option>
+                    {{end}}
+                </select>
+                <p class="help-text" style="color: #856404;">⚠ Changing audit rules requires re-running the enlist script</p>
             </div>
         </fieldset>
         

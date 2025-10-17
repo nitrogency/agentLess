@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# common.sh - Shared functions for AgentLess IDS scripts
+# common.sh - Shared functions
 # Source this file in other scripts: source "$(dirname "$0")/lib/common.sh"
 #
 
@@ -20,7 +20,18 @@ get_script_dir() {
 
 # Get the repository root directory
 get_repo_root() {
-    cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd
+    local dir="$(dirname "${BASH_SOURCE[1]}")"
+    # Keep going up until we find go.mod (project root marker)
+    while [ ! -f "$dir/go.mod" ] && [ "$dir" != "/" ]; do
+        dir="$(cd "$dir/.." && pwd)"
+    done
+    
+    if [ -f "$dir/go.mod" ]; then
+        echo "$dir"
+    else
+        # Fallback: assume we're in scripts/ subdirectory
+        cd "$(dirname "${BASH_SOURCE[1]}")/../" && pwd
+    fi
 }
 
 # Check if a command exists (returns 0/1 for use in conditionals)
@@ -41,13 +52,49 @@ execute_sqlite() {
         return 1
     fi
     
-    # Use SQLCipher with the encryption key
-    # Suppress output for INSERT/UPDATE operations, preserve for SELECT
+    # Use SQLCipher with the encryption key and timeout
     if [[ "$query" =~ ^[[:space:]]*(INSERT|UPDATE|DELETE) ]]; then
-        sqlcipher "$db_path" "PRAGMA key = '$encryption_key'; $query" > /dev/null 2>&1
+        local result
+        result=$(printf "%s\n%s\n" "PRAGMA key = '$encryption_key';" "$query" | timeout 10 sqlcipher "$db_path" 2>&1)
+        local exit_code=$?
+        
+        if [ $exit_code -eq 124 ]; then
+            log_error "Database write timed out"
+            return 1
+        fi
+        
+        if [ $exit_code -ne 0 ] || echo "$result" | grep -qi "error"; then
+            log_error "Database write failed: $result"
+            return 1
+        fi
+        return 0
     else
-        # For SELECT queries, filter out the 'ok' output
-        sqlcipher "$db_path" "PRAGMA key = '$encryption_key'; $query" 2>/dev/null | grep -v '^ok$'
+        echo "[EXEC_SQL DEBUG] Running SELECT query" >&2
+        echo "[EXEC_SQL DEBUG] encryption_key=${encryption_key:0:10}..." >&2
+        echo "[EXEC_SQL DEBUG] db_path=$db_path" >&2
+        
+        local result
+        echo "[EXEC_SQL DEBUG] About to run printf | timeout | sqlcipher..." >&2
+        result=$(printf "%s\n%s\n" "PRAGMA key = '$encryption_key';" "$query" | timeout 10 sqlcipher "$db_path" 2>&1)
+        local exit_code=$?
+        echo "[EXEC_SQL DEBUG] Command completed with exit code: $exit_code" >&2
+        
+        if [ $exit_code -eq 124 ]; then
+            log_error "Database read timed out"
+            return 1
+        fi
+        
+        if [ $exit_code -ne 0 ] || echo "$result" | grep -qi "error"; then
+            log_error "Database read failed: $result"
+            return 1
+        fi
+        
+        # Filter out PRAGMA 'ok' response, keep actual query results
+        while IFS= read -r line; do
+            if [[ "$line" != "ok" ]]; then
+                echo "$line"
+            fi
+        done <<< "$result"
     fi
 }
 
@@ -177,17 +224,6 @@ add_user_to_group() {
     else
         log_info "User $username already in group $groupname"
     fi
-}
-
-# Generate random name from wordlists
-generate_random_name() {
-    local adjectives=("silent" "hidden" "secure" "vigilant" "watchful" "alert" "sentinel" "guardian" "monitor" "observer")
-    local nouns=("hawk" "eagle" "falcon" "owl" "raven" "phoenix" "griffin" "dragon" "tiger" "lion")
-    
-    local adj_index=$((RANDOM % ${#adjectives[@]}))
-    local noun_index=$((RANDOM % ${#nouns[@]}))
-    
-    echo "${adjectives[$adj_index]}_${nouns[$noun_index]}"
 }
 
 # Cleanup function for trap handling

@@ -3,8 +3,15 @@
 {{end}}
 
 {{define "content"}}
-<div class="container" style="width: 150%; margin-left: -25%;">
-    <h2>Device Monitoring: {{.Device.Name}}</h2>
+<div class="container-wide">
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Device Monitoring: {{.Device.Name}}</h2>
+        {{if .Device.NeedsReenrollment}}
+        <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">Re-enrollment Required</span>
+        {{else}}
+        <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">Config OK</span>
+        {{end}}
+    </div>
     
     {{if .Error}}
     <div class="error-message">{{.Error}}</div>
@@ -13,149 +20,159 @@
     {{if .Success}}
     <div class="success-message">{{.Success}}</div>
     {{end}}
-
-    <div class="card">
-        <div class="card-header">
-            <h3>Device Information</h3>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col">
-                    <p><strong>ID:</strong> {{.Device.ID}}</p>
-                    <p><strong>Name:</strong> {{.Device.Name}}</p>
-                    <p><strong>Type:</strong> {{.Device.Type}}</p>
-                    <p><strong>Status:</strong> <span class="badge badge-{{.Device.Status}}">{{.Device.Status}}</span></p>
-                </div>
-                <div class="col">
-                    <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
-                    <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
-                    <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
-                    <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
-                </div>
-            </div>
-        </div>
+    
+    {{if .Device.NeedsReenrollment}}
+    <div class="alert alert-warning" style="margin-bottom: 20px;">
+        <strong>Configuration Update Required</strong><br>
+        This device has configuration changes that require re-enrollment. Please run the enlist script to apply changes:<br><br>
+        {{if eq .Device.OSType "linux"}}
+        <pre class="code-block" style="margin: 10px 0 0 0;">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
+        {{else if eq .Device.OSType "windows"}}
+        <p style="margin: 10px 0 0 0;">On the Windows target, run in PowerShell as Administrator:<br>
+        <code>Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process; .\enlist-windows.ps1</code></p>
+        {{end}}
     </div>
+    {{end}}
 
-    <div class="card mt-4">
+    <div class="device-config-card">
         <div class="card-header">
-            <h3>Monitoring Data</h3>
-            <button class="btn btn-secondary btn-sm float-right">Refresh Data</button>
+            <h3>Device Configuration</h3>
         </div>
         <div class="card-body">
-            <h4>System Information</h4>
-            <table class="users-table mb-4">
-                <tbody>
-                    {{range $key, $value := .MonitoringData}}
-                    <tr>
-                        <td><strong>{{$key}}</strong></td>
-                        <td>{{$value}}</td>
-                    </tr>
-                    {{else}}
-                    <tr>
-                        <td colspan="2" class="text-center">No monitoring data available</td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
-        </div>
-    </div>
-            
-    <div class="card mt-4">
-        <div class="card-header">
-            <h3>Log Entries</h3>
-        </div>
-        <div class="card-body">
-            <!-- Search and page size controls -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <!-- Search bar -->
-                <div style="display: flex; align-items: center;">
-                    <form action="" method="GET" style="display: flex; align-items: center;">
-                        <input type="text" name="search" class="form-control" placeholder="Search logs..." value="{{.Data.SearchTerm}}" style="margin-right: 10px; width: 250px;">
-                        <button class="btn btn-primary" type="submit" style="margin-right: 10px;">Search</button>
-                        {{if .Data.SearchTerm}}
-                        <a href="?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
-                        {{end}}
-                    </form>
-                </div>
-                
-                <!-- Page size controls -->
-                <div style="display: flex; align-items: center;">
-                    <div class="btn-group" role="group" style="margin-right: 15px;">
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
-                        <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
+            <!-- Basic Information -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Basic Information
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Device Name</span>
+                        <span class="info-value">{{.Device.Name}}</span>
                     </div>
-                    <span>Total: {{.Data.TotalLogs}} logs</span>
+                    <div class="info-item">
+                        <span class="info-label">Device Type</span>
+                        <span class="info-value">{{.Device.Type}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Status</span>
+                        <span class="info-value"><span class="badge badge-{{.Device.Status}}">{{.Device.Status}}</span></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Operating System</span>
+                        <span class="info-value">
+                            {{if eq .Device.OSType "linux"}}
+                                Linux (auditd)
+                            {{else if eq .Device.OSType "windows"}}
+                                Windows (Sysmon)
+                            {{else}}
+                                Unknown
+                            {{end}}
+                        </span>
+                    </div>
                 </div>
             </div>
-            
-            <div style="padding: 0 15px;">
-                <table class="users-table" style="width: 100%;">
-                    <thead>
-                        <tr>
-                            <th>Event Time</th>
-                            <th>Received Time</th>
-                            <th>Type</th>
-                            <th>Key</th>
-                            <th>Message</th>
-                            <th>Raw Log</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range $log := .Data.AuditLogs}}
-                        <tr>
-                            <td>{{$log.EventTime}}</td>
-                            <td>{{$log.Timestamp.Format "2006-01-02 15:04:05"}}</td>
-                            <td>{{$log.Type}}</td>
-                            <td>{{$log.Key}}</td>
-                            <td><div class="log-message">{{$log.Message}}</div></td>
-                            <td><pre style="min-width: 500px;" class="raw-log">{{$log.RawLog}}</pre></td>
-                        </tr>
-                        {{else}}
-                        <tr>
-                            <td colspan="6" class="text-center">No audit logs available</td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
+
+            <!-- Connection Information -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Connection
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">IP Address</span>
+                        <span class="info-value">{{.Device.IPAddress}}{{if ne .Device.SSHPort 22}}:{{.Device.SSHPort}}{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH User</span>
+                        <span class="info-value">{{.Device.SSHUser}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Group</span>
+                        <span class="info-value">{{.Device.SSHGroup}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Port</span>
+                        <span class="info-value">{{.Device.SSHPort}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Key Path</span>
+                        <span class="info-value"><code>{{.Device.SSHKeyPath}}</code></span>
+                    </div>
+                </div>
             </div>
-            
-            <!-- Pagination controls -->
-            {{if gt .Data.TotalPages 1}}
-            <div class="pagination-container mt-3 text-center">
-                <div class="btn-group" role="group">
-                    <!-- Previous page button -->
-                    <a href="?page={{if eq .Data.CurrentPage 1}}1{{else}}{{.Data.CurrentPage | sub1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &laquo;
-                    </a>
-                    
-                    <!-- First page -->
-                    <a href="?page=1&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage 1}}btn-primary{{else}}btn-outline-primary{{end}}">1</a>
-                    
-                    <!-- Ellipsis if needed -->
-                    {{if gt .Data.CurrentPage 3}}
-                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
-                    {{end}}
-                    
-                    <!-- Current page (if not first or last) -->
-                    {{if and (gt .Data.CurrentPage 1) (lt .Data.CurrentPage .Data.TotalPages)}}
-                    <a href="?page={{.Data.CurrentPage}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm btn-primary">{{.Data.CurrentPage}}</a>
-                    {{end}}
-                    
-                    <!-- Ellipsis if needed -->
-                    {{if lt .Data.CurrentPage (sub .Data.TotalPages 2)}}
-                    <a href="#" class="btn btn-sm btn-outline-secondary disabled">...</a>
-                    {{end}}
-                    
-                    <!-- Last page (if not first page) -->
-                    {{if gt .Data.TotalPages 1}}
-                    <a href="?page={{.Data.TotalPages}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-primary{{else}}btn-outline-primary{{end}}">{{.Data.TotalPages}}</a>
-                    {{end}}
-                    
-                    <!-- Next page button -->
-                    <a href="?page={{if eq .Data.CurrentPage .Data.TotalPages}}{{.Data.TotalPages}}{{else}}{{.Data.CurrentPage | add1}}{{end}}&pageSize={{.Data.PageSize}}{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}" class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
-                        &raquo;
-                    </a>
+
+            <!-- Connection Status -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Connection Status
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">ICMP Response</span>
+                        <span class="info-value">
+                            {{if eq .Device.ICMPStatus "ok"}}
+                                <span class="badge badge-success">OK</span>
+                            {{else if eq .Device.ICMPStatus "none"}}
+                                <span class="badge badge-danger">No Response</span>
+                            {{else}}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">SSH Connection</span>
+                        <span class="info-value">
+                            {{if eq .Device.SSHStatus "ok"}}
+                                <span class="badge badge-success">OK</span>
+                            {{else if eq .Device.SSHStatus "failed"}}
+                                <span class="badge badge-danger">Failed</span>
+                            {{else}}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Last Ping</span>
+                        <span class="info-value">{{.Device.LastUpdated.Format "2006-01-02 15:04:05"}}</span>
+                    </div>
+                    <div class="info-item">
+                    </div>
+                </div>
+            </div>
+
+            {{if eq .Device.OSType "linux"}}
+            <!-- Audit Configuration -->
+            <div class="config-section">
+                <h4 class="section-title">
+                    Audit Configuration
+                </h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Architecture</span>
+                        <span class="info-value">
+                            {{if eq .Device.AuditArch "x64"}}
+                                64-bit (x64)
+                            {{else if eq .Device.AuditArch "x32"}}
+                                32-bit (x32)
+                            {{else}}
+                                {{.Device.AuditArch}}
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Ruleset Profile</span>
+                        <span class="info-value">
+                            {{if eq .Device.AuditRuleset "audit_default.rules"}}
+                                Default
+                            {{else if eq .Device.AuditRuleset "audit_high.rules"}}
+                                High
+                            {{else if eq .Device.AuditRuleset "audit_min.rules"}}
+                                Minimal
+                            {{else}}
+                                {{.Device.AuditRuleset}}
+                            {{end}}
+                        </span>
+                    </div>
                 </div>
             </div>
             {{end}}
@@ -168,74 +185,46 @@
         </div>
         <div class="card-body">
             <h4 class="card-title">Setup Instructions</h4>
-            <p>To set up this device for monitoring, follow these steps:</p>
+            {{if eq .Device.OSType "windows"}}
+            <p>To set up this Windows device for monitoring, follow these steps:</p>
             <ol>
-                <li>Copy the server's public key to the client device:
+                <li><strong>Get your SSH public key from the IDS server</strong>
+                    <pre class="code-block">cat {{.Device.SSHKeyPath}}.pub</pre>
+                    <p class="note">Copy the entire output </p>
+                </li>
+                <li><strong>Transfer the enrollment script to Windows</strong>
+                    <p>You can either copy the "enlist-windows.ps1" script from the github repo or from the monitoring server. If possible copy over to your setup user's Temp folder.</p>
+                    <pre class="code-block">
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/nitrogency/agentLess/main/scripts/windows/enlist-windows.ps1" -OutFile "C:\Users\{{.Device.SetupUser}}\AppData\Local\Temp\enlist-windows.ps1"</pre>
+                </li>
+                <li><strong>Run the enrollment script on Windows (as Administrator)</strong>
+                    <pre class="code-block">
+cd C:\Users\{{.Device.SetupUser}}\AppData\Local\Temp
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+.\enlist-windows.ps1 -ServerIP &lt;IDS-SERVER-IP&gt; -MonitoringUser {{.Device.SSHUser}}</pre>
+                    <p class="note">Replace <code>&lt;IDS-SERVER-IP&gt;</code> with this server's IP, then paste the SSH public key from step 1 when prompted</p>
+                </li>
+            </ol>
+            {{else}}
+            <!-- Linux Setup Instructions -->
+            <p>To set up this Linux device for monitoring, follow these steps:</p>
+            <ol>
+                <li><strong>Copy the server's public key to the client device:</strong>
                     <pre class="code-block">ssh-copy-id -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
-                <li>Run the enlist.sh script from your terminal:
-                    <pre class="code-block">./scripts/enlist.sh {{if not .Device.RandomUser}}-u {{.Device.SSHUser}} -g {{.Device.SSHGroup}}{{else}}-r{{end}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} {{.Device.IPAddress}}</pre>
-                    <p></p>
+                <li><strong>Run the enrollment script from your terminal:</strong>
+                    <pre class="code-block">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
                 </li>
             </ol>
-            <div class="alert alert-info mt-3">
-                <h4>Important!</h4>
-                <p>Each time you add a new device, you must run the cron monitoring script to start automatically monitoring your devices (may require sudo):</p>
-                <pre class="code-block">./scripts/setup-monitoring-cron.sh</pre>
-                <p>This will set up a cron job on your server that runs the monitoring script automatically.</p>
-            </div>
+            {{end}}
         </div>
     </div>
 
     <div class="actions mt-4">
-        <a href="/devices" class="btn btn-secondary">Back to Devices</a>
         <a href="/devices/edit/{{.Device.ID}}" class="btn btn-primary">Edit Device</a>
         <a href="/devices/delete/{{.Device.ID}}" class="btn btn-danger">Delete Device</a>
     </div>
 </div>
 
-<style>
-.code-block {
-    background-color: #212529;
-    color: #f8f9fa;
-    border: 1px solid #495057;
-    border-radius: 3px;
-    padding: 10px;
-    margin: 10px 0;
-    overflow-x: auto;
-    font-family: monospace;
-}
-.note {
-    font-size: 0.9em;
-    color: var(--text-secondary);
-    margin-top: 5px;
-    font-style: italic;
-}
-.alert-info {
-    background-color: #1a3c42;
-    border-color: #164450;
-    color: var(--text-primary);
-    padding: 15px;
-    border-radius: 5px;
-}
-.log-message {
-    max-height: 60px; /* Adjust as needed */
-    overflow-y: auto;
-    font-size: 0.9em;
-    white-space: pre-wrap; /* Allows wrapping long lines */
-    word-break: break-all; /* Breaks long words if necessary */
-}
-.raw-log {
-    max-height: 100px; /* Adjust as needed */
-    width: 300px;
-    overflow: auto;
-    background-color: #212529;
-    padding: 5px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-</style>
 {{end}}

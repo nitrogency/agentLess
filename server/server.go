@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -34,14 +35,36 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 	// Setup session store
 	cookieStore := cookie.NewStore([]byte(cfg.Session.SecretKey))
+	
+	// Convert SameSite string to http.SameSite type
+	sameSite := http.SameSiteLaxMode // Default to Lax
+	switch strings.ToLower(cfg.Session.SameSite) {
+	case "strict":
+		sameSite = http.SameSiteStrictMode
+	case "lax":
+		sameSite = http.SameSiteLaxMode
+	case "none":
+		sameSite = http.SameSiteNoneMode
+	}
+	
 	cookieStore.Options(sessions.Options{
 		Path:     "/",
 		HttpOnly: cfg.Session.HttpOnly,
 		Secure:   cfg.Session.Secure,
+		SameSite: sameSite,
 		MaxAge:   3600 * 24, // 24 hours
 	})
 
 	router.Use(sessions.Sessions(cfg.Session.Name, cookieStore))
+	
+	// Add session timeout enforcement
+	router.Use(middleware.SessionTimeoutMiddleware(
+		cfg.Session.IdleTimeout,
+		cfg.Session.AbsoluteTimeout,
+	))
+	
+	// Add CSRF protection middleware
+	router.Use(middleware.CSRFMiddleware())
 
 	// Add template functions for Gin
 	router.SetFuncMap(template.FuncMap{
@@ -70,6 +93,10 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		"deviceName": func(id int64) string {
 			return db.GetDeviceNameByID(id)
 		},
+		"csrfToken": func() string {
+			// This will be overridden by the actual token in handler context
+			return ""
+		},
 	})
 
 	// Load HTML templates with layout pattern
@@ -82,12 +109,44 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 	// Apply security middleware
 	router.Use(func(c *gin.Context) {
-		// Security headers
+		// Content Security Policy - restricts sources of content
+		c.Writer.Header().Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; "+
+				"connect-src 'self'; "+
+				"font-src 'self'; "+
+				"object-src 'none'; "+
+				"media-src 'self'; "+
+				"frame-src 'none'; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'self'; "+
+				"form-action 'self';")
+
+		// X-Content-Type-Options - prevents MIME type sniffing
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+
+		// X-Frame-Options - prevents clickjacking (DENY = no iframes at all)
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
+
+		// X-XSS-Protection - stops pages from loading when XSS is detected
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		// Referrer-Policy - controls referrer information leakage
 		c.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'")
+
+		// Strict-Transport-Security (HSTS) - enforces HTTPS for 1 year
+		c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+
+		// Permissions-Policy - disables unnecessary browser features
+		c.Writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=()")
+
+		// Cache-Control - prevents sensitive information caching
+		c.Writer.Header().Set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate, private")
+		c.Writer.Header().Set("Pragma", "no-cache")
+		c.Writer.Header().Set("Expires", "0")
+
 		c.Next()
 	})
 
@@ -176,7 +235,7 @@ func setupRoutes(router *gin.Engine) {
 	router.NoRoute(handlers.NotFoundHandler)
 }
 
-// CreateServer creates and configures the HTTP server
+// CreateServer creates and configures the HTTPS server
 func CreateServer(router *gin.Engine, cfg *config.Config) *http.Server {
 	return &http.Server{
 		Addr:         ":" + cfg.Server.Port,

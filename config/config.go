@@ -14,6 +14,8 @@ type Config struct {
 		ReadTimeout  time.Duration
 		WriteTimeout time.Duration
 		IdleTimeout  time.Duration
+		CertFile     string
+		KeyFile      string
 	}
 	Session struct {
 		SecretKey       string
@@ -35,11 +37,13 @@ func Load() (*Config, error) {
 
 	var config Config
 
-	// Server configuration
-	config.Server.Port = getEnv("SERVER_PORT", "8080")
+	// Server configuration (HTTPS only)
+	config.Server.Port = getEnv("PORT", "8443")
 	config.Server.ReadTimeout = 10 * time.Second
 	config.Server.WriteTimeout = 10 * time.Second
 	config.Server.IdleTimeout = 120 * time.Second
+	config.Server.CertFile = getEnv("CERT_FILE", "certs/server.crt")
+	config.Server.KeyFile = getEnv("KEY_FILE", "certs/server.key")
 
 	// Session configuration
 	config.Session.SecretKey = getEnv("SESSION_SECRET", "")
@@ -50,7 +54,7 @@ func Load() (*Config, error) {
 	config.Session.Name = getEnv("SESSION_NAME", "session-name")
 	config.Session.Secure = getEnv("SESSION_SECURE", "true") == "true"
 	config.Session.HttpOnly = getEnv("SESSION_HTTP_ONLY", "true") == "true"
-	config.Session.SameSite = getEnv("SESSION_SAME_SITE", "Lax")
+	config.Session.SameSite = getEnv("SESSION_SAME_SITE", "Strict")
 	config.Session.IdleTimeout = 30 * time.Minute
 	config.Session.AbsoluteTimeout = 24 * time.Hour
 

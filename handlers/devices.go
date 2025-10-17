@@ -37,6 +37,20 @@ func AddDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Add Device"
 
+	// Get available audit rulesets for both architectures
+	x64Rulesets, err := utils.GetAvailableRulesets("x64")
+	if err != nil {
+		log.Printf("Warning: Failed to load x64 rulesets: %v", err)
+		x64Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	x32Rulesets, err := utils.GetAvailableRulesets("x32")
+	if err != nil {
+		log.Printf("Warning: Failed to load x32 rulesets: %v", err)
+		x32Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
+
 	if c.Request.Method == "POST" {
 		// Get form data
 		name := strings.TrimSpace(c.PostForm("name"))
@@ -49,11 +63,21 @@ func AddDeviceHandler(c *gin.Context) {
 		osInfo := strings.TrimSpace(c.PostForm("os_info"))
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
-		setupPassword := c.PostForm("setup_password")
-		randomUserVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_user")))
-		randomKeyVal := strings.ToLower(strings.TrimSpace(c.PostForm("random_key")))
-		randomUser := randomUserVal == "on" || randomUserVal == "true" || randomUserVal == "1"
-		randomKey := randomKeyVal == "on" || randomKeyVal == "true" || randomKeyVal == "1"
+		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
+		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
+		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
+
+		// Default to linux if not specified
+		if osType == "" {
+			osType = "linux"
+		}
+		// Default audit settings for Linux
+		if auditArch == "" {
+			auditArch = "x64"
+		}
+		if auditRuleset == "" {
+			auditRuleset = "audit_default.rules"
+		}
 
 		// Store form data for repopulating on error
 		data.FormData["name"] = name
@@ -64,12 +88,11 @@ func AddDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_port"] = sshPortStr
 		data.FormData["hostname"] = hostname
 		data.FormData["os_info"] = osInfo
+		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
-		data.FormData["setup_password"] = setupPassword
-		// Preserve checkbox state in template on validation errors
-		data.RandomUser = randomUser
-		data.RandomKey = randomKey
+		data.FormData["audit_arch"] = auditArch
+		data.FormData["audit_ruleset"] = auditRuleset
 
 		// Validate required fields
 		if name == "" {
@@ -144,10 +167,18 @@ func AddDeviceHandler(c *gin.Context) {
 			setupUser = "root"
 		}
 
+		// Validate OS type
+		if osType != "linux" && osType != "windows" {
+			data.Error = "Invalid OS type. Must be 'linux' or 'windows'"
+			data.ErrorFields["os_type"] = true
+			templates.RenderGinTemplate(c, "add-device", data)
+			return
+		}
+
 		// Create device
 		if ipAddress != "" {
-			// Create monitored device with SSH details
-			err = db.CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, setupPassword)
+			// Create monitored device with SSH details and OS type
+			err = db.CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset)
 		} else {
 			// Create simple device
 			err = db.CreateDevice(name, deviceType)
@@ -156,7 +187,6 @@ func AddDeviceHandler(c *gin.Context) {
 		if err != nil {
 			log.Printf("Error creating device: %v", err)
 			data.Error = "Failed to create device"
-			templates.RenderGinTemplate(c, "add-device", data)
 			return
 		}
 
@@ -165,6 +195,10 @@ func AddDeviceHandler(c *gin.Context) {
 		return
 	}
 
+	// Provide rulesets for GET request as well
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
+
 	templates.RenderGinTemplate(c, "add-device", data)
 }
 
@@ -172,6 +206,20 @@ func AddDeviceHandler(c *gin.Context) {
 func EditDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Edit Device"
+
+	// Get available audit rulesets for both architectures
+	x64Rulesets, err := utils.GetAvailableRulesets("x64")
+	if err != nil {
+		log.Printf("Warning: Failed to load x64 rulesets: %v", err)
+		x64Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	x32Rulesets, err := utils.GetAvailableRulesets("x32")
+	if err != nil {
+		log.Printf("Warning: Failed to load x32 rulesets: %v", err)
+		x32Rulesets = []utils.RulesetInfo{} // Empty list on error
+	}
+	data.Data["X64Rulesets"] = x64Rulesets
+	data.Data["X32Rulesets"] = x32Rulesets
 
 	// Get device ID from URL parameter
 	deviceIDStr := c.Param("id")
@@ -182,18 +230,18 @@ func EditDeviceHandler(c *gin.Context) {
 	}
 
 	// Parse device ID
-	deviceID, err := strconv.ParseInt(deviceIDStr, 10, 64)
-	if err != nil {
-		log.Printf("Invalid device ID: %v", err)
+	deviceID, parseErr := strconv.ParseInt(deviceIDStr, 10, 64)
+	if parseErr != nil {
+		log.Printf("Invalid device ID: %v", parseErr)
 		data.Error = "Invalid device ID"
 		templates.RenderGinTemplate(c, "404", data)
 		return
 	}
 
 	// Load device from database
-	device, err := db.GetDeviceByID(deviceID)
-	if err != nil {
-		log.Printf("Error loading device ID %d: %v", deviceID, err)
+	device, dbErr := db.GetDeviceByID(deviceID)
+	if dbErr != nil {
+		log.Printf("Error loading device ID %d: %v", deviceID, dbErr)
 		data.Error = "Device not found"
 		templates.RenderGinTemplate(c, "404", data)
 		return
@@ -216,11 +264,32 @@ func EditDeviceHandler(c *gin.Context) {
 		sshPortStr := strings.TrimSpace(c.PostForm("ssh_port"))
 		hostname := strings.TrimSpace(c.PostForm("hostname"))
 		osInfo := strings.TrimSpace(c.PostForm("os_info"))
+		osType := strings.ToLower(strings.TrimSpace(c.PostForm("os_type")))
 		sshGroup := strings.TrimSpace(c.PostForm("ssh_group"))
 		setupUser := strings.TrimSpace(c.PostForm("setup_user"))
-		setupPassword := c.PostForm("setup_password")
-		randomUser := c.PostForm("random_user") == "on"
-		randomKey := c.PostForm("random_key") == "on"
+		auditArch := strings.TrimSpace(c.PostForm("audit_arch"))
+		auditRuleset := strings.TrimSpace(c.PostForm("audit_ruleset"))
+
+		// Default to device's current OS type if not specified
+		if osType == "" {
+			osType = device.OSType
+			if osType == "" {
+				osType = "linux"
+			}
+		}
+		// Default audit settings if not specified
+		if auditArch == "" {
+			auditArch = device.AuditArch
+			if auditArch == "" {
+				auditArch = "x64"
+			}
+		}
+		if auditRuleset == "" {
+			auditRuleset = device.AuditRuleset
+			if auditRuleset == "" {
+				auditRuleset = "audit_default.rules"
+			}
+		}
 
 		// Store form data for repopulating on error
 		data.FormData["name"] = name
@@ -231,9 +300,11 @@ func EditDeviceHandler(c *gin.Context) {
 		data.FormData["ssh_port"] = sshPortStr
 		data.FormData["hostname"] = hostname
 		data.FormData["os_info"] = osInfo
+		data.FormData["os_type"] = osType
 		data.FormData["ssh_group"] = sshGroup
 		data.FormData["setup_user"] = setupUser
-		data.FormData["setup_password"] = setupPassword
+		data.FormData["audit_arch"] = auditArch
+		data.FormData["audit_ruleset"] = auditRuleset
 
 		// Validate required fields
 		if name == "" {
@@ -320,8 +391,31 @@ func EditDeviceHandler(c *gin.Context) {
 			setupUser = "root"
 		}
 
-		// Update device
-		err = db.UpdateMonitoredDevice(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, sshGroup, randomUser, randomKey, setupUser, setupPassword)
+		// Validate OS type
+		if osType != "linux" && osType != "windows" {
+			data.Error = "Invalid OS type. Must be 'linux' or 'windows'"
+			data.ErrorFields["os_type"] = true
+			data.Data["Device"] = device
+			templates.RenderGinTemplate(c, "edit-device", data)
+			return
+		}
+
+		// Check if enrollment-sensitive fields have changed
+		newDevice := &db.Device{
+			SSHPort:            sshPort,
+			SSHUser:            sshUser,
+			SSHKeyPath:         sshKeyPath,
+			SSHGroup:           sshGroup,
+			AuditArch:          auditArch,
+			AuditRuleset:       auditRuleset,
+			FirewallMode:       device.FirewallMode, // Firewall settings come from existing device
+			FirewallAllowedIPs: device.FirewallAllowedIPs,
+			SetupUser:          setupUser,
+		}
+		needsReenrollment := db.NeedsReenrollmentChanged(device, newDevice)
+
+		// Update device with OS type and reenrollment flag
+		err = db.UpdateMonitoredDeviceWithOSAndReenrollment(deviceID, name, deviceType, device.Status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset, needsReenrollment)
 		if err != nil {
 			log.Printf("Error updating device: %v", err)
 			data.Error = "Failed to update device"
@@ -336,6 +430,9 @@ func EditDeviceHandler(c *gin.Context) {
 	}
 
 	// Populate device data for GET request
+	// For templates using top-level .Device
+	data.Device = *device
+	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.FormData["name"] = device.Name
 	data.FormData["type"] = device.Type
@@ -345,9 +442,11 @@ func EditDeviceHandler(c *gin.Context) {
 	data.FormData["ssh_port"] = strconv.Itoa(device.SSHPort)
 	data.FormData["hostname"] = device.Hostname
 	data.FormData["os_info"] = device.OSInfo
+	data.FormData["os_type"] = device.OSType
 	data.FormData["ssh_group"] = device.SSHGroup
 	data.FormData["setup_user"] = device.SetupUser
-	data.FormData["setup_password"] = device.SetupPassword
+	data.FormData["audit_arch"] = device.AuditArch
+	data.FormData["audit_ruleset"] = device.AuditRuleset
 
 	templates.RenderGinTemplate(c, "edit-device", data)
 }
@@ -412,12 +511,12 @@ func DeleteDeviceHandler(c *gin.Context) {
 		}
 	}
 
-  // Populate device data
-  // For templates using top-level .Device
-  data.Device = *device
-  // Keep Data map for any legacy references
-  data.Data["Device"] = device
-  templates.RenderGinTemplate(c, "delete-device-confirm", data)
+	// Populate device data
+	// For templates using top-level .Device
+	data.Device = *device
+	// Keep Data map for any legacy references
+	data.Data["Device"] = device
+	templates.RenderGinTemplate(c, "delete-device-confirm", data)
 }
 
 // MonitorDeviceHandler handles device monitoring interface
@@ -509,3 +608,4 @@ func MonitorDeviceHandler(c *gin.Context) {
 
 	templates.RenderGinTemplate(c, "monitor-device", data)
 }
+

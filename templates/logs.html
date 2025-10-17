@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "content"}}
-<div class="container" style="width: 150%; margin-left: -25%;">
+<div class="container-wide">
     <h2>System Audit Logs</h2>
 
     {{if .Error}}
@@ -19,17 +19,17 @@
         </div>
         <div class="card-body">
             <form method="GET" action="/logs" class="mb-3">
-                <div class="row g-3 align-items-center">
-                    <div class="col-md-3" style="margin-left: 15px;">
+                <div class="form-row">
+                    <div class="form-col">
                         <label for="device_id_filter" class="form-label">Device</label>
                         <select name="device_id" id="device_id_filter" class="form-select">
                             <option value="0" {{if eq .Data.FilterDeviceID 0}}selected{{end}}>All Devices</option>
-                            {{range .Devices}}
-                                <option value="{{.ID}}" {{if eq $.Data.FilterDeviceID .ID}}selected{{end}}>{{.Name}} ({{.IPAddress}})</option>
+                            {{range .Data.Devices}}
+                            <option value="{{.ID}}" {{if eq .ID $.Data.FilterDeviceID}}selected{{end}}>{{.Name}} ({{.IPAddress}})</option>
                             {{end}}
                         </select>
                     </div>
-                    <div class="col-md-3" style="margin-left: 15px;">
+                    <div class="form-col">
                         <label for="security_level_filter" class="form-label">Security Level</label>
                         <select name="security_level" id="security_level_filter" class="form-select">
                             <option value="" {{if eq .Data.FilterSecurityLevel ""}}selected{{end}}>All Levels</option>
@@ -38,13 +38,13 @@
                             <option value="low" {{if eq .Data.FilterSecurityLevel "low"}}selected{{end}}>Low</option>
                         </select>
                     </div>
-                    <div class="col-md-3" style="margin-left: 15px;">
+                    <div class="form-col">
                         <label for="search_filter" class="form-label">Search Term</label>
                         <input type="text" name="search" id="search_filter" class="form-control" placeholder="Search logs..." value="{{.Data.SearchTerm}}">
                     </div>
-                    <div class="col-md-3 d-flex align-items-end" style="margin-left: 15px; margin-top: 30px;">
-                        <button class="btn btn-primary me-2" type="submit">Filter</button>
-                        <a href="/logs?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary">Clear</a>
+                    <div class="form-col-auto">
+                        <button class="btn btn-primary me-2" type="submit" style="min-height: 40px;">Filter</button>
+                        <a href="/logs?page=1&pageSize={{.Data.PageSize}}" class="btn btn-secondary" style="min-height: 40px;">Clear</a>
                     </div>
                 </div>
             </form>
@@ -57,9 +57,9 @@
         </div>
         <div class="card-body">
             <!-- Page size controls -->
-            <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 15px;">
-                <div style="display: flex; align-items: center;">
-                    <div class="btn-group" role="group" style="margin-right: 15px;">
+            <div class="page-controls">
+                <div class="page-size-controls">
+                    <div class="btn-group" role="group">
                         <a href="?page={{.Data.CurrentPage}}&pageSize=10{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 10}}btn-primary{{else}}btn-outline-primary{{end}}">10</a>
                         <a href="?page={{.Data.CurrentPage}}&pageSize=20{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 20}}btn-primary{{else}}btn-outline-primary{{end}}">20</a>
                         <a href="?page={{.Data.CurrentPage}}&pageSize=50{{if .Data.SearchTerm}}&search={{.Data.SearchTerm}}{{end}}{{if .Data.FilterDeviceID}}&device_id={{.Data.FilterDeviceID}}{{end}}{{if .Data.FilterSecurityLevel}}&security_level={{.Data.FilterSecurityLevel}}{{end}}" class="btn btn-sm {{if eq .Data.PageSize 50}}btn-primary{{else}}btn-outline-primary{{end}}">50</a>
@@ -68,8 +68,8 @@
                 </div>
             </div>
 
-            <div style="padding: 0 15px;">
-            <table class="users-table" style="width: 100%;">
+            <div class="table-container">
+            <table class="logs-table">
                 <thead>
                     <tr>
                         <th>Event Time</th>
@@ -92,7 +92,7 @@
                         <td>{{.Key}}</td>
                         <td><span class="security-badge security-{{.SecurityLevel}}">{{.SecurityLevel}}</span></td>
                         <td><div class="log-message">{{.Message}}</div></td>
-                        <td><pre style="min-width: 500px;" class="raw-log">{{.RawLog}}</pre></td>
+                        <td><pre class="raw-log">{{.RawLog}}</pre></td>
                     </tr>
                     {{else}}
                     <tr>
@@ -127,49 +127,9 @@
                        class="btn btn-sm {{if eq .Data.CurrentPage .Data.TotalPages}}btn-outline-secondary disabled{{else}}btn-outline-primary{{end}}">
                         &raquo;
                     </a>
-                </div>
-            </div>
             {{end}}
         </div>
     </div>
 </div>
 
-<style>
-.log-message {
-    max-height: 60px; /* Adjust as needed */
-    overflow-y: auto;
-    font-size: 0.9em;
-    white-space: pre-wrap; /* Allows wrapping long lines */
-    word-break: break-all; /* Breaks long words if necessary */
-}
-.raw-log {
-    max-height: 100px; /* Adjust as needed */
-    width: 300px;
-    overflow: auto;
-    background-color: #212529;
-    padding: 5px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.security-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-weight: bold;
-    text-transform: uppercase;
-    font-size: 0.8em;
-    color: white;
-}
-.security-high {
-    background-color: #dc3545; /* Red for high security/suspiciousness */
-}
-.security-medium {
-    background-color: #fd7e14; /* Orange for medium security/suspiciousness */
-}
-.security-low {
-    background-color: #28a745; /* Green for low security/suspiciousness */
-}
-</style>
 {{end}}

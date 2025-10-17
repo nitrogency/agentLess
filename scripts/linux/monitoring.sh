@@ -1,22 +1,28 @@
 #!/bin/bash
 #
-# monitoring.sh - minimal collector to feed audit lines into scripts/monitoring.go
+# monitoring.sh - minimal collector to feed audit lines into scripts/linux/monitoring.go
 #
 # Usage: monitoring.sh -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> -p <port>
 # Notes: keeps it simple on purpose; relies on Go program to classify and insert into DB.
 set -euo pipefail
 
-# Source shared libraries (minimal logging for this lightweight script)
+# Source shared libraries (minimal logging for this
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+
+# Load database encryption key and export for Go binary
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+    export DB_ENCRYPTION_KEY
+fi
 
 # Configuration
 PROJECT_ROOT="$(get_repo_root)"
-GO_MONITOR="$PROJECT_ROOT/scripts/monitoring.go"
+GO_MONITOR="$PROJECT_ROOT/scripts/linux/monitoring.go"
 BIN_MONITOR="$PROJECT_ROOT/bin/monitor"
-
 DEVICE_ID=""
 SSH_USER=""
 IP=""
@@ -71,21 +77,38 @@ SSH_OPTS=(
 
 # Remote command: try tail (preferred), fallback to sudo tail, then cat  
 LOG_LIMIT="$(get_config log_limit)"
-REMOTE_CMD="if [ -r $AUDIT_LOG_PATH ]; then tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; \
-else sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH; fi"
+
+REMOTE_CMD="(
+  if [ -r $AUDIT_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  else
+    sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
+    sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  fi
+) & (
+  if [ -r $CLAMAV_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+  else
+    sudo -n tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH 2>/dev/null || \
+    sudo tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+  fi
+); wait"
 
 log_debug "Starting monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
 log_debug "SSH options: ${SSH_OPTS[*]}"
 log_debug "Remote command: $REMOTE_CMD"
 
 # Pipe raw audit lines into Go program which writes directly to the encrypted DB
-# Prefer compiled binary under systemd (Go may not be in PATH); fallback to go run.
 if [ -x "$BIN_MONITOR" ]; then
   log_debug "Using compiled monitor binary: $BIN_MONITOR"
-  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
-    (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID")
+  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
+    (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
+elif [ -f "$BIN_MONITOR" ]; then
+  log_error "Binary exists but is not executable: $BIN_MONITOR"
+  log_info "Run: chmod +x $BIN_MONITOR"
+  exit 1
 else
-  log_debug "Using go run with source: $GO_MONITOR"
-  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" | \
-    (cd "$PROJECT_ROOT" && go run ./scripts/monitoring.go -device "$DEVICE_ID")
+  log_error "Compiled binary not found: $BIN_MONITOR"
+  log_info "Run: go build -o $BIN_MONITOR ./scripts/linux/monitoring.go"
+  exit 1
 fi

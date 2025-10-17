@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# config.sh - Centralized configuration for AgentLess IDS scripts
+# config.sh - Centralized configuration for helper scripts
 # Source this file in other scripts: source "$(dirname "$0")/lib/config.sh"
 #
 
 # Version and project info
 readonly AGENTLESS_VERSION="1.0.0"
-readonly PROJECT_NAME="AgentLess IDS"
+readonly PROJECT_NAME="Agent<"
 
 # Default values for device enrollment
 readonly DEFAULT_REMOTE_USER="ids_monitor"
@@ -19,11 +19,10 @@ readonly DEFAULT_DB_ENCRYPTION_KEY="default-dev-encryption-key-do-not-use-in-pro
 
 # File paths (relative to repo root)
 readonly DEFAULT_DB_PATH="data/site.db"
-readonly DEFAULT_SSH_KEY_PATH="${HOME:-/root}/.ssh/ids_monitoring_key"
+readonly DEFAULT_SSH_KEY_PATH="/opt/agentless/.ssh/ids_monitoring_key"
 
 # System paths
 readonly SYSTEMD_SYSTEM_DIR="/etc/systemd/system"
-readonly AGENTLESS_ENV_DIR="/etc/agentless"
 readonly SUDOERS_DIR="/etc/sudoers.d"
 
 # Service and timer names
@@ -37,6 +36,9 @@ readonly AUDIT_RULES_FILE="audit.rules"
 readonly AUDIT_LOG_PATH="/var/log/audit/audit.log"
 readonly AUDIT_RULES_SOURCE_PATH="rulesets/x64/audit_default.rules"
 
+# ClamAV configuration
+readonly CLAMAV_LOG_PATH="/var/log/clamav/clamav.log"
+
 # Log retention settings
 readonly DEFAULT_RETENTION_DAYS="30"
 readonly DEFAULT_LOG_LIMIT="1000"
@@ -44,6 +46,10 @@ readonly DEFAULT_LOG_LIMIT="1000"
 # Network and SSH settings
 readonly DEFAULT_SSH_CONNECT_TIMEOUT="5"
 readonly DEFAULT_SSH_COMMAND_TIMEOUT="10"
+
+# Windows-specific settings
+readonly DEFAULT_WINDOWS_COLLECTION_INTERVAL="30"
+readonly WINDOWS_SYSMON_LOG="Microsoft-Windows-Sysmon/Operational"
 
 # Security settings
 readonly SSH_KEY_TYPE="rsa"
@@ -89,9 +95,24 @@ get_config() {
         "audit_rules_source_path")
             echo "${AUDIT_RULES_SOURCE_PATH:-$AUDIT_RULES_SOURCE_PATH}"
             ;;
+        "windows_collection_interval")
+            echo "${WINDOWS_COLLECTION_INTERVAL:-$DEFAULT_WINDOWS_COLLECTION_INTERVAL}"
+            ;;
+        "clamav_log_path")
+            echo "$CLAMAV_LOG_PATH"
+            ;;
+        "audit_log_path")
+            echo "$AUDIT_LOG_PATH"
+            ;;
         *)
-            echo ""
-            return 1
+            # Allow custom config values with default
+            local default="$2"
+            if [ -n "$default" ]; then
+                echo "$default"
+            else
+                echo ""
+                return 1
+            fi
             ;;
     esac
 }
@@ -148,7 +169,7 @@ validate_config() {
 
 # Print configuration summary
 print_config() {
-    log_info "=== AgentLess IDS Configuration ==="
+    log_info "=== Agent< Config ==="
     log_info "Version: $AGENTLESS_VERSION"
     log_info "Remote User: $(get_config remote_user)"
     log_info "Remote Group: $(get_config remote_group)"

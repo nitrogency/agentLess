@@ -1,81 +1,72 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const randomUserCheckbox = document.getElementById('random_user');
-    const sshUserInput = document.getElementById('ssh_user');
-    const sshGroupInput = document.getElementById('ssh_group');
-    const randomKeyCheckbox = document.getElementById('random_key');
-    const sshKeyPathInput = document.getElementById('ssh_key_path');
+    // Dynamic ruleset switching based on architecture
+    const auditArchSelect = document.getElementById('audit_arch');
+    const auditRulesetSelect = document.getElementById('audit_ruleset');
     
-    // Only proceed if elements exist (for add-device page)
-    if (randomUserCheckbox && sshUserInput && sshGroupInput) {
-        let savedSshUser = '';
-        let savedSshGroup = '';
-        let savedUserPlaceholder = sshUserInput.placeholder;
-        let savedGroupPlaceholder = sshGroupInput.placeholder;
-
-        // Function to toggle SSH user and group fields based on random user checkbox
-        function toggleSshFields() {
-            if (randomUserCheckbox.checked) {
-                // Save current values and placeholders before disabling
-                savedSshUser = sshUserInput.value;
-                savedSshGroup = sshGroupInput.value;
-                savedUserPlaceholder = sshUserInput.placeholder;
-                savedGroupPlaceholder = sshGroupInput.placeholder;
+    if (auditArchSelect && auditRulesetSelect && window.rulesetData) {
+        function updateRulesetOptions() {
+            const selectedArch = auditArchSelect.value || 'x64';
+            const rulesets = window.rulesetData[selectedArch] || [];
+            const currentSelection = auditRulesetSelect.value;
+            
+            // Clear existing options
+            auditRulesetSelect.innerHTML = '';
+            
+            // Add options from the ruleset data
+            rulesets.forEach(function(ruleset) {
+                const option = document.createElement('option');
+                option.value = ruleset.Filename;
+                option.textContent = ruleset.DisplayName;
                 
-                // Clear and disable fields, update placeholders
-                sshUserInput.value = '';
-                sshGroupInput.value = '';
-                sshUserInput.placeholder = "Will be generated from wordlist";
-                sshGroupInput.placeholder = "Will be generated from wordlist";
-                sshUserInput.required = false;
-                sshGroupInput.required = false;
-                sshUserInput.disabled = true;
-                sshGroupInput.disabled = true;
+                // Preserve selection if it exists in the new architecture
+                if (ruleset.Filename === currentSelection) {
+                    option.selected = true;
+                } else if (!currentSelection && ruleset.IsDefault) {
+                    // Select default if no current selection
+                    option.selected = true;
+                }
+                
+                auditRulesetSelect.appendChild(option);
+            });
+        }
+        
+        // Update rulesets when architecture changes
+        auditArchSelect.addEventListener('change', updateRulesetOptions);
+    }
+
+    // Hide setup authentication and audit sections when OS type is Windows
+    const osTypeSelect = document.getElementById('os_type');
+    const setupAuthSection = document.getElementById('setup_auth_section');
+    const setupUserInput = document.getElementById('setup_user');
+    const auditConfigSection = document.getElementById('audit_config_section');
+
+    if (osTypeSelect && setupAuthSection && setupUserInput) {
+        const originalRequired = setupUserInput.required;
+
+        function toggleOSSpecificSections() {
+            if (osTypeSelect.value === 'windows') {
+                setupAuthSection.classList.add('hidden');
+                setupUserInput.required = false;
+                setupUserInput.readOnly = true;
+                
+                // Hide audit config section for Windows
+                if (auditConfigSection) {
+                    auditConfigSection.style.display = 'none';
+                }
             } else {
-                // Restore saved values, placeholders and enable fields
-                sshUserInput.value = savedSshUser;
-                sshGroupInput.value = savedSshGroup;
-                sshUserInput.placeholder = savedUserPlaceholder;
-                sshGroupInput.placeholder = savedGroupPlaceholder;
-                sshUserInput.required = true;
-                sshGroupInput.required = true;
-                sshUserInput.disabled = false;
-                sshGroupInput.disabled = false;
+                setupAuthSection.classList.remove('hidden');
+                setupUserInput.readOnly = false;
+                setupUserInput.required = originalRequired;
+                
+                // Show audit config section for Linux
+                if (auditConfigSection) {
+                    auditConfigSection.style.display = 'block';
+                }
             }
         }
 
-        // Initial setup and event listener
-        toggleSshFields();
-        randomUserCheckbox.addEventListener('change', toggleSshFields);
+        toggleOSSpecificSections();
+        osTypeSelect.addEventListener('change', toggleOSSpecificSections);
     }
 
-    // Handle SSH key path field (for both add and edit pages)
-    if (randomKeyCheckbox && sshKeyPathInput) {
-        let savedSshKeyPath = '';
-        let savedKeyPathPlaceholder = sshKeyPathInput.placeholder;
-
-        // Function to toggle SSH key path field based on random key checkbox
-        function toggleSshKeyPathField() {
-            if (randomKeyCheckbox.checked) {
-                // Save current value and placeholder before disabling
-                savedSshKeyPath = sshKeyPathInput.value;
-                savedKeyPathPlaceholder = sshKeyPathInput.placeholder;
-                
-                // Clear and disable field, update placeholder
-                sshKeyPathInput.value = '';
-                sshKeyPathInput.placeholder = "Will be generated automatically";
-                sshKeyPathInput.required = false;
-                sshKeyPathInput.disabled = true;
-            } else {
-                // Restore saved value, placeholder and enable field
-                sshKeyPathInput.value = savedSshKeyPath;
-                sshKeyPathInput.placeholder = savedKeyPathPlaceholder;
-                sshKeyPathInput.required = true;
-                sshKeyPathInput.disabled = false;
-            }
-        }
-
-        // Initial setup and event listener
-        toggleSshKeyPathField();
-        randomKeyCheckbox.addEventListener('change', toggleSshKeyPathField);
-    }
 });

@@ -26,6 +26,8 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+After setup, the web interface should be accessible at https://localhost:8443.
+
 ## After installation
 At the end of the `setup.sh` script, a systemd service is created. This allows for easier debugging and log management. To view the status of the web app, simply type:
 ```bash
@@ -33,7 +35,15 @@ sudo systemctl status agentless
 ```
 If you wish to `restart`, `stop` or `disable` the service, replace the `status` word accordingly.
 
+### Logging
+
 To view the service log, type:
 ```bash
 journalctl -u agentless
 ```
+
+Other app related logs (login attempts, script results) are saved in `/logs`.
+
+### Certificates
+
+By default, the app does not support HTTP. During setup, a self-signed certificate is generated in the `certs/` directory. To re-generate them, remove them and run the `setup.sh` script again.

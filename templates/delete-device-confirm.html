@@ -30,7 +30,6 @@
                     <p><strong>IP Address:</strong> {{.Device.IPAddress}}</p>
                     <p><strong>SSH User:</strong> {{.Device.SSHUser}}</p>
                     <p><strong>SSH Group:</strong> {{.Device.SSHGroup}}</p>
-                    <p><strong>Random User:</strong> {{if .Device.RandomUser}}Yes{{else}}No{{end}}</p>
                 </div>
             </div>
             
@@ -40,6 +39,7 @@
             
             <div class="actions mt-4">
                 <form method="POST" action="/devices/delete/{{.Device.ID}}">
+                    <input type="hidden" name="csrf_token" value="{{.FormToken}}">
                     <input type="hidden" name="confirm" value="yes">
                     <button type="submit" class="btn btn-danger">Yes, Delete Device</button>
                     <a href="/devices" class="btn btn-secondary">Cancel</a>

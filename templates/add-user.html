@@ -17,6 +17,7 @@
     {{end}}
 
     <form method="POST" action="/users/add" class="user-form">
+        <input type="hidden" name="csrf_token" value="{{.FormToken}}">
         <input type="hidden" name="action" value="create">
         
         <div class="form-group">

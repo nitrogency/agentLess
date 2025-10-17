@@ -1,0 +1,12 @@
+{{define "content"}}
+<div class="error-container">
+    <h2>{{.Title}}</h2>
+    {{if .Error}}
+        <div class="error-message">
+            <p>{{.Error}}</p>
+        </div>
+    {{end}}
+    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+    <a href="/login" class="btn btn-secondary">Login</a>
+</div>
+{{end}}

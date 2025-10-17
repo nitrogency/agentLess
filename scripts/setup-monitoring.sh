@@ -2,13 +2,13 @@
 #
 # setup-monitoring.sh
 # Create and enable one systemd service per device to run continuous monitoring.
-# Keeps it as simple as possible and self-contained.
+# Uses database as single source of truth for device configuration.
 #
 # This script:
-#  1) Reads devices from the encrypted SQLite DB (SQLCipher)
-#  2) Creates per-device environment files with SSH parameters
-#  3) Installs a template unit agentless-monitor@.service pointing to scripts/monitoring.sh
-#  4) Enables and starts agentless-monitor@<device-id>.service for each device
+#  1) Reads active devices from the encrypted SQLite DB (SQLCipher)
+#  2) Installs a template unit agentless-monitor@.service pointing to scripts/start-monitoring.sh
+#  3) Enables and starts agentless-monitor@<device-id>.service for each device
+#  4) Reconciles and removes services for deleted devices
 #
 set -euo pipefail
 
@@ -18,15 +18,20 @@ source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/common.sh"
 
+# Load database encryption key
+if [ -f "/etc/agentless/secrets.env" ]; then
+    # shellcheck disable=SC1091
+    source /etc/agentless/secrets.env
+fi
+
 # Setup cleanup trap
 setup_cleanup_trap
 
 # Configuration
 REPO_ROOT="$(get_repo_root)"
 DB_PATH="$REPO_ROOT/$(get_config db_path)"
-ENV_DIR="$AGENTLESS_ENV_DIR"
 UNIT_PATH="$SYSTEMD_SYSTEM_DIR/$MONITOR_SERVICE_TEMPLATE"
-MONITOR_SH="$REPO_ROOT/scripts/monitoring.sh"
+MONITOR_SH="$REPO_ROOT/scripts/start-monitoring.sh"
 
 # Check dependencies
 check_dependency sqlcipher
@@ -34,7 +39,6 @@ check_dependency systemctl
 
 log_info "Repository: $REPO_ROOT"
 log_info "Database: $DB_PATH" 
-log_info "Environment dir: $ENV_DIR"
 log_info "Monitor script: $MONITOR_SH"
 
 # Ensure required files/dirs
@@ -46,20 +50,20 @@ if [ ! -f "$DB_PATH" ]; then
   handle_error "database not found: $DB_PATH"
 fi
 
-# Query devices: id|ip|ssh_user|ssh_key_path|ssh_port
+# Query active device IDs from database
 log_progress "Reading devices from database..."
-DEVICES=$(execute_sqlite "SELECT id, ip_address, ssh_user, ssh_key_path, COALESCE(ssh_port,'22') FROM devices WHERE status != 'deleted';" "$DB_PATH")
+DEVICES=$(execute_sqlite "SELECT id, name FROM devices WHERE status != 'deleted';" "$DB_PATH")
 if [ -z "$DEVICES" ]; then
   log_warn "No devices found. Add devices to the DB first."
   # Still proceed to reconcile and stop any stale services
 fi
 
-# Build a space-delimited list of active IDs for reconciliation like: " 1 2 3 "
+# Build a space-delimited list of active IDs for reconciliation
 ACTIVE_IDS=""
 if [ -n "$DEVICES" ]; then
   IFS=$'\n'
   for row in $DEVICES; do
-    IFS='|' read -r ID _rest <<<"$row"
+    IFS='|' read -r ID NAME <<<"$row"
     if [ -n "$ID" ]; then
       ACTIVE_IDS+=" $ID"
     fi
@@ -67,34 +71,27 @@ if [ -n "$DEVICES" ]; then
 fi
 ACTIVE_IDS="${ACTIVE_IDS# }"
 
-# Reconcile: disable/stop units and remove env files for IDs not in DB
-echo "Reconciling stale monitor units/env files..."
-if ls "$ENV_DIR"/monitor-*.env >/dev/null 2>&1; then
-  for envf in "$ENV_DIR"/monitor-*.env; do
-    [ -e "$envf" ] || continue
-    bn=$(basename "$envf")
-    did=${bn#monitor-}
-    did=${did%.env}
-    case " $ACTIVE_IDS " in
-      *" $did "*)
-        # still active
-        :
-        ;;
-      *)
-        log_info "Removing stale device $did"
-        systemctl_safe disable-stop "agentless-monitor@$did.service"
-        sudo_command rm -f -- "$envf"
-        ;;
-    esac
-  done
-fi
-
-# Create env dir
-log_progress "Setting up environment directory..."
-if [ ! -d "$ENV_DIR" ]; then
-  sudo_command mkdir -p "$ENV_DIR"
-  sudo_command chmod 0750 "$ENV_DIR"
-fi
+# Reconcile: disable/stop units for IDs not in DB
+log_progress "Reconciling stale monitor units..."
+for service_file in $SYSTEMD_SYSTEM_DIR/agentless-monitor@*.service; do
+  [ -e "$service_file" ] || continue
+  
+  # Extract device ID from service filename
+  bn=$(basename "$service_file")
+  did=${bn#agentless-monitor@}
+  did=${did%.service}
+  
+  case " $ACTIVE_IDS " in
+    *" $did "*)
+      # still active
+      :
+      ;;
+    *)
+      log_info "Removing stale device service: $did"
+      systemctl_safe disable-stop "agentless-monitor@$did.service"
+      ;;
+  esac
+done
 
 # Install or update the unit template with absolute paths
 UNIT_CONTENT="[Unit]
@@ -104,12 +101,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=agentless
+Group=agentless
 WorkingDirectory=%s
-EnvironmentFile=%s/monitor-%%i.env
-Environment=HOME=/root
-ExecStart=%s -d %%i -u \${SSH_USER} -i \${IP} -k \${SSH_KEY} -p \${SSH_PORT}
+Environment=HOME=/opt/agentless
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=%s -d %%i
 Restart=always
-RestartSec=2
+RestartSec=10
 # Hardening (relaxed for script execution)
 NoNewPrivileges=true
 PrivateTmp=true
@@ -133,35 +132,22 @@ WantedBy=multi-user.target
 "
 log_progress "Installing systemd service template..."
 # shellcheck disable=SC2059
-printf "$UNIT_CONTENT" "$REPO_ROOT" "$ENV_DIR" "$MONITOR_SH" "$REPO_ROOT" | sudo_command tee "$UNIT_PATH" >/dev/null
+printf "$UNIT_CONTENT" "$REPO_ROOT" "$MONITOR_SH" "$REPO_ROOT" | sudo_command tee "$UNIT_PATH" >/dev/null
 
 systemctl_safe reload
 
-# Create per-device env and enable services
+# Enable and start services for each device
 IFS=$'\n'
 for row in $DEVICES; do
-  IFS='|' read -r ID IP SSH_USER SSH_KEY SSH_PORT <<<"$row"
-  if [ -z "$ID" ] || [ -z "$IP" ]; then
+  IFS='|' read -r ID NAME <<<"$row"
+  if [ -z "$ID" ]; then
     log_warn "Skipping invalid row: $row"
     continue
   fi
-  [ -z "${SSH_USER:-}" ] && SSH_USER="$(get_config remote_user)"
-  [ -z "${SSH_KEY:-}" ] && SSH_KEY="$(get_config ssh_key_path)"
-  [ -z "${SSH_PORT:-}" ] && SSH_PORT="$(get_config ssh_port)"
 
-  ENV_FILE="$ENV_DIR/monitor-$ID.env"
-  log_progress "Configuring device $ID ($IP)..."
-  sudo_command bash -c "cat > '$ENV_FILE' <<ENVEOF
-SSH_USER=$SSH_USER
-IP=$IP
-SSH_KEY=$SSH_KEY
-SSH_PORT=$SSH_PORT
-ENVEOF"
-  sudo_command chmod 0640 "$ENV_FILE"
-
+  log_progress "Configuring device $ID ($NAME)..."
   log_info "Enabling and starting service: agentless-monitor@$ID"
   systemctl_safe enable-start "agentless-monitor@$ID.service"
-
 done
 
 systemctl list-units --type=service --state=running | grep -E 'agentless-monitor@' || log_info "No monitoring services currently running"
