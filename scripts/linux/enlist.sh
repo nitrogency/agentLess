@@ -124,7 +124,7 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     log_warn "SSH key not found at $SSH_KEY_PATH"
     if [ "$RANDOM_KEY" = true ]; then
         log_progress "Generating a new SSH key pair..."
-        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" -C "ids_monitoring_key"
+        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" -C "monitor"
         log_success "Generated new SSH key at $SSH_KEY_PATH"
     else
         log_error "Please specify a valid SSH key with -k or --key"

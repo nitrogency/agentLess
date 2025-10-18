@@ -22,6 +22,7 @@ ExecStart=__APP_DIR__/agentless
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
+AmbientCapabilities=CAP_NET_RAW
 ReadWritePaths=__APP_DIR__/data __APP_DIR__/tmp /var/log/agentless
 
 Restart=on-failure

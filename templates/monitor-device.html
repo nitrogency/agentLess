@@ -210,7 +210,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
             <p>To set up this Linux device for monitoring, follow these steps:</p>
             <ol>
                 <li><strong>Copy the server's public key to the client device:</strong>
-                    <pre class="code-block">ssh-copy-id -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
+                    <pre class="code-block">sudo ssh-copy-id {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
                     <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
                 </li>
                 <li><strong>Run the enrollment script from your terminal:</strong>

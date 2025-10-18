@@ -372,19 +372,19 @@ sudo chown agentless:agentless /opt/agentless/.ssh
 sudo chmod 700 /opt/agentless/.ssh
 
 # Generate SSH keys for monitoring if they don't exist
-if [ ! -f "/opt/agentless/.ssh/ids_monitoring_key" ]; then
+if [ ! -f "/opt/agentless/.ssh/monitor" ]; then
   log_progress "Generating SSH keys for agentless user..."
-  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /opt/agentless/.ssh/ids_monitoring_key -N "" -C "ids_monitoring"
-  sudo chmod 600 /opt/agentless/.ssh/ids_monitoring_key
-  sudo chmod 644 /opt/agentless/.ssh/ids_monitoring_key.pub
-  log_success "SSH keys generated at /opt/agentless/.ssh/ids_monitoring_key"
+  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /opt/agentless/.ssh/monitor -N "" -C "agentless_monitor"
+  sudo chmod 600 /opt/agentless/.ssh/monitor
+  sudo chmod 644 /opt/agentless/.ssh/monitor.pub
+  log_success "SSH keys generated at /opt/agentless/.ssh/monitor"
 else
-  log_info "SSH keys already exist at /opt/agentless/.ssh/ids_monitoring_key"
+  log_info "SSH keys already exist at /opt/agentless/.ssh/monitor"
 fi
 
 # Display public key for user reference
 log_info "Public key for device enrollment:"
-sudo cat /opt/agentless/.ssh/ids_monitoring_key.pub
+sudo cat /opt/agentless/.ssh/monitor.pub
 
 # Set up HTTPS certificates if they don't exist
 CERT_DIR="$APP_DIR/certs"
