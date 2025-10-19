@@ -30,6 +30,15 @@ else
   log_info "User 'agentless' already exists"
 fi
 
+# Add agentless to adm group for audit log access
+log_progress "Adding agentless user to adm group for log access..."
+if ! groups agentless | grep -q '\badm\b'; then
+  sudo usermod -a -G adm agentless
+  log_success "User 'agentless' added to adm group"
+else
+  log_info "User 'agentless' already in adm group"
+fi
+
 # Configure passwordless sudo for agentless user
 log_progress "Configuring passwordless sudo for agentless user..."
 sudo bash -c 'cat > /etc/sudoers.d/agentless << "EOF"
@@ -80,6 +89,15 @@ log_progress "Creating required directories..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$APP_DIR/tmp"
 mkdir -p "$APP_DIR/bin"
+mkdir -p "$APP_DIR/config"
+
+# Ensure config file exists
+if [ ! -f "$APP_DIR/config/audit_priorities.conf" ]; then
+  if [ -f "$SOURCE_DIR/config/audit_priorities.conf" ]; then
+    cp "$SOURCE_DIR/config/audit_priorities.conf" "$APP_DIR/config/"
+    log_success "Audit priorities config installed"
+  fi
+fi
 
 # Create system-wide log directory
 log_progress "Creating system log directory..."

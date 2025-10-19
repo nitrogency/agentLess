@@ -45,6 +45,8 @@
                         <span class="badge badge-success" title="SSH connection: OK">Connected</span>
                     {{else if eq .SSHStatus "failed"}}
                         <span class="badge badge-danger" title="SSH connection: Failed">Failed</span>
+                    {{else if eq .SSHStatus "n/a"}}
+                        <span class="badge badge-secondary" title="Localhost - no SSH check needed">N/A</span>
                     {{else if eq .SSHStatus "unknown"}}
                         <span class="badge badge-secondary" title="SSH not configured">Unknown</span>
                     {{else}}
@@ -89,8 +91,12 @@
                     {{if .IPAddress}}
                     <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>
                     {{end}}
+                    {{if and (ne .IPAddress "127.0.0.1") (ne .IPAddress "localhost")}}
                     <a href="/devices/edit/{{.ID}}" class="btn btn-sm btn-secondary">Edit</a>
                     <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
+                    {{else}}
+                    <span class="badge badge-info" title="Localhost device cannot be edited or deleted">Localhost</span>
+                    {{end}}
                 </td>
             </tr>
             {{else}}

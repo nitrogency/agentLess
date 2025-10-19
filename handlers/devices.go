@@ -253,6 +253,13 @@ func EditDeviceHandler(c *gin.Context) {
 		return
 	}
 
+	// Prevent editing localhost device
+	if device.IPAddress == "127.0.0.1" || device.IPAddress == "localhost" {
+		data.Error = "Localhost device cannot be edited"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
 	// Handle POST request (form submission)
 	if c.Request.Method == "POST" {
 		// Get form data
@@ -484,6 +491,13 @@ func DeleteDeviceHandler(c *gin.Context) {
 
 	if device == nil {
 		data.Error = "Device not found"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
+	// Prevent deleting localhost device
+	if device.IPAddress == "127.0.0.1" || device.IPAddress == "localhost" {
+		data.Error = "Localhost device cannot be deleted"
 		templates.RenderGinTemplate(c, "404", data)
 		return
 	}

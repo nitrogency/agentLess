@@ -474,6 +474,14 @@ func UpdateAllDeviceStatuses() error {
 			return err
 		}
 
+		// Skip status checks for localhost - it's always online and doesn't need SSH/ICMP checks
+		if ipAddress == "127.0.0.1" || ipAddress == "localhost" {
+			if err := UpdateDeviceStatusWithDetails(id, "online", "n/a", "n/a"); err != nil {
+				log.Printf("Error updating status for localhost device %d: %v", id, err)
+			}
+			continue
+		}
+
 		// Check ICMP (ping) status
 		icmpStatus := "none"
 		if pingOk, err := CheckDeviceStatus(ipAddress); err == nil && pingOk {

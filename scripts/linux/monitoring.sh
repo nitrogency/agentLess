@@ -75,40 +75,50 @@ SSH_OPTS=(
   -o Compression=yes
 )
 
-# Remote command: try tail (preferred), fallback to sudo tail, then cat  
 LOG_LIMIT="$(get_config log_limit)"
 
-REMOTE_CMD="(
-  if [ -r $AUDIT_LOG_PATH ]; then
-    tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+# Check if monitoring binary exists
+if [ ! -x "$BIN_MONITOR" ]; then
+  if [ -f "$BIN_MONITOR" ]; then
+    log_error "Binary exists but is not executable: $BIN_MONITOR"
+    log_info "Run: chmod +x $BIN_MONITOR"
   else
-    sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
-    sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+    log_error "Compiled binary not found: $BIN_MONITOR"
+    log_info "Run: go build -o $BIN_MONITOR ./scripts/linux/monitoring.go"
   fi
-) & (
-  if [ -r $CLAMAV_LOG_PATH ]; then
-    tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
-  else
-    sudo -n tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH 2>/dev/null || \
-    sudo tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
-  fi
-); wait"
+  exit 1
+fi
 
 log_debug "Starting monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
-log_debug "SSH options: ${SSH_OPTS[*]}"
-log_debug "Remote command: $REMOTE_CMD"
+log_debug "Using compiled monitor binary: $BIN_MONITOR"
 
-# Pipe raw audit lines into Go program which writes directly to the encrypted DB
-if [ -x "$BIN_MONITOR" ]; then
-  log_debug "Using compiled monitor binary: $BIN_MONITOR"
+# Check if this is localhost - read logs directly without SSH
+if [[ "$IP" == "127.0.0.1" || "$IP" == "localhost" ]]; then
+  log_info "Detected localhost - reading logs directly (no SSH)"
+  
+  # Read logs directly (agentless user must be in adm group for audit log access)
+  (cd "$PROJECT_ROOT" && tail -n "$LOG_LIMIT" -F "$AUDIT_LOG_PATH" "$CLAMAV_LOG_PATH" 2>/dev/null | "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
+else
+  # Remote device - use SSH
+  REMOTE_CMD="(
+    if [ -r $AUDIT_LOG_PATH ]; then
+      tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+    else
+      sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
+      sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+    fi
+  ) & (
+    if [ -r $CLAMAV_LOG_PATH ]; then
+      tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+    else
+      sudo -n tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH 2>/dev/null || \
+      sudo tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+    fi
+  ); wait"
+  
+  log_debug "SSH options: ${SSH_OPTS[*]}"
+  log_debug "Remote command: $REMOTE_CMD"
+  
   ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
     (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
-elif [ -f "$BIN_MONITOR" ]; then
-  log_error "Binary exists but is not executable: $BIN_MONITOR"
-  log_info "Run: chmod +x $BIN_MONITOR"
-  exit 1
-else
-  log_error "Compiled binary not found: $BIN_MONITOR"
-  log_info "Run: go build -o $BIN_MONITOR ./scripts/linux/monitoring.go"
-  exit 1
 fi
