@@ -93,10 +93,8 @@
                     {{end}}
                     {{if and (ne .IPAddress "127.0.0.1") (ne .IPAddress "localhost")}}
                     <a href="/devices/edit/{{.ID}}" class="btn btn-sm btn-secondary">Edit</a>
-                    <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
-                    {{else}}
-                    <span class="badge badge-info" title="Localhost device cannot be edited or deleted">Localhost</span>
                     {{end}}
+                    <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
                 </td>
             </tr>
             {{else}}

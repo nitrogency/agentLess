@@ -495,13 +495,6 @@ func DeleteDeviceHandler(c *gin.Context) {
 		return
 	}
 
-	// Prevent deleting localhost device
-	if device.IPAddress == "127.0.0.1" || device.IPAddress == "localhost" {
-		data.Error = "Localhost device cannot be deleted"
-		templates.RenderGinTemplate(c, "404", data)
-		return
-	}
-
 	// Handle POST request (confirm deletion)
 	if c.Request.Method == "POST" {
 		confirm := c.PostForm("confirm")
