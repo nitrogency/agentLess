@@ -19,17 +19,17 @@
 -a always,exit -F arch=b64 -F dir=/etc/audit/ -F perm=wa -F auid!=unset -k auditconfig
 
 # Monitor for use of audit management tools
--a always,exit -F arch=b64 -F exe=/sbin/auditctl -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/sbin/auditd -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/auditd -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/augenrules -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/sbin/auditctl -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/sbin/auditd -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/auditd -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/augenrules -F auid!=unset -k audittools
 
 # Access to all audit trails
--a always,exit -F arch=b64 -F exe=/usr/sbin/ausearch -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/aureport -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/aulast -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/aulastlogin -F auid!=unset -k audittools
--a always,exit -F arch=b64 -F exe=/usr/sbin/auvirt -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/ausearch -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/aureport -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/aulast -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/aulastlogin -F auid!=unset -k audittools
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/auvirt -F auid!=unset -k audittools
 
 # Sensitive file modifying
 # Editing these files can change or break the behavior of system users and grant privileges
@@ -114,24 +114,24 @@
 -a always,exit -F arch=b64 -F dir=/etc/apparmor.d -F perm=wa -F auid!=unset -k MAC_policy
 
 # These commands can be used to alter ACLs or the security context
--a always,exit -F arch=b64 -F exe=/usr/bin/chcon -F auid>=1000 -F auid!=unset -k conf_chcon
--a always,exit -F arch=b64 -F exe=/usr/bin/setfacl -F auid>=1000 -F auid!=unset -k conf_setfacl
--a always,exit -F arch=b64 -F exe=/usr/bin/chacl -F auid>=1000 -F auid!=unset -k conf_chacl
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/chcon -F auid>=1000 -F auid!=unset -k conf_chcon
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/setfacl -F auid>=1000 -F auid!=unset -k conf_setfacl
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/chacl -F auid>=1000 -F auid!=unset -k conf_chacl
 
 # User account modification
 # Usermod can be used to grant, edit or revoke privileges
--a always,exit -F arch=b64 -F exe=/usr/sbin/usermod -F auid>=1000 -F auid!=unset -k usermod
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/usermod -F auid>=1000 -F auid!=unset -k usermod
 
 # Kernel module loading
 -a always,exit -F arch=b64 -S init_module,delete_module,finit_module -F auid>=1000 -F auid!=unset -k kernel_modules
--a always,exit -F arch=b64 -F exe=/usr/bin/kmod -F auid>=1000 -F auid!=unset -k kernel_modules
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/kmod -F auid>=1000 -F auid!=unset -k kernel_modules
 
 # Firewall events
--a always,exit -F arch=b64 -F exe=/usr/sbin/ufw -F auid>=1000 -F auid!=unset -k firewall
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/sbin/ufw -F auid>=1000 -F auid!=unset -k firewall
 -a always,exit -F arch=b64 -F dir=/etc/ufw/ -F perm=wa -F auid>=1000 -F auid!=unset -k firewall
 
 # Systemd events - related to services, units, timers - sensitive,, method of persistance
--a always,exit -F arch=b64 -F exe=/bin/systemctl -F auid>=1000 -F auid!=unset -k systemd_monitoring
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/bin/systemctl -F auid>=1000 -F auid!=unset -k systemd_monitoring
 -a always,exit -F arch=b64 -F dir=/etc/systemd/   -F perm=wa -F auid>=1000 -F auid!=unset -k systemd_monitoring
 
 # Cron events - cron can be used to gain persistence on target system
@@ -146,71 +146,71 @@
 -a always,exit -F arch=b64 -F dir=/var/spool/cron/     -F auid!=unset -k cron_events
 
 # Reconnaissance
--a always,exit -F arch=b64 -F exe=/usr/bin/whoami -F auid>=1000 -F auid!=unset -k recon
--a always,exit -F arch=b64 -F exe=/usr/bin/id -F auid>=1000 -F auid!=unset -k recon
--a always,exit -F arch=b64 -F exe=/bin/hostname -F auid>=1000 -F auid!=unset -k recon
--a always,exit -F arch=b64 -F exe=/bin/uname -F auid>=1000 -F auid!=unset -k recon
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/whoami -F auid>=1000 -F auid!=unset -k recon
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/id -F auid>=1000 -F auid!=unset -k recon
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/bin/hostname -F auid>=1000 -F auid!=unset -k recon
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/bin/uname -F auid>=1000 -F auid!=unset -k recon
 -a always,exit -F arch=b64 -F path=/etc/issue -F perm=r -F auid>=1000 -F auid!=unset -k recon
 -a always,exit -F arch=b64 -F path=/etc/hostname -F perm=r -F auid>=1000 -F auid!=unset -k recon
 
 # Suspicious activity
--a always,exit -F arch=b64 -F exe=/usr/bin/wget -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/curl -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/base64 -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/bin/nc -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/bin/netcat -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/ncat -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/ss -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/netstat -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/ssh -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/scp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/sftp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/ftp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/socat -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/wireshark -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/tshark -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/rawshark -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/rdesktop -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/local/bin/rdesktop -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/wlfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/xfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/local/bin/xfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
--a always,exit -F arch=b64 -F exe=/usr/bin/nmap -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/wget -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/curl -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/base64 -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/bin/nc -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/bin/netcat -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ncat -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ss -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/netstat -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ssh -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/scp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/sftp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ftp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/socat -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/wireshark -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/tshark -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/rawshark -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/rdesktop -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/local/bin/rdesktop -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/wlfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/xfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/local/bin/xfreerdp -F auid>=1000 -F auid!=unset -k susp_activity
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/nmap -F auid>=1000 -F auid!=unset -k susp_activity
 
 # Credential/string searching
--a always,exit -F arch=b64 -F exe=/usr/bin/grep -F auid>=1000 -F auid!=unset -k string_search
--a always,exit -F arch=b64 -F exe=/usr/bin/egrep -F auid>=1000 -F auid!=unset -k string_search
--a always,exit -F arch=b64 -F exe=/usr/bin/ugrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/grep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/egrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ugrep -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/tmbinc/bgrep
--a always,exit -F arch=b64 -F exe=/usr/bin/bgrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/bgrep -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/BurntSushi/ripgrep
--a always,exit -F arch=b64 -F exe=/usr/bin/rg -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/rg -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/awgn/cgrep
--a always,exit -F arch=b64 -F exe=/usr/bin/cgrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/cgrep -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/jpr5/ngrep
--a always,exit -F arch=b64 -F exe=/usr/bin/ngrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ngrep -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/vrothberg/vgrep
--a always,exit -F arch=b64 -F exe=/usr/bin/vgrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/vgrep -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/monochromegane/the_platinum_searcher
--a always,exit -F arch=b64 -F exe=/usr/bin/pt -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/pt -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/gvansickle/ucg
--a always,exit -F arch=b64 -F exe=/usr/bin/ucg -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ucg -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/ggreer/the_silver_searcher
--a always,exit -F arch=b64 -F exe=/usr/bin/ag -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ag -F auid>=1000 -F auid!=unset -k string_search
 
 # https://github.com/beyondgrep/ack3
 # https://beyondgrep.com
--a always,exit -F arch=b64 -F exe=/usr/bin/ack -F auid>=1000 -F auid!=unset -k string_search
--a always,exit -F arch=b64 -F exe=/usr/local/bin/ack -F auid>=1000 -F auid!=unset -k string_search
--a always,exit -F arch=b64 -F exe=/usr/bin/semgrep -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/ack -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/local/bin/ack -F auid>=1000 -F auid!=unset -k string_search
+-a always,exit -F arch=b64 -S execve,execveat -F exe=/usr/bin/semgrep -F auid>=1000 -F auid!=unset -k string_search
 
 # SUID root execution
 -a always,exit -F arch=b64 -S execve,execveat -C uid!=euid -F euid=0 -F auid>=1000 -F auid!=unset -k suid_root_exec

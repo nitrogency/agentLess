@@ -98,24 +98,24 @@
 -a always,exit -F arch=b32 -F dir=/etc/apparmor.d -F perm=wa -F auid!=unset -k MAC_policy
 
 # These commands can be used to alter ACLs or the security context
--a always,exit -F arch=b32 -F exe=/usr/bin/chcon -F auid>=1000 -F auid!=unset -k conf_chcon
--a always,exit -F arch=b32 -F exe=/usr/bin/setfacl -F auid>=1000 -F auid!=unset -k conf_setfacl
--a always,exit -F arch=b32 -F exe=/usr/bin/chacl -F auid>=1000 -F auid!=unset -k conf_chacl
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/bin/chcon -F auid>=1000 -F auid!=unset -k conf_chcon
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/bin/setfacl -F auid>=1000 -F auid!=unset -k conf_setfacl
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/bin/chacl -F auid>=1000 -F auid!=unset -k conf_chacl
 
 # User account modification
 # Usermod can be used to grant, edit or revoke privileges
--a always,exit -F arch=b32 -F exe=/usr/sbin/usermod -F auid>=1000 -F auid!=unset -k usermod
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/sbin/usermod -F auid>=1000 -F auid!=unset -k usermod
 
 # Kernel module loading
 -a always,exit -F arch=b32 -S init_module,delete_module,finit_module -F auid>=1000 -F auid!=unset -k kernel_modules
--a always,exit -F arch=b32 -F exe=/usr/bin/kmod -F auid>=1000 -F auid!=unset -k kernel_modules
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/bin/kmod -F auid>=1000 -F auid!=unset -k kernel_modules
 
 # Firewall events
--a always,exit -F arch=b32 -F exe=/usr/sbin/ufw -F auid>=1000 -F auid!=unset -k firewall
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/usr/sbin/ufw -F auid>=1000 -F auid!=unset -k firewall
 -a always,exit -F arch=b32 -F dir=/etc/ufw/ -F perm=wa -F auid>=1000 -F auid!=unset -k firewall
 
 # Systemd events - related to services, units, timers - sensitive,, method of persistance
--a always,exit -F arch=b32 -F exe=/bin/systemctl -F auid>=1000 -F auid!=unset -k systemd_monitoring
+-a always,exit -F arch=b32 -S execve,execveat -F exe=/bin/systemctl -F auid>=1000 -F auid!=unset -k systemd_monitoring
 -a always,exit -F arch=b32 -F dir=/etc/systemd/   -F perm=wa -F auid>=1000 -F auid!=unset -k systemd_monitoring
 
 # Make the config immutable
