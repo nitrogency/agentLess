@@ -365,85 +365,8 @@ done
 
 log_success "Unnecessary services disabled."
 
-# Enroll localhost for self-monitoring
-log_section "Localhost Self-Monitoring"
-log_info "Enrolling localhost to monitor the IDS server itself..."
-
-# Get project root and database path
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-DB_PATH="$PROJECT_ROOT/data/site.db"
-
-if [ ! -f "$DB_PATH" ]; then
-    log_error "Database not found at $DB_PATH"
-    log_error "Please run setup.sh first"
-    exit 1
-fi
-
-# Load database encryption key
-if [ -f "/etc/agentless/secrets.env" ]; then
-    source /etc/agentless/secrets.env
-fi
-
-# Get hostname and OS info
-HOSTNAME=$(hostname)
-OS_INFO=$(cat /etc/os-release | grep PRETTY_NAME | cut -d '=' -f 2 | tr -d '"')
-
-# Add agentless to adm group for audit log access
-log_progress "Adding agentless user to adm group for log access..."
-if ! groups agentless | grep -q '\badm\b'; then
-    usermod -a -G adm agentless
-    log_success "User 'agentless' added to adm group"
-else
-    log_info "User 'agentless' already in adm group"
-fi
-
-# Check if localhost already exists in database
-EXISTING_LOCALHOST=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '127.0.0.1' AND status != 'deleted' LIMIT 1;" "$DB_PATH" 2>/dev/null || echo "")
-
-if [ -n "$EXISTING_LOCALHOST" ]; then
-    log_info "Localhost already enrolled (Device ID: $EXISTING_LOCALHOST)"
-    LOCALHOST_ID="$EXISTING_LOCALHOST"
-else
-    # Insert localhost as a device
-    log_progress "Adding localhost to database..."
-    execute_sqlite "INSERT INTO devices (name, type, status, ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type, ssh_group, setup_user, audit_arch, audit_ruleset) VALUES ('Localhost (Monitor Server)', 'server', 'online', '127.0.0.1', 'agentless', '/opt/agentless/.ssh/monitor', 22, '$HOSTNAME', '$OS_INFO', 'linux', 'agentless', 'root', 'x64', 'audit_default.rules');" "$DB_PATH"
-    
-    LOCALHOST_ID=$(execute_sqlite "SELECT id FROM devices WHERE ip_address = '127.0.0.1' AND status != 'deleted' LIMIT 1;" "$DB_PATH")
-    log_success "Localhost enrolled as Device ID: $LOCALHOST_ID"
-fi
-
-# Set up systemd service for localhost monitoring
-log_progress "Configuring localhost monitoring service..."
-SERVICE_NAME="agentless-monitor@$LOCALHOST_ID.service"
-
-if systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
-    log_info "Restarting monitoring service: $SERVICE_NAME"
-    systemctl restart "$SERVICE_NAME"
-else
-    log_info "Starting monitoring service: $SERVICE_NAME"
-    
-    # Install monitoring service template if not present
-    if [ ! -f "/etc/systemd/system/agentless-monitor@.service" ]; then
-        if [ -f "$PROJECT_ROOT/systemd/agentless-monitor@.service.template" ]; then
-            sed -e "s|__REPO_ROOT__|$PROJECT_ROOT|g" \
-                -e "s|__MONITOR_SCRIPT__|$PROJECT_ROOT/scripts/start-monitoring.sh|g" \
-                "$PROJECT_ROOT/systemd/agentless-monitor@.service.template" | tee /etc/systemd/system/agentless-monitor@.service >/dev/null
-            systemctl daemon-reload
-        fi
-    fi
-    
-    systemctl enable "$SERVICE_NAME" 2>/dev/null || true
-    systemctl start "$SERVICE_NAME" 2>/dev/null || true
-fi
-
-if systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
-    log_success "Localhost monitoring service running"
-    log_info "View logs: journalctl -u $SERVICE_NAME -f"
-    log_info "Check status: systemctl status $SERVICE_NAME"
-else
-    log_warn "Monitoring service may not have started correctly"
-fi
-
-log_success "Localhost self-monitoring configured (using standard monitoring.sh)"
-log_info "Localhost logs will appear in the web dashboard automatically"
+# Note: Localhost is NOT enrolled for self-monitoring
+# The IDS server's audit logs remain in /var/log/audit for manual review if needed
+log_info "IDS server audit logs available at: /var/log/audit/audit.log"
+log_info "ClamAV logs available at: /var/log/clamav/"
 

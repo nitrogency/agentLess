@@ -96,11 +96,6 @@ func CreateDevice(name, deviceType string) error {
 	return err
 }
 
-// CreateMonitoredDevice creates a new device with SSH monitoring details
-func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, setupUser string) error {
-	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, "x64", "audit_default.rules")
-}
-
 // CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
 func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, setupUser, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
@@ -348,16 +343,6 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 	return err
 }
 
-// UpdateMonitoredDevice updates a monitored device's information
-func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, setupUser string) error {
-	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, "x64", "audit_default.rules")
-}
-
-// UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
-func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, auditArch, auditRuleset string) error {
-	return UpdateMonitoredDeviceWithOSAndReenrollment(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset, false)
-}
-
 // UpdateMonitoredDeviceWithOSAndReenrollment updates a monitored device's information including OS type and reenrollment flag
 func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, auditArch, auditRuleset string, needsReenrollment bool) error {
 	_, err := db.Exec(`
@@ -472,14 +457,6 @@ func UpdateAllDeviceStatuses() error {
 
 		if err := rows.Scan(&id, &ipAddress, &sshUser, &sshKeyPath, &sshPort); err != nil {
 			return err
-		}
-
-		// Skip status checks for localhost - it's always online and doesn't need SSH/ICMP checks
-		if ipAddress == "127.0.0.1" || ipAddress == "localhost" {
-			if err := UpdateDeviceStatusWithDetails(id, "online", "n/a", "n/a"); err != nil {
-				log.Printf("Error updating status for localhost device %d: %v", id, err)
-			}
-			continue
 		}
 
 		// Check ICMP (ping) status

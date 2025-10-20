@@ -25,9 +25,8 @@ func DevicesHandler(c *gin.Context) {
 		data.Error = "Failed to load devices"
 		devices = []db.Device{}
 	}
-	// Populate PageData field used by templates
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Devices = devices
-	// Keep Data map for any legacy references
 	data.Data["Devices"] = devices
 	templates.RenderGinTemplate(c, "devices", data)
 }
@@ -253,13 +252,6 @@ func EditDeviceHandler(c *gin.Context) {
 		return
 	}
 
-	// Prevent editing localhost device
-	if device.IPAddress == "127.0.0.1" || device.IPAddress == "localhost" {
-		data.Error = "Localhost device cannot be edited"
-		templates.RenderGinTemplate(c, "404", data)
-		return
-	}
-
 	// Handle POST request (form submission)
 	if c.Request.Method == "POST" {
 		// Get form data
@@ -436,10 +428,8 @@ func EditDeviceHandler(c *gin.Context) {
 		return
 	}
 
-	// Populate device data for GET request
-	// For templates using top-level .Device
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.FormData["name"] = device.Name
 	data.FormData["type"] = device.Type
@@ -518,10 +508,8 @@ func DeleteDeviceHandler(c *gin.Context) {
 		}
 	}
 
-	// Populate device data
-	// For templates using top-level .Device
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	templates.RenderGinTemplate(c, "delete-device-confirm", data)
 }
@@ -599,13 +587,10 @@ func MonitorDeviceHandler(c *gin.Context) {
 		totalPages = 1
 	}
 
-	// Populate data
-	// For templates using top-level .Device
+	// Populate both direct fields and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.Data["Logs"] = logs
-	// Back-compat for templates expecting .Data.AuditLogs
 	data.Data["AuditLogs"] = logs
 	data.Data["CurrentPage"] = page
 	data.Data["TotalPages"] = totalPages

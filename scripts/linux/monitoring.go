@@ -78,7 +78,7 @@ func loadPriorities(configPath string) error {
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -275,11 +275,18 @@ func main() {
 	deviceFlag := flag.Int64("device", 0, "Device ID to attribute logs to (required)")
 	configFlag := flag.String("config", "", "Path to audit priorities config file")
 	flag.Parse()
-	
+
 	if *deviceFlag <= 0 {
 		fmt.Fprintln(os.Stderr, "error: -device <id> is required")
 		os.Exit(2)
 	}
+
+	// Initialize encrypted database using shared app settings
+	if err := db.InitDB(); err != nil {
+		fmt.Fprintln(os.Stderr, "db init error:", err)
+		os.Exit(1)
+	}
+	defer db.Close()
 
 	// Load priority configuration
 	configPath := *configFlag
@@ -291,7 +298,7 @@ func main() {
 			configPath = "/opt/agentless/config/audit_priorities.conf"
 		}
 	}
-	
+
 	if err := loadPriorities(configPath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to load priorities from %s: %v (using defaults)\n", configPath, err)
 	}

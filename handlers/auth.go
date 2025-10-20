@@ -150,8 +150,6 @@ func LoginHandler(c *gin.Context) {
 			return
 		}
 
-		log.Printf("[DEBUG] Session saved successfully for user: %s, authenticated: %v", user.Username, session.Get("authenticated"))
-
 		// Log successful login
 		logSecurityEvent(c, "Successful login", user.Username)
 

@@ -33,9 +33,8 @@ func UsersHandler(c *gin.Context) {
 		users = []db.User{}
 	}
 
-	// Populate PageData field used by templates
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Users = users
-	// Keep Data map for any legacy references
 	data.Data["Users"] = users
 	templates.RenderGinTemplate(c, "users", data)
 }

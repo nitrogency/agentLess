@@ -140,24 +140,6 @@ func ValidateUser(username, password string) (bool, error) {
 	return true, nil
 }
 
-// GetUser retrieves a user by username
-func GetUser(username string) (*User, error) {
-	user := &User{}
-	err := db.QueryRow(
-		"SELECT id, username, is_admin, can_add_devices, can_modify_devices, can_add_users, can_modify_users, flicker_low, flicker_medium, flicker_high, search_terms, created_at FROM users WHERE username = ?",
-		username,
-	).Scan(&user.ID, &user.Username, &user.IsAdmin, &user.CanAddDevices, &user.CanModifyDevices, &user.CanAddUsers, &user.CanModifyUsers, &user.FlickerLow, &user.FlickerMedium, &user.FlickerHigh, &user.SearchTerms, &user.CreatedAt)
-
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // User not found
-		}
-		return nil, err
-	}
-
-	return user, nil
-}
-
 // GetUserByID returns a user by their ID
 func GetUserByID(id int64) (*User, error) {
 	var user User
