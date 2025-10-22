@@ -491,7 +491,7 @@ if [ -d "/etc/systemd/system" ]; then
   fi
   
   # Create new service file from template with systemd secret management
-  TEMPLATE_FILE="$INSTALL_DIR/systemd/agentless.service.template"
+  TEMPLATE_FILE="$INSTALL_DIR/scripts/systemd/agentless.service.template"
   if [ ! -f "$TEMPLATE_FILE" ]; then
     handle_error "Template file not found: $TEMPLATE_FILE"
   fi
@@ -548,8 +548,8 @@ else
   
   # Remove export-related files and directories
   sudo rm -rf "$INSTALL_DIR/cmd/exporter" 2>/dev/null || true
-  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.service" 2>/dev/null || true
-  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.timer" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/scripts/systemd/agentless-exporter.service" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/scripts/systemd/agentless-exporter.timer" 2>/dev/null || true
   sudo rm -rf "$INSTALL_DIR/scripts/export" 2>/dev/null || true
   
   log_success "Export-related files removed"

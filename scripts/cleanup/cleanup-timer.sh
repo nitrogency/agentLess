@@ -28,7 +28,7 @@ check_dependency sudo
 
 # Create service from template
 log_progress "Creating systemd service: $CLEANUP_SERVICE"
-SERVICE_TEMPLATE="$REPO_ROOT/systemd/agentless-cleanup.service.template"
+SERVICE_TEMPLATE="$REPO_ROOT/scripts/systemd/agentless-cleanup.service.template"
 if [ ! -f "$SERVICE_TEMPLATE" ]; then
   handle_error "Template file not found: $SERVICE_TEMPLATE"
 fi
@@ -40,7 +40,7 @@ sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" \
 
 # Create timer from template
 log_progress "Creating systemd timer: $CLEANUP_TIMER"
-TIMER_TEMPLATE="$REPO_ROOT/systemd/agentless-cleanup.timer"
+TIMER_TEMPLATE="$REPO_ROOT/scripts/systemd/agentless-cleanup.timer"
 if [ ! -f "$TIMER_TEMPLATE" ]; then
   handle_error "Template file not found: $TIMER_TEMPLATE"
 fi

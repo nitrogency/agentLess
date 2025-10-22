@@ -40,7 +40,7 @@ fi
 
 # Create service from template
 log_progress "Creating rotation service..."
-SERVICE_TEMPLATE="$REPO_ROOT/systemd/agentless-rotate-secrets.service.template"
+SERVICE_TEMPLATE="$REPO_ROOT/scripts/systemd/agentless-rotate-secrets.service.template"
 if [ ! -f "$SERVICE_TEMPLATE" ]; then
   echo "Error: Template file not found: $SERVICE_TEMPLATE"
   exit 1
@@ -54,7 +54,7 @@ log_success "Service created: $ROTATION_SERVICE"
 
 # Create timer from template
 log_progress "Creating rotation timer (runs every 90 days)..."
-TIMER_TEMPLATE="$REPO_ROOT/systemd/agentless-rotate-secrets.timer"
+TIMER_TEMPLATE="$REPO_ROOT/scripts/systemd/agentless-rotate-secrets.timer"
 if [ ! -f "$TIMER_TEMPLATE" ]; then
   echo "Error: Template file not found: $TIMER_TEMPLATE"
   exit 1

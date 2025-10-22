@@ -111,19 +111,19 @@ HARDEN_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$HARDEN_SCRIPT_DIR")"
 
 # Install systemd service and timer files
-if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" ]; then
-    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" /etc/systemd/system/
+if [ -f "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.service" ]; then
+    cp "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.service" /etc/systemd/system/
     log_info "Installed ClamAV scan service"
 else
-    log_error "agentless-clamav-scan.service not found at $PROJECT_ROOT/systemd/"
+    log_error "agentless-clamav-scan.service not found at $PROJECT_ROOT/scripts/systemd/"
     exit 1
 fi
 
-if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" ]; then
-    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" /etc/systemd/system/
+if [ -f "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.timer" ]; then
+    cp "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.timer" /etc/systemd/system/
     log_info "Installed ClamAV scan timer"
 else
-    log_error "agentless-clamav-scan.timer not found at $PROJECT_ROOT/systemd/"
+    log_error "agentless-clamav-scan.timer not found at $PROJECT_ROOT/scripts/systemd/"
     exit 1
 fi
 

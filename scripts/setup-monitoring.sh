@@ -96,7 +96,7 @@ for service_file in $SYSTEMD_SYSTEM_DIR/agentless-monitor@*.service; do
 done
 
 # Install or update the unit template from template file
-TEMPLATE_FILE="$REPO_ROOT/systemd/agentless-monitor@.service.template"
+TEMPLATE_FILE="$REPO_ROOT/scripts/systemd/agentless-monitor@.service.template"
 if [ ! -f "$TEMPLATE_FILE" ]; then
   handle_error "Template file not found: $TEMPLATE_FILE"
 fi

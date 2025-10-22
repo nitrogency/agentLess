@@ -87,8 +87,8 @@ fi
 log_progress "[4/6] Installing systemd units..."
 
 # Copy systemd files
-cp "$PROJECT_ROOT/systemd/agentless-exporter.service" /etc/systemd/system/
-cp "$PROJECT_ROOT/systemd/agentless-exporter.timer" /etc/systemd/system/
+cp "$PROJECT_ROOT/scripts/systemd/agentless-exporter.service" /etc/systemd/system/
+cp "$PROJECT_ROOT/scripts/systemd/agentless-exporter.timer" /etc/systemd/system/
 
 # Reload systemd
 systemctl daemon-reload
