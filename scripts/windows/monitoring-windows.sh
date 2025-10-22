@@ -153,7 +153,6 @@ collect_logs_once() {
     return 0
 }
 
-# Run collection loop with intervals (easier to implement than real-time streaming)
 # Windows event logs are better suited to polling rather than real-time streaming
 COLLECTION_INTERVAL=$(get_config "windows_collection_interval" 30)
 

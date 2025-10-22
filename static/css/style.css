@@ -550,6 +550,10 @@ li {
     padding: 12px 15px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .users-table th {
@@ -561,6 +565,12 @@ li {
 
 .users-table tr:hover {
     background-color: var(--hover-color);
+}
+
+/* Allow actions column to be wider and not truncate */
+.users-table td:last-child {
+    max-width: none;
+    white-space: nowrap;
 }
 
 /* Device Management Styles */

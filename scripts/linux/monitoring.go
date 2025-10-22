@@ -55,23 +55,16 @@ var (
 // Format: [section] headers followed by keys, one per line
 // Sections: [high], [medium], [low]
 func loadPriorities(configPath string) error {
-	// Set defaults in case file doesn't exist or fails to load
-	setDefaultPriorities()
-
-	file, err := os.Open(configPath)
-	if err != nil {
-		// If file doesn't exist, use defaults silently
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to open config: %w", err)
-	}
-	defer file.Close()
-
-	// Clear existing maps to load fresh from file
+	// Clear any existing priorities
 	highKeys = make(map[string]struct{})
 	mediumKeys = make(map[string]struct{})
 	lowKeys = make(map[string]struct{})
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to open config file: %w", err)
+	}
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	var currentSection string
@@ -109,35 +102,6 @@ func loadPriorities(configPath string) error {
 	return nil
 }
 
-// setDefaultPriorities sets hardcoded defaults as fallback
-func setDefaultPriorities() {
-	// High priority defaults
-	highKeys = map[string]struct{}{
-		"suid_root_exec":         {},
-		"rootkey":                {},
-		"32bit_abi":              {},
-		"anon_file_create":       {},
-		"network_connect_4":      {},
-		"network_connect_6":      {},
-		"network_socket_created": {},
-	}
-
-	// Medium priority defaults
-	mediumKeys = map[string]struct{}{
-		"identity_mod": {}, "perm_mod": {}, "mounts": {}, "sudo_log_mod": {},
-		"sudoers_mod": {}, "user_emulation": {}, "time_change": {}, "system_env": {},
-		"failed_access": {}, "session": {}, "file_delete": {}, "MAC_policy": {},
-		"conf_chcon": {}, "conf_setfacl": {}, "conf_chacl": {}, "usermod": {},
-		"kernel_modules": {}, "firewall": {}, "systemd_monitoring": {}, "cron_events": {},
-		"auditconfig": {}, "audittools": {}, "susp_activity": {}, "string_search": {},
-		"recon": {},
-	}
-
-	// Low priority defaults
-	lowKeys = map[string]struct{}{
-		"exec_all": {},
-	}
-}
 
 // classify determines the security level of an audit event based purely on the audit rule key
 // The audit rules assign keys to events at the kernel level:
@@ -300,7 +264,9 @@ func main() {
 	}
 
 	if err := loadPriorities(configPath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to load priorities from %s: %v (using defaults)\n", configPath, err)
+		fmt.Fprintf(os.Stderr, "error: failed to load priorities from %s: %v\n", configPath, err)
+		fmt.Fprintln(os.Stderr, "Priority configuration file is required. Please ensure config/audit_priorities.conf exists.")
+		os.Exit(1)
 	}
 
 	// Initialize encrypted database using shared app settings

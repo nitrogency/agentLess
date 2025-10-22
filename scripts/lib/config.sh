@@ -5,12 +5,11 @@
 #
 
 # Version and project info
-readonly AGENTLESS_VERSION="1.0.0"
 readonly PROJECT_NAME="Agent<"
 
 # Default values for device enrollment
-readonly DEFAULT_REMOTE_USER="ids_monitor"
-readonly DEFAULT_REMOTE_GROUP="ids_monitor"
+readonly DEFAULT_REMOTE_USER="monitor"
+readonly DEFAULT_REMOTE_GROUP="monitor"
 readonly DEFAULT_SSH_PORT="22"
 readonly DEFAULT_LOGIN_USER="root"
 
@@ -47,6 +46,46 @@ readonly DEFAULT_LOG_LIMIT="1000"
 readonly DEFAULT_SSH_CONNECT_TIMEOUT="5"
 readonly DEFAULT_SSH_COMMAND_TIMEOUT="10"
 
+# Harden script settings
+readonly DEFAULT_HARDENED_SSH_PORT="4222"
+readonly SERVICES_TO_DISABLE=(
+    "avahi-daemon"      # Zeroconf/Bonjour
+    "cups"              # Printing
+    "bluetooth"         # Bluetooth
+    "rpcbind"           # RPC portmapper
+    "nfs-client"        # NFS client
+    "ypbind"            # NIS client
+    "rsh"               # Remote shell
+    "rlogin"            # Remote login
+    "rexec"             # Remote exec
+    "talk"              # Talk daemon
+    "ntalk"             # Network talk
+    "telnet"            # Telnet
+    "chargen-dgram"     # Character generator (UDP)
+    "chargen-stream"    # Character generator (TCP)
+    "daytime-dgram"     # Daytime (UDP)
+    "daytime-stream"    # Daytime (TCP)
+    "echo-dgram"        # Echo (UDP)
+    "echo-stream"       # Echo (TCP)
+    "tcpmux-server"     # TCP multiplexer
+    "snmpd"             # SNMP daemon
+    "apache2"           # Apache web server
+    "httpd"             # Apache/HTTPD
+    "nginx"             # Nginx web server
+    "postfix"           # Postfix mail server
+    "exim4"             # Exim mail server
+    "sendmail"          # Sendmail
+    "vsftpd"            # FTP server
+    "proftpd"           # FTP server
+    "tftp"              # TFTP server
+    "inetd"             # Internet super-server
+    "xinetd"            # Extended internet super-server
+    "smbd"              # Samba (SMB)
+    "nmbd"              # Samba (NetBIOS)
+    "ntp"               # NTP (use systemd-timesyncd instead)
+    "ntpd"              # NTP daemon
+)
+
 # Windows-specific settings
 readonly DEFAULT_WINDOWS_COLLECTION_INTERVAL="30"
 readonly WINDOWS_SYSMON_LOG="Microsoft-Windows-Sysmon/Operational"
@@ -67,6 +106,9 @@ get_config() {
             ;;
         "ssh_port")
             echo "${SSH_PORT:-$DEFAULT_SSH_PORT}"
+            ;;
+        "hardened_ssh_port")
+            echo "${HARDENED_SSH_PORT:-$DEFAULT_HARDENED_SSH_PORT}"
             ;;
         "login_user")
             echo "${LOGIN_USER:-$DEFAULT_LOGIN_USER}"
@@ -170,7 +212,6 @@ validate_config() {
 # Print configuration summary
 print_config() {
     log_info "=== Agent< Config ==="
-    log_info "Version: $AGENTLESS_VERSION"
     log_info "Remote User: $(get_config remote_user)"
     log_info "Remote Group: $(get_config remote_group)"
     log_info "SSH Port: $(get_config ssh_port)"

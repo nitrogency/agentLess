@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=__REPO_ROOT__
-ExecStart=/usr/bin/env bash -lc '__REPO_ROOT__/scripts/clean.sh __RETENTION_DAYS__'
+ExecStart=/usr/bin/env bash -lc '__REPO_ROOT__/scripts/cleanup/clean.sh __RETENTION_DAYS__'
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true

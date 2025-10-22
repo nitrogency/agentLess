@@ -5,9 +5,9 @@ set -euo pipefail
 
 # Source shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
 
 # Setup cleanup trap
 setup_cleanup_trap
@@ -45,7 +45,7 @@ if [ ! -f "$TIMER_TEMPLATE" ]; then
   handle_error "Template file not found: $TIMER_TEMPLATE"
 fi
 
-# Copy timer file (no substitution needed)
+# Copy timer file
 sudo cp "$TIMER_TEMPLATE" "$TIMER_PATH"
 
 # Reload systemd and enable timer

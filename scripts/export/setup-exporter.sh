@@ -5,9 +5,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source common libraries
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/common.sh"
-source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+# Setup cleanup and interrupt handling
+setup_cleanup_trap
+setup_interrupt_trap "setup-exporter.sh"
 
 # Get project root
 PROJECT_ROOT="$(get_repo_root)"

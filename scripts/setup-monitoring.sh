@@ -5,10 +5,10 @@
 # Uses database as single source of truth for device configuration.
 #
 # This script:
-#  1) Reads active devices from the encrypted SQLite DB (SQLCipher)
+#  1) Reads active devices from DB
 #  2) Installs a template unit agentless-monitor@.service pointing to scripts/start-monitoring.sh
 #  3) Enables and starts agentless-monitor@<device-id>.service for each device
-#  4) Reconciles and removes services for deleted devices
+#  4) Removes services for deleted devices
 #
 set -euo pipefail
 
@@ -26,6 +26,9 @@ fi
 
 # Setup cleanup trap
 setup_cleanup_trap
+
+# Setup interrupt handling
+setup_interrupt_trap "setup-monitoring.sh"
 
 # Configuration
 REPO_ROOT="$(get_repo_root)"
@@ -55,7 +58,6 @@ log_progress "Reading devices from database..."
 DEVICES=$(execute_sqlite "SELECT id, name FROM devices WHERE status != 'deleted';" "$DB_PATH")
 if [ -z "$DEVICES" ]; then
   log_warn "No devices found. Add devices to the DB first."
-  # Still proceed to reconcile and stop any stale services
 fi
 
 # Build a space-delimited list of active IDs for reconciliation
@@ -129,7 +131,7 @@ log_info "Services installed: agentless-monitor@<device-id>.service"
 # Set up cleanup timer for log retention
 log_section "Log Cleanup Timer Setup"
 log_progress "Setting up cleanup timer for log retention..."
-CLEANUP_SCRIPT="$SCRIPT_DIR/cleanup-timer.sh"
+CLEANUP_SCRIPT="$SCRIPT_DIR/cleanup/cleanup-timer.sh"
 if [ -f "$CLEANUP_SCRIPT" ]; then
     bash "$CLEANUP_SCRIPT" "$(get_config retention_days)"
     log_success "Cleanup timer installed successfully."

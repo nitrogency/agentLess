@@ -7,11 +7,15 @@ set -e
 
 # Source logging library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
 
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ROTATION_SCRIPT="$REPO_ROOT/scripts/rotate-secrets.sh"
+# Setup cleanup and interrupt handling
+setup_cleanup_trap
+setup_interrupt_trap "setup-rotation-timer.sh"
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ROTATION_SCRIPT="$REPO_ROOT/scripts/rotate/rotate-secrets.sh"
 ROTATION_SERVICE="/etc/systemd/system/agentless-rotate-secrets.service"
 ROTATION_TIMER="/etc/systemd/system/agentless-rotate-secrets.timer"
 
@@ -25,12 +29,12 @@ check_dependency systemctl
 
 log_info "This will configure automatic secret rotation every 90 days"
 log_warn "Automatic rotation will invalidate all user sessions"
-log_info ""
+echo ""
 read -p "Do you want to enable automatic secret rotation? (yes/no): " -r CONFIRM
 
 if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
   log_info "Automatic rotation cancelled"
-  log_info "You can still manually rotate secrets using: sudo bash scripts/rotate-secrets.sh"
+  log_info "You can still manually rotate secrets using: sudo bash scripts/rotate/rotate-secrets.sh"
   exit 0
 fi
 
@@ -65,8 +69,6 @@ log_success "Timer created: $ROTATION_TIMER"
 log_progress "Updating rotation script for automatic mode..."
 if ! grep -q "\-\-auto" "$ROTATION_SCRIPT"; then
   log_info "Adding automatic mode support to rotation script..."
-  # Note: The --auto flag will skip interactive confirmation
-  # This would require modifying rotate-secrets.sh
 fi
 
 # Reload systemd
@@ -79,20 +81,20 @@ systemctl_safe enable-start "agentless-rotate-secrets.timer"
 
 log_section "Setup Complete"
 log_success "Automatic secret rotation enabled!"
-log_info ""
+echo ""
 log_info "Configuration:"
 log_info "  - Rotation frequency: Every 90 days"
 log_info "  - Rotation time: 02:00 AM (±1 hour randomization)"
 log_info "  - SESSION_SECRET will be rotated"
 log_info "  - DB_ENCRYPTION_KEY will never be rotated"
-log_info ""
+echo ""
 log_info "Timer status:"
 systemctl list-timers | grep agentless-rotate || log_warn "Timer not found in list"
-log_info ""
+echo ""
 log_info "Manual commands:"
 log_info "  - Check timer status: sudo systemctl status agentless-rotate-secrets.timer"
 log_info "  - Check timer schedule: sudo systemctl list-timers"
-log_info "  - Manual rotation: sudo bash scripts/rotate-secrets.sh"
+  log_info "  - Manual rotation: sudo bash scripts/rotate/rotate-secrets.sh"
 log_info "  - View rotation logs: sudo journalctl -u agentless-rotate-secrets.service"
 log_info "  - Disable auto-rotation: sudo systemctl disable agentless-rotate-secrets.timer"
 echo ""

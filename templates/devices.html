@@ -65,19 +65,19 @@
                         -
                     {{end}}
                 </td>
-                <td>
+                <td title="{{.AuditRuleset}} ({{.AuditArch}})">
                     {{if eq .OSType "linux"}}
                         {{if eq .AuditRuleset "audit_default.rules"}}
-                            <span title="{{.AuditArch}}">Default</span>
+                            <span>Default</span>
                         {{else if eq .AuditRuleset "audit_high.rules"}}
-                            <span title="{{.AuditArch}}">High</span>
+                            <span>High</span>
                         {{else if eq .AuditRuleset "audit_min.rules"}}
-                            <span title="{{.AuditArch}}">Minimal</span>
+                            <span>Minimal</span>
                         {{else}}
-                            <span title="{{.AuditArch}}">{{.AuditRuleset}}</span>
+                            <span>{{.AuditRuleset}}</span>
                         {{end}}
                     {{else}}
-                        <span title="N/A for Windows">-</span>
+                        <span>-</span>
                     {{end}}
                 </td>
                 <td>{{if .SSHUser}}{{.SSHUser}}{{else}}-{{end}}</td>
