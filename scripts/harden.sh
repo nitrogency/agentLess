@@ -225,12 +225,22 @@ sudo chmod 755 "$LOG_DIR"
 sudo touch "$LOG_DIR/security.log"
 sudo chmod 644 "$LOG_DIR/security.log"
 
+# Load fail2ban configuration from config.sh
+F2B_SSH_MAXRETRY="$(get_config fail2ban_ssh_maxretry)"
+F2B_SSH_BANTIME="$(get_config fail2ban_ssh_bantime)"
+F2B_WEB_MAXRETRY="$(get_config fail2ban_web_maxretry)"
+F2B_WEB_BANTIME="$(get_config fail2ban_web_bantime)"
+F2B_FINDTIME="$(get_config fail2ban_findtime)"
+
 log_info "Creating Fail2ban configuration..."
+log_info "SSH: Ban after $F2B_SSH_MAXRETRY attempts for $F2B_SSH_BANTIME seconds"
+log_info "Web: Ban after $F2B_WEB_MAXRETRY attempts for $F2B_WEB_BANTIME seconds"
+
 cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
-bantime = 3600
-findtime = 600
-maxretry = 3
+bantime = $F2B_SSH_BANTIME
+findtime = $F2B_FINDTIME
+maxretry = $F2B_SSH_MAXRETRY
 backend = systemd
 
 [sshd]
@@ -238,16 +248,16 @@ enabled = true
 port = ssh
 filter = sshd
 logpath = /var/log/auth.log
-maxretry = 3
-bantime = 3600
+maxretry = $F2B_SSH_MAXRETRY
+bantime = $F2B_SSH_BANTIME
 
 [agentless-web]
 enabled = true
 port = 8443
 filter = agentless-web
 logpath = ${LOG_DIR}/security.log
-maxretry = 5
-bantime = 1800
+maxretry = $F2B_WEB_MAXRETRY
+bantime = $F2B_WEB_BANTIME
 EOF
 
 log_info "Creating Fail2ban filter..."

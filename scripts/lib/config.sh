@@ -48,6 +48,14 @@ readonly DEFAULT_SSH_COMMAND_TIMEOUT="10"
 
 # Harden script settings
 readonly DEFAULT_HARDENED_SSH_PORT="4222"
+
+# Fail2ban settings
+readonly DEFAULT_FAIL2BAN_SSH_MAXRETRY="3"
+readonly DEFAULT_FAIL2BAN_SSH_BANTIME="3600"     # 1 hour in seconds
+readonly DEFAULT_FAIL2BAN_WEB_MAXRETRY="5"
+readonly DEFAULT_FAIL2BAN_WEB_BANTIME="1800"     # 30 minutes in seconds
+readonly DEFAULT_FAIL2BAN_FINDTIME="600"         # 10 minutes in seconds
+
 readonly SERVICES_TO_DISABLE=(
     "avahi-daemon"      # Zeroconf/Bonjour
     "cups"              # Printing
@@ -109,6 +117,21 @@ get_config() {
             ;;
         "hardened_ssh_port")
             echo "${HARDENED_SSH_PORT:-$DEFAULT_HARDENED_SSH_PORT}"
+            ;;
+        "fail2ban_ssh_maxretry")
+            echo "${FAIL2BAN_SSH_MAXRETRY:-$DEFAULT_FAIL2BAN_SSH_MAXRETRY}"
+            ;;
+        "fail2ban_ssh_bantime")
+            echo "${FAIL2BAN_SSH_BANTIME:-$DEFAULT_FAIL2BAN_SSH_BANTIME}"
+            ;;
+        "fail2ban_web_maxretry")
+            echo "${FAIL2BAN_WEB_MAXRETRY:-$DEFAULT_FAIL2BAN_WEB_MAXRETRY}"
+            ;;
+        "fail2ban_web_bantime")
+            echo "${FAIL2BAN_WEB_BANTIME:-$DEFAULT_FAIL2BAN_WEB_BANTIME}"
+            ;;
+        "fail2ban_findtime")
+            echo "${FAIL2BAN_FINDTIME:-$DEFAULT_FAIL2BAN_FINDTIME}"
             ;;
         "login_user")
             echo "${LOGIN_USER:-$DEFAULT_LOGIN_USER}"

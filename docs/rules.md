@@ -26,7 +26,7 @@ You can catch all syscalls made in a different architecture than the one your en
 
 This way you both achieve better performance and monitor potentially suspicious activity related to [ABI](https://stackoverflow.com/questions/2171177/what-is-an-application-binary-interface-abi) abuse.
 
-## File watch rules vs Syscall rules
+## File watch rules vs Syscall format rules
 
 And older format of watching files/directories was this:
 ```bash
@@ -35,16 +35,43 @@ And older format of watching files/directories was this:
 # -p - what to log, in this case `wa` means log any Write and Access changes.
 # -k - assigns a key to the rule. used for easier formatting/log filtering.
 ```
-This is a shortened format of a regular syscall rule. This format is considered [deprecated](https://man7.org/linux/man-pages/man8/auditctl.8.html), because it watches both architectures (which the downsides of doing so we discussed earlier), and doesn't allow for filtering by `auid`, which can be extremely useful when trying to generate less noise (we can filter out system daemons by using `auid!=unset` for example). It also watches for all syscalls made towards the specified file, which might not always be necessary. 
+This is a shortened format of a regular syscall rule. This format is considered [deprecated](https://man7.org/linux/man-pages/man8/auditctl.8.html), because it watches both architectures (which the downsides of doing so we discussed earlier), and doesn't allow for filtering by `auid`, which can be extremely useful when trying to generate less noise (we can filter out system daemons by using `auid!=unset` for example). 
 
 A more performance-friendly version of the same rule on a 64-bit system can look like this:
 ```bash
 -a always,exit -F path=/etc/passwd -F perm=wa -F auid!=unset -k identity_mod
 # -a - Here it logs on syscall exit
 # -F arch=b64 - specifies to log only 64-bit syscalls
-# -F path=/etc/passwd - specifies directory to monitor
-# -F perm=wa - what sort of changes to log. `wa` means log any Write and Access changes.
+# -F path=/etc/passwd - specifies file to monitor
+# -F perm=wa - what sort of changes to log. `wa` means log any Write and Access syslog events.
 # -F auid!=unset - system daemons have an unset auid. this filters out system daemon calls to this file, which is usually safe. daemons started by the user (after user login) inherit their auid, so these syscalls are still logged. Root user actions (auid=0) are also still logged.
 # -k identity_mod - key to assign to the rule. used for easier formatting/log filtering.
 ```
 It is generally recommended to either use the syscall rule format or convert existing `-w` rules to it.
+
+## Rule types
+
+There main types of syscall format rules are:
+
+- File watch rules. These are the rules we discussed earlier. These rules do as the name describes - they watch files according to specified changes. The changes to watch for are specified after the `-F perm=` flag:
+
+    - `w` - log any Write syslog events.
+    - `a` - log any Access syslog events.
+    - `r` - log any Read syslog events.
+
+These can also be combined:
+    - `wa` - log any Write and Access syslog events.
+
+These arguments are only a way to specify what type of syslogs to monitor for the file. The longer, more unwieldy way of doing this would be:
+    - `-S open, openat, open_by_handle_at, open_by_handle_at, write, pwrite, writev, pwritev, pwritev2`. 
+
+Basically, something like `-F perm=war` says "watch all syscalls that are associated with opening/reading/accessing the file", instead of "watch this specific syscall, and this specific syscall, and this and so on". Also, this way of monitoring is quicker than with the `-S` flag, since the kernel knows to automatically skip all syscalls that are not file-related.
+
+The file to watch is specified after the `-F path=` flag. Path watches can also be used for executables, but we will later discuss why this shouldn't be done.
+
+A full file watch rule might look like this:
+```bash
+-a always,exit -F path=/etc/passwd -F perm=wa -F auid!=unset -k identity_mod
+```
+
+This would watch for any Write and Access events (`-F perm=wa`) made by any user (excluding system daemons, `-F auid!=unset`) to the `/etc/passwd` file, and assign it the `identity_mod` key. The `-a always,exit` flag just means that it will log on syscall exit.
