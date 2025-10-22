@@ -107,6 +107,11 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 	if err == nil && user != nil {
 		data.UserID = user.ID  // Use user ID from database instead of session
 		data.IsAdmin = user.IsAdmin
+		// Populate permission fields
+		data.CanAddDevices = user.CanAddDevices
+		data.CanModifyDevices = user.CanModifyDevices
+		data.CanAddUsers = user.CanAddUsers
+		data.CanModifyUsers = user.CanModifyUsers
 		// Populate flicker preferences
 		data.FlickerLow = user.FlickerLow
 		data.FlickerMedium = user.FlickerMedium

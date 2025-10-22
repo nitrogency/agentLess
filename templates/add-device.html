@@ -88,9 +88,9 @@
             
             <div class="form-group">
                 <label for="ssh_key_path">SSH Key Path</label>
-                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /opt/agentless/.ssh/monitoring_key" required>
+                <input type="text" class="form-control {{if .ErrorFields.ssh_key_path}}input-error{{end}}" id="ssh_key_path" name="ssh_key_path" value="{{.FormData.ssh_key_path}}" placeholder="e.g. /etc/agentless/.ssh/monitoring_key" required>
                 <p class="help-text">This is the private SSH key that will be used for monitoring connections after the initial SSH connection. Make sure it's a path the "agentless" user can access.</p>
-                <p class="help-text">If you wish so, you can use the default key at `/opt/agentless/.ssh/monitor`</p>
+                <p class="help-text">If you wish so, you can use the default key at `/etc/agentless/.ssh/monitor`</p>
             </div>
             
             <div class="form-group">

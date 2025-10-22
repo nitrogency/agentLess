@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -35,9 +37,11 @@ type SysmonEvent struct {
 
 var (
 	names = map[int]string{1: "ProcessCreate", 2: "FileCreationTimeChanged", 3: "NetworkConnect", 4: "SysmonServiceStateChanged", 5: "ProcessTerminate", 6: "DriverLoad", 7: "ImageLoad", 8: "CreateRemoteThread", 9: "RawAccessRead", 10: "ProcessAccess", 11: "FileCreate", 12: "RegistryEventObjectCreateDelete", 13: "RegistryEventValueSet", 14: "RegistryEventKeyRename", 15: "FileCreateStreamHash", 16: "SysmonConfigStateChanged", 17: "PipeEventCreated", 18: "PipeEventConnected", 19: "WmiEventFilter", 20: "WmiEventConsumer", 21: "WmiEventConsumerToFilter", 22: "DnsQuery", 23: "FileDelete", 24: "ClipboardChange", 25: "ProcessTampering", 26: "FileDeleteDetected"}
-	high  = []string{"powershell -enc", "invoke-expression", "downloadstring", "invoke-webrequest", "net user", "net localgroup", "mimikatz", "procdump", "psexec", "wmic process call create", "schtasks /create", "at.exe", "reg add", "vssadmin delete shadows", "bcdedit", "certutil -decode", "bitsadmin /transfer", "mshta http", "rundll32", "regsvr32 /s /u /i:http", "base64"}
-	med   = []string{"whoami", "net view", "net share", "ipconfig", "tasklist", "systeminfo", "netstat", "nslookup", "ping", "tracert", "nbtstat", "arp", "route print", "powershell.exe", "cmd.exe /c", "wscript", "cscript", "regsvr32"}
-	sPort = map[int]struct{}{4444: {}, 5555: {}, 6666: {}, 7777: {}, 8888: {}, 31337: {}, 1337: {}}
+	
+	// Priority maps loaded from config file
+	highEventIDs   = make(map[int]struct{})
+	mediumEventIDs = make(map[int]struct{})
+	lowEventIDs    = make(map[int]struct{})
 )
 
 func dm(e *SysmonEvent) map[string]string {
@@ -49,83 +53,111 @@ func dm(e *SysmonEvent) map[string]string {
 }
 func g(m map[string]string, k string) string { return m[k] }
 
-func level(e *SysmonEvent, m map[string]string) string {
-	id := e.System.EventID
-	img := strings.ToLower(g(m, "Image"))
-	cmd := strings.ToLower(g(m, "CommandLine"))
-	tgt := strings.ToLower(g(m, "TargetFilename"))
-	for _, p := range high {
-		if strings.Contains(cmd, p) || strings.Contains(img, p) {
-			return "high"
-		}
+// classify determines the security level based purely on Sysmon Event ID
+// The priority is determined by the sysmon_priorities.conf configuration file
+func classify(eventID int) string {
+	if _, ok := highEventIDs[eventID]; ok {
+		return "high"
 	}
-	for _, p := range med {
-		if strings.Contains(cmd, p) || strings.Contains(img, p) {
-			return "medium"
-		}
-	}
-	switch id {
-	case 1:
-		p := strings.ToLower(g(m, "ParentImage"))
-		if strings.Contains(p, "excel") || strings.Contains(p, "word") || strings.Contains(p, "outlook") || strings.Contains(p, "acrobat") {
-			return "high"
-		}
-		return "medium"
-	case 3:
-		if port, err := strconv.Atoi(g(m, "DestinationPort")); err == nil {
-			if _, ok := sPort[port]; ok {
-				return "high"
-			}
-		}
-		return "low"
-	case 5:
-		return "low"
-	case 7:
-		if strings.Contains(img, "inject") || strings.Contains(img, "reflective") {
-			return "high"
-		}
-		return "low"
-	case 8:
-		return "high"
-	case 10:
-		t := strings.ToLower(g(m, "TargetImage"))
-		if strings.Contains(t, "lsass.exe") || strings.Contains(t, "csrss.exe") {
-			return "high"
-		}
-		return "medium"
-	case 11:
-		if strings.Contains(tgt, "\\appdata\\roaming") || strings.Contains(tgt, "\\temp\\") || strings.Contains(tgt, "\\startup\\") {
-			return "medium"
-		}
-		return "low"
-	case 12, 13, 14:
-		o := strings.ToLower(g(m, "TargetObject"))
-		if strings.Contains(o, "\\run") || strings.Contains(o, "\\currentversion\\windows\\run") || strings.Contains(o, "\\winlogon") {
-			return "high"
-		}
-		return "medium"
-	case 15:
-		return "medium"
-	case 17, 18:
-		return "medium"
-	case 19, 20, 21:
-		return "high"
-	case 22:
-		q := strings.ToLower(g(m, "QueryName"))
-		for _, d := range []string{"pastebin", "raw.githubusercontent", "ngrok", "duckdns"} {
-			if strings.Contains(q, d) {
-				return "high"
-			}
-		}
-		return "low"
-	case 23:
-		return "medium"
-	case 25:
-		return "high"
-	case 26:
+	if _, ok := mediumEventIDs[eventID]; ok {
 		return "medium"
 	}
+	if _, ok := lowEventIDs[eventID]; ok {
+		return "low"
+	}
+	// Default to low for unknown event types
 	return "low"
+}
+
+// setDefaultPriorities sets hardcoded defaults as fallback
+func setDefaultPriorities() {
+	// High priority defaults
+	highEventIDs = map[int]struct{}{
+		8:  {}, // CreateRemoteThread
+		10: {}, // ProcessAccess
+		19: {}, // WmiEventFilter
+		20: {}, // WmiEventConsumer
+		21: {}, // WmiEventConsumerToFilter
+		25: {}, // ProcessTampering
+	}
+
+	// Medium priority defaults
+	mediumEventIDs = map[int]struct{}{
+		1:  {}, // ProcessCreate
+		12: {}, // RegistryEventObjectCreateDelete
+		13: {}, // RegistryEventValueSet
+		14: {}, // RegistryEventKeyRename
+		15: {}, // FileCreateStreamHash
+		17: {}, // PipeEventCreated
+		18: {}, // PipeEventConnected
+		23: {}, // FileDelete
+		26: {}, // FileDeleteDetected
+	}
+
+	// Low priority defaults
+	lowEventIDs = map[int]struct{}{
+		2:  {}, // FileCreationTimeChanged
+		3:  {}, // NetworkConnect
+		4:  {}, // SysmonServiceStateChanged
+		5:  {}, // ProcessTerminate
+		6:  {}, // DriverLoad
+		7:  {}, // ImageLoad
+		9:  {}, // RawAccessRead
+		11: {}, // FileCreate
+		16: {}, // SysmonConfigStateChanged
+		22: {}, // DnsQuery
+		24: {}, // ClipboardChange
+	}
+}
+
+// loadPriorities loads event priorities from configuration file
+func loadPriorities(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var currentSection string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check for section headers
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = strings.ToLower(strings.Trim(line, "[]"))
+			continue
+		}
+
+		// Parse event ID (ignore comments after the ID)
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
+			continue
+		}
+
+		eventID, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue // Skip invalid event IDs
+		}
+
+		// Add to appropriate map
+		switch currentSection {
+		case "high":
+			highEventIDs[eventID] = struct{}{}
+		case "medium":
+			mediumEventIDs[eventID] = struct{}{}
+		case "low":
+			lowEventIDs[eventID] = struct{}{}
+		}
+	}
+
+	return scanner.Err()
 }
 
 func msg(e *SysmonEvent, m map[string]string) string {
@@ -170,6 +202,7 @@ func getName(id int) string {
 func main() {
 	device := flag.Int64("device", 0, "Device ID (required)")
 	debug := flag.Bool("debug", false, "Enable debug output")
+	configPath := flag.String("config", "", "Path to sysmon_priorities.conf")
 	flag.Parse()
 	if *device <= 0 {
 		fmt.Fprintln(os.Stderr, "error: -device <id> is required")
@@ -180,6 +213,28 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	// Load priority configuration
+	if *configPath == "" {
+		// Default to config/sysmon_priorities.conf relative to project root
+		if repoRoot := os.Getenv("REPO_ROOT"); repoRoot != "" {
+			*configPath = filepath.Join(repoRoot, "config", "sysmon_priorities.conf")
+		} else {
+			*configPath = "/opt/agentless/config/sysmon_priorities.conf"
+		}
+	}
+
+	// Set defaults first
+	setDefaultPriorities()
+
+	// Load from config file if available
+	if err := loadPriorities(*configPath); err != nil {
+		if *debug {
+			fmt.Fprintf(os.Stderr, "Warning: Could not load config from %s: %v. Using defaults.\n", *configPath, err)
+		}
+	} else if *debug {
+		fmt.Fprintf(os.Stderr, "Loaded priorities from: %s\n", *configPath)
+	}
 
 	// PowerShell .ToXml() over SSH outputs UTF-8, not UTF-16
 	// Just use stdin directly
@@ -242,10 +297,10 @@ func main() {
 			
 			if *debug {
 				fmt.Fprintf(os.Stderr, "Inserting: ts=%s, event=%s, key=%s, audit=%s, msg=%s, level=%s\n", 
-					ts, ev, key, audit, msg(&e, m), level(&e, m))
+					ts, ev, key, audit, msg(&e, m), classify(e.System.EventID))
 			}
 			
-			if rowID, err := db.InsertAuditLog(*device, ts, ev, key, msg(&e, m), rawLog, level(&e, m), audit); err != nil {
+			if rowID, err := db.InsertAuditLog(*device, ts, ev, key, msg(&e, m), rawLog, classify(e.System.EventID), audit); err != nil {
 				fmt.Fprintln(os.Stderr, "insert error:", err)
 			} else if rowID == 0 {
 				if *debug {

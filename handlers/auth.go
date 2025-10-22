@@ -14,6 +14,7 @@ import (
 	"example/go-website/db"
 	"example/go-website/models"
 	"example/go-website/templates"
+	"example/go-website/utils"
 )
 
 // Security logger for fail2ban integration
@@ -208,8 +209,22 @@ func SignupHandler(c *gin.Context) {
 			return
 		}
 
+		if !utils.IsValidUsername(username) {
+			data.Error = "Invalid username format. Use lowercase letters, numbers, underscore, and hyphens only."
+			data.ErrorFields["username"] = true
+			templates.RenderGinTemplate(c, "signup", data)
+			return
+		}
+
 		if password == "" {
 			data.Error = "Password is required"
+			data.ErrorFields["password"] = true
+			templates.RenderGinTemplate(c, "signup", data)
+			return
+		}
+
+		if len(password) < 8 {
+			data.Error = "Password must be at least 8 characters long"
 			data.ErrorFields["password"] = true
 			templates.RenderGinTemplate(c, "signup", data)
 			return

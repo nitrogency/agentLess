@@ -14,9 +14,11 @@
     <div class="success-message">{{.Success}}</div>
     {{end}}
 
+    {{if or .IsAdmin .CanAddDevices}}
     <div class="device-actions">
         <a href="/devices/add" class="btn btn-primary">Add Device</a>
     </div>
+    {{end}}
 
     <table class="users-table">
         <thead>
@@ -92,9 +94,13 @@
                     <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>
                     {{end}}
                     {{if and (ne .IPAddress "127.0.0.1") (ne .IPAddress "localhost")}}
+                    {{if or $.IsAdmin $.CanModifyDevices}}
                     <a href="/devices/edit/{{.ID}}" class="btn btn-sm btn-secondary">Edit</a>
                     {{end}}
+                    {{end}}
+                    {{if or $.IsAdmin $.CanModifyDevices}}
                     <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
+                    {{end}}
                 </td>
             </tr>
             {{else}}
