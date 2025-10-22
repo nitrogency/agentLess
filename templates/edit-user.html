@@ -31,6 +31,7 @@
             <input type="password" class="form-control" id="password" name="password">
         </div>
         
+        {{if .Data.CanEditPermissions}}
         <div class="form-group">
             <label class="checkbox-label">
                 <input type="checkbox" name="isAdmin" id="isAdmin" {{if .User.IsAdmin}}checked{{end}}>
@@ -58,26 +59,8 @@
                     </div>
                 </fieldset>
             </div>
-            
-            <div class="permission-section">
-                <fieldset>
-                    <legend>User Management</legend>
-                    <div class="permission-content">
-                        <p>These settings determine what user operations the user can perform</p>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canAddUsers" id="canAddUsers" {{if .User.CanAddUsers}}checked{{end}}>
-                            Can Add Users
-                        </label>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="canModifyUsers" id="canModifyUsers" {{if .User.CanModifyUsers}}checked{{end}}>
-                            Can Modify/Delete Users
-                        </label>
-                    </div>
-                </fieldset>
-            </div>
         </div>
+        {{end}}
         
         <div class="form-group">
             <h4>Notification Preferences</h4>
@@ -116,10 +99,15 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Update User</button>
+            {{if .IsAdmin}}
             <a href="/users" class="btn btn-secondary">Cancel</a>
+            {{else}}
+            <a href="/" class="btn btn-secondary">Cancel</a>
+            {{end}}
         </div>
     </form>
 
+    {{if and .IsAdmin (not .Data.IsEditingSelf)}}
     <div class="user-form">
         <h3>Danger Zone</h3>
         <p>Once you delete a user, there is no going back. Please be certain.</p>
@@ -130,5 +118,6 @@
             <button type="submit" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this user? This action cannot be undone.')">Delete User</button>
         </form>
     </div>
+    {{end}}
 </div>
 {{end}}

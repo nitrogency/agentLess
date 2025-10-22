@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -44,89 +45,111 @@ func inSet(s string, set map[string]struct{}) bool {
 }
 
 var (
-	highKeys   = map[string]struct{}{}
-	mediumKeys = map[string]struct{}{
-		"identity_mod":       {},
-		"perm_mod":           {},
-		"mounts":             {},
-		"sudo_log_mod":       {},
-		"sudoers_mod":        {},
-		"user_emulation":     {},
-		"time_change":        {},
-		"system_env":         {},
-		"failed_access":      {},
-		"session":            {},
-		"file_delete":        {},
-		"MAC_policy":         {},
-		"conf_chcon":         {},
-		"conf_setfacl":       {},
-		"conf_chacl":         {},
-		"usermod":            {},
-		"kernel_modules":     {},
-		"firewall":           {},
-		"systemd_monitoring": {},
-		"cron_events":        {},
+	// These will be populated from config file or defaults
+	highKeys   = make(map[string]struct{})
+	mediumKeys = make(map[string]struct{})
+	lowKeys    = make(map[string]struct{})
+)
+
+// loadPriorities reads the audit priority configuration file
+// Format: [section] headers followed by keys, one per line
+// Sections: [high], [medium], [low]
+func loadPriorities(configPath string) error {
+	// Set defaults in case file doesn't exist or fails to load
+	setDefaultPriorities()
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		// If file doesn't exist, use defaults silently
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to open config: %w", err)
 	}
+	defer file.Close()
+
+	// Clear existing maps to load fresh from file
+	highKeys = make(map[string]struct{})
+	mediumKeys = make(map[string]struct{})
+	lowKeys = make(map[string]struct{})
+
+	scanner := bufio.NewScanner(file)
+	var currentSection string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check for section headers
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = strings.ToLower(strings.Trim(line, "[]"))
+			continue
+		}
+
+		// Add key to current section
+		key := strings.ToLower(line)
+		switch currentSection {
+		case "high":
+			highKeys[key] = struct{}{}
+		case "medium":
+			mediumKeys[key] = struct{}{}
+		case "low":
+			lowKeys[key] = struct{}{}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read config: %w", err)
+	}
+
+	return nil
+}
+
+// setDefaultPriorities sets hardcoded defaults as fallback
+func setDefaultPriorities() {
+	// High priority defaults
+	highKeys = map[string]struct{}{
+		"suid_root_exec":         {},
+		"rootkey":                {},
+		"32bit_abi":              {},
+		"anon_file_create":       {},
+		"network_connect_4":      {},
+		"network_connect_6":      {},
+		"network_socket_created": {},
+	}
+
+	// Medium priority defaults
+	mediumKeys = map[string]struct{}{
+		"identity_mod": {}, "perm_mod": {}, "mounts": {}, "sudo_log_mod": {},
+		"sudoers_mod": {}, "user_emulation": {}, "time_change": {}, "system_env": {},
+		"failed_access": {}, "session": {}, "file_delete": {}, "MAC_policy": {},
+		"conf_chcon": {}, "conf_setfacl": {}, "conf_chacl": {}, "usermod": {},
+		"kernel_modules": {}, "firewall": {}, "systemd_monitoring": {}, "cron_events": {},
+		"auditconfig": {}, "audittools": {}, "susp_activity": {}, "string_search": {},
+		"recon": {},
+	}
+
+	// Low priority defaults
 	lowKeys = map[string]struct{}{
 		"exec_all": {},
 	}
-)
+}
 
+// classify determines the security level of an audit event based purely on the audit rule key
+// The audit rules assign keys to events at the kernel level:
+// - High keys: SUID execution, root key access, network connections, 32-bit ABI, anonymous files
+// - Medium keys: system modifications, reconnaissance, suspicious tools, audit config changes
+// - Low keys: general command execution (exec_all)
+// Events without keys are not stored to reduce noise
 func classify(ev *Event) string {
 	key := strings.ToLower(ev.Key)
-	comm := strings.ToLower(ev.Comm)
-	exe := ev.Exe
-	success := strings.ToLower(ev.Success)
 
-	// ---- Safelist: your monitoring actions reading audit logs (near real-time/SSH backfill)
-	argvJoined := strings.ToLower(strings.Join(ev.Argv, " "))
-	if (comm == "tail" || comm == "cat" || comm == "ausearch" || comm == "ssh" || comm == "sudo") &&
-		(strings.Contains(argvJoined, "/var/log/audit") || strings.Contains(argvJoined, "audit.log")) {
-		return "low"
-	}
-
-	// ---- Explicit high-risk executables/patterns (cheap substring checks)
-	// Single pass list: exact exe paths and argv substrings considered high-risk
-	exeLower := strings.ToLower(exe)
-	highList := []string{
-		// exact binaries (also checked in argv)
-		"/bin/netcat", "/usr/bin/netcat", "/bin/nc", "/usr/bin/nc", "/usr/bin/ncat", "/usr/bin/socat",
-		// nc command-exec variants
-		" nc -e ", " nc -c ",
-		// reverse shells
-		" bash -i", "/dev/tcp/",
-		// download-and-execute one-liners (broader match)
-		"| sh",
-		// socat pty reverse pattern
-		"socat pty,raw,echo=0",
-	}
-	for _, pat := range highList {
-		if exeLower == pat || strings.Contains(argvJoined, pat) {
-			return "high"
-		}
-	}
-	mediumList := []string{
-		"/usr/bin/whoami", "/usr/sbin/ifconfig", "/usr/bin/id", "/bin/hostname", "/bin/uname",
-		"/etc/issue", "/proc/version", "/proc/sys/kernel/domainname", "/proc/swaps", "/proc/partitions",
-		"/proc/cpuinfo", "/proc/self/mounts",
-
-		"/usr/bin/base64", "/usr/bin/scp", "/usr/bin/sftp", "/usr/bin/ftp", "/etc/alternatives/ftp",
-		"/usr/bin/dmesg", "/usr/bin/ps", "/usr/bin/pstree", "/usr/bin/top", "/usr/bin/htop",
-		"/usr/bin/kill", "/usr/bin/killall", "/usr/bin/last", "/usr/bin/lsof", "/usr/bin/kmod",
-		"/usr/sbin/arp", "/bin/bash", "/etc/alternatives/arptables", "/usr/sbin/arptables",
-	}
-	for _, pat := range mediumList {
-		if exeLower == pat || strings.Contains(argvJoined, pat) {
-			return "medium"
-		}
-	}
-
-	// ---- Key-based classification (fast paths)
+	// Key-based classification
 	if inSet(key, highKeys) {
-		// soften if clearly a system mgmt binary path
-		if strings.HasPrefix(exe, "/usr/lib/") || strings.HasPrefix(exe, "/usr/sbin/") {
-			return "medium"
-		}
 		return "high"
 	}
 	if inSet(key, mediumKeys) {
@@ -136,45 +159,7 @@ func classify(ev *Event) string {
 		return "low"
 	}
 
-	// ---- Additional heuristics similar to your shell script fallbacks
-
-	// High auth failures
-	if strings.Contains(argvJoined, "failed password") ||
-		strings.Contains(argvJoined, "authentication failure") ||
-		strings.Contains(argvJoined, "invalid user") {
-		return "high"
-	}
-
-	// Syscall-like hints from raw (when key missing)
-	// We don't parse syscall names here, but argv may carry commands indicative of risk.
-	if strings.Contains(argvJoined, "execve") || strings.Contains(argvJoined, "unlink") ||
-		strings.Contains(argvJoined, "rmdir") || strings.Contains(argvJoined, "delete") {
-		return "medium"
-	}
-
-	// Generic high patterns
-	if strings.Contains(argvJoined, "unauthorized") ||
-		strings.Contains(argvJoined, "privilege escalation") ||
-		strings.Contains(argvJoined, "user not in sudoers") {
-		return "high"
-	}
-
-	// Generic medium patterns
-	if strings.Contains(argvJoined, "kernel module") ||
-		strings.Contains(argvJoined, "chmod +x") ||
-		strings.Contains(argvJoined, "new user") ||
-		strings.Contains(argvJoined, "password change") ||
-		strings.Contains(argvJoined, "sudo command") ||
-		strings.Contains(argvJoined, "insmod") ||
-		strings.Contains(argvJoined, "modprobe") {
-		return "medium"
-	}
-
-	// If sudo failed
-	if success == "no" && comm == "sudo" {
-		return "medium"
-	}
-
+	// Default to low for any remaining events with keys
 	return "low"
 }
 
@@ -288,10 +273,34 @@ func main() {
 
 	// Flags
 	deviceFlag := flag.Int64("device", 0, "Device ID to attribute logs to (required)")
+	configFlag := flag.String("config", "", "Path to audit priorities config file")
 	flag.Parse()
+
 	if *deviceFlag <= 0 {
 		fmt.Fprintln(os.Stderr, "error: -device <id> is required")
 		os.Exit(2)
+	}
+
+	// Initialize encrypted database using shared app settings
+	if err := db.InitDB(); err != nil {
+		fmt.Fprintln(os.Stderr, "db init error:", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Load priority configuration
+	configPath := *configFlag
+	if configPath == "" {
+		// Default to config/audit_priorities.conf relative to project root
+		if repoRoot := os.Getenv("REPO_ROOT"); repoRoot != "" {
+			configPath = filepath.Join(repoRoot, "config", "audit_priorities.conf")
+		} else {
+			configPath = "/opt/agentless/config/audit_priorities.conf"
+		}
+	}
+
+	if err := loadPriorities(configPath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to load priorities from %s: %v (using defaults)\n", configPath, err)
 	}
 
 	// Initialize encrypted database using shared app settings

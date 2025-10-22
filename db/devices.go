@@ -96,11 +96,6 @@ func CreateDevice(name, deviceType string) error {
 	return err
 }
 
-// CreateMonitoredDevice creates a new device with SSH monitoring details
-func CreateMonitoredDevice(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo string, sshGroup string, setupUser string) error {
-	return CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, "x64", "audit_default.rules")
-}
-
 // CreateMonitoredDeviceWithOS creates a new device with SSH monitoring details and OS type
 func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType string, sshGroup string, setupUser, auditArch, auditRuleset string) error {
 	_, err := db.Exec(`
@@ -346,16 +341,6 @@ func UpdateDevice(id int64, name, deviceType, status string) error {
 		WHERE id = ?
 	`, name, deviceType, status, id)
 	return err
-}
-
-// UpdateMonitoredDevice updates a monitored device's information
-func UpdateMonitoredDevice(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, sshGroup string, setupUser string) error {
-	return UpdateMonitoredDeviceWithOS(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, "linux", sshGroup, setupUser, "x64", "audit_default.rules")
-}
-
-// UpdateMonitoredDeviceWithOS updates a monitored device's information including OS type
-func UpdateMonitoredDeviceWithOS(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, auditArch, auditRuleset string) error {
-	return UpdateMonitoredDeviceWithOSAndReenrollment(id, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset, false)
 }
 
 // UpdateMonitoredDeviceWithOSAndReenrollment updates a monitored device's information including OS type and reenrollment flag

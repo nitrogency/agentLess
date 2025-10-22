@@ -1,0 +1,36 @@
+[Unit]
+Description=Agent< Web Application
+After=network.target
+
+[Service]
+Type=simple
+User=agentless
+Group=agentless
+WorkingDirectory=__APP_DIR__
+
+# Load secrets from systemd environment file
+EnvironmentFile=__SECRETS_FILE__
+
+# Load non-secret configuration
+EnvironmentFile=__APP_DIR__/.env
+
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=GOPATH=__GOPATH__
+
+ExecStart=__APP_DIR__/agentless
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+AmbientCapabilities=CAP_NET_RAW
+ReadWritePaths=__APP_DIR__/data __APP_DIR__/tmp /var/log/agentless
+
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agentless-ids
+
+[Install]
+WantedBy=multi-user.target

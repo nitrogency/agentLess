@@ -69,15 +69,9 @@ execute_sqlite() {
         fi
         return 0
     else
-        echo "[EXEC_SQL DEBUG] Running SELECT query" >&2
-        echo "[EXEC_SQL DEBUG] encryption_key=${encryption_key:0:10}..." >&2
-        echo "[EXEC_SQL DEBUG] db_path=$db_path" >&2
-        
         local result
-        echo "[EXEC_SQL DEBUG] About to run printf | timeout | sqlcipher..." >&2
         result=$(printf "%s\n%s\n" "PRAGMA key = '$encryption_key';" "$query" | timeout 10 sqlcipher "$db_path" 2>&1)
         local exit_code=$?
-        echo "[EXEC_SQL DEBUG] Command completed with exit code: $exit_code" >&2
         
         if [ $exit_code -eq 124 ]; then
             log_error "Database read timed out"

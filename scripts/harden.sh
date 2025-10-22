@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/config.sh"
 
 SSH_CFG="/etc/ssh/sshd_config"
 SSH_PORT="4222"
@@ -23,6 +25,11 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
+# Check if running with sudo/root privileges
+if [ "$EUID" -ne 0 ]; then
+    log_error "This script must be run with sudo."
+    exit 1
+fi
 
 log_info "Starting..."
 
@@ -33,11 +40,99 @@ dpkg-reconfigure -plow unattended-upgrades
 log_success "System updates complete."
 
 log_info "Installing security tools..."
-apt update && apt install -y clamav clamav-daemon ufw fail2ban
-systemctl stop clamav-freshclam
-freshclam
-systemctl start clamav-freshclam
-log_success "Security tools installed."
+apt update && apt install -y clamav clamav-daemon clamav-freshclam ufw fail2ban
+log_success "Security packages installed."
+
+log_info "Configuring ClamAV..."
+
+# Create log directory
+mkdir -p /var/log/clamav
+
+# Configure freshclam (disable Example line)
+if [ -f /etc/clamav/freshclam.conf ]; then
+    sed -i 's/^Example/#Example/' /etc/clamav/freshclam.conf 2>/dev/null || true
+elif [ -f /etc/freshclam.conf ]; then
+    sed -i 's/^Example/#Example/' /etc/freshclam.conf 2>/dev/null || true
+fi
+
+# Configure clamd (disable Example line)
+if [ -f /etc/clamav/clamd.conf ]; then
+    sed -i 's/^Example/#Example/' /etc/clamav/clamd.conf 2>/dev/null || true
+elif [ -f /etc/clamd.conf ]; then
+    sed -i 's/^Example/#Example/' /etc/clamd.conf 2>/dev/null || true
+fi
+
+# Stop freshclam service before manual update (avoid log file lock conflict)
+if systemctl is-active clamav-freshclam >/dev/null 2>&1; then
+    log_info "Stopping freshclam service temporarily for initial database update..."
+    systemctl stop clamav-freshclam
+fi
+
+# Update virus definitions (this MUST complete before starting daemon)
+log_info "Updating ClamAV virus definitions (this may take a few minutes)..."
+if freshclam; then
+    log_success "Virus definitions updated successfully"
+else
+    log_warn "freshclam update failed, trying to continue anyway"
+fi
+
+# Wait a moment for files to settle
+sleep 2
+
+# Enable and start freshclam service for automatic updates
+log_info "Starting freshclam service for automatic updates..."
+systemctl enable clamav-freshclam 2>/dev/null || true
+systemctl start clamav-freshclam 2>/dev/null || true
+
+# Enable and start ClamAV daemon
+log_info "Starting ClamAV daemon..."
+systemctl enable clamav-daemon 2>/dev/null || true
+systemctl start clamav-daemon 2>/dev/null || log_warn "clamav-daemon may need manual start after database update completes"
+
+# Set up log file permissions
+if [ -f /var/log/clamav/clamav.log ]; then
+    chmod 644 /var/log/clamav/clamav.log
+else
+    touch /var/log/clamav/clamav.log
+    chmod 644 /var/log/clamav/clamav.log
+fi
+
+log_success "ClamAV configured and running."
+
+# Install systemd timer for daily scans
+log_info "Configuring daily ClamAV scans via systemd timer..."
+
+# Get the script directory and project root
+HARDEN_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$HARDEN_SCRIPT_DIR")"
+
+# Install systemd service and timer files
+if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" ]; then
+    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" /etc/systemd/system/
+    log_info "Installed ClamAV scan service"
+else
+    log_error "agentless-clamav-scan.service not found at $PROJECT_ROOT/systemd/"
+    exit 1
+fi
+
+if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" ]; then
+    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" /etc/systemd/system/
+    log_info "Installed ClamAV scan timer"
+else
+    log_error "agentless-clamav-scan.timer not found at $PROJECT_ROOT/systemd/"
+    exit 1
+fi
+
+# Reload systemd and enable timer
+systemctl daemon-reload
+systemctl enable agentless-clamav-scan.timer
+systemctl start agentless-clamav-scan.timer
+
+log_success "Daily ClamAV scans configured (runs at 2:00 AM daily)"
+log_info "Scan logs: /var/log/clamav/clamav.log"
+log_info "Quarantine directory: /var/log/clamav/quarantine"
+log_info "Check timer status: systemctl status agentless-clamav-scan.timer"
+log_info "Run manual scan: systemctl start agentless-clamav-scan.service"
 
 log_info "Configuring SSH settings..."
 log_info "SSH port will be set to: $SSH_PORT"
@@ -95,9 +190,9 @@ fi
 
 # Reload SSH service
 log_info "Reloading SSH service..."
-if timeout 10 systemctl reload sshd 2>/dev/null; then
+if timeout 10 systemctl restart sshd 2>/dev/null; then
     log_info "SSH service reloaded successfully (sshd)"
-elif timeout 10 systemctl reload ssh 2>/dev/null; then
+elif timeout 10 systemctl restart ssh 2>/dev/null; then
     log_info "SSH service reloaded successfully (ssh)"
 else
     log_info "WARNING: SSH service reload failed or timed out - continuing anyway"
@@ -118,7 +213,6 @@ log_info "Configuring Fail2ban..."
 
 # App directory is always /opt/agentless (standard installation location)
 APP_DIR="/opt/agentless"
-LOG_DIR="/var/log/agentless"
 
 if [ ! -d "$APP_DIR" ]; then
     log_error "Agent< not found at $APP_DIR"
@@ -232,8 +326,8 @@ EOF
 systemctl enable auditd
 systemctl restart auditd
 
-# Load the rules
-augenrules --load
+# Load the rules (allow non-zero exit on "No change")
+augenrules --load || true
 
 log_success "Auditd installed and configured with default rules."
 
@@ -270,4 +364,9 @@ for service in "${SERVICES_TO_DISABLE[@]}"; do
 done
 
 log_success "Unnecessary services disabled."
+
+# Note: Localhost is NOT enrolled for self-monitoring
+# The IDS server's audit logs remain in /var/log/audit for manual review if needed
+log_info "IDS server audit logs available at: /var/log/audit/audit.log"
+log_info "ClamAV logs available at: /var/log/clamav/"
 

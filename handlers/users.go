@@ -33,9 +33,8 @@ func UsersHandler(c *gin.Context) {
 		users = []db.User{}
 	}
 
-	// Populate PageData field used by templates
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Users = users
-	// Keep Data map for any legacy references
 	data.Data["Users"] = users
 	templates.RenderGinTemplate(c, "users", data)
 }
@@ -60,8 +59,9 @@ func AddUserHandler(c *gin.Context) {
 		isAdmin := c.PostForm("isAdmin") == "on"
 		canAddDevices := c.PostForm("canAddDevices") == "on"
 		canModifyDevices := c.PostForm("canModifyDevices") == "on"
-		canAddUsers := c.PostForm("canAddUsers") == "on"
-		canModifyUsers := c.PostForm("canModifyUsers") == "on"
+		// User management is admin-only, so these are always false for new users
+		canAddUsers := false
+		canModifyUsers := false
 
 		// Store form data for repopulating on error
 		data.FormData["username"] = username
@@ -140,13 +140,6 @@ func EditUserHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Edit User"
 
-	// Check if user is admin
-	if !data.IsAdmin {
-		data.Error = "Access denied. Admin privileges required."
-		templates.RenderGinTemplate(c, "404", data)
-		return
-	}
-
 	// Get user ID from URL parameter
 	userIDStr := c.Param("id")
 	if userIDStr == "" {
@@ -160,6 +153,14 @@ func EditUserHandler(c *gin.Context) {
 	if err != nil {
 		log.Printf("Invalid user ID: %v", err)
 		data.Error = "Invalid user ID"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
+	// Check permissions: users can only edit their own profile unless they're admin
+	isEditingSelf := userID == data.UserID
+	if !data.IsAdmin && !isEditingSelf {
+		data.Error = "Access denied. You can only edit your own profile."
 		templates.RenderGinTemplate(c, "404", data)
 		return
 	}
@@ -179,17 +180,36 @@ func EditUserHandler(c *gin.Context) {
 		return
 	}
 
+	// Pass flag to template to hide admin/permissions sections for non-admins
+	data.Data["IsEditingSelf"] = isEditingSelf
+	data.Data["CanEditPermissions"] = data.IsAdmin
+
 	// Handle POST request (form submission)
 	if c.Request.Method == "POST" {
 		// Get form data
 		username := strings.TrimSpace(c.PostForm("username"))
 		password := c.PostForm("password")
 		confirmPassword := c.PostForm("confirm_password")
-		isAdmin := c.PostForm("isAdmin") == "on"
-		canAddDevices := c.PostForm("canAddDevices") == "on"
-		canModifyDevices := c.PostForm("canModifyDevices") == "on"
-		canAddUsers := c.PostForm("canAddUsers") == "on"
-		canModifyUsers := c.PostForm("canModifyUsers") == "on"
+		
+		// Only admins can change permissions and admin status
+		var isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers bool
+		if data.IsAdmin {
+			// Admin can change these fields
+			isAdmin = c.PostForm("isAdmin") == "on"
+			canAddDevices = c.PostForm("canAddDevices") == "on"
+			canModifyDevices = c.PostForm("canModifyDevices") == "on"
+			canAddUsers = c.PostForm("canAddUsers") == "on"
+			canModifyUsers = c.PostForm("canModifyUsers") == "on"
+		} else {
+			// Non-admin editing themselves: keep existing permissions
+			isAdmin = user.IsAdmin
+			canAddDevices = user.CanAddDevices
+			canModifyDevices = user.CanModifyDevices
+			canAddUsers = user.CanAddUsers
+			canModifyUsers = user.CanModifyUsers
+		}
+		
+		// Everyone can change their notification preferences
 		flickerLow := c.PostForm("flickerLow") == "on"
 		flickerMedium := c.PostForm("flickerMedium") == "on"
 		flickerHigh := c.PostForm("flickerHigh") == "on"
@@ -288,8 +308,12 @@ func EditUserHandler(c *gin.Context) {
 			// Don't fail the user update for notification rule errors, just log it
 		}
 
-		// Redirect to users list on success
-		c.Redirect(http.StatusFound, "/users")
+		// Redirect based on user role
+		if data.IsAdmin {
+			c.Redirect(http.StatusFound, "/users")
+		} else {
+			c.Redirect(http.StatusFound, "/")
+		}
 		return
 	}
 

@@ -120,9 +120,8 @@ func AllLogsHandler(c *gin.Context) {
 	// Calculate statistics
 	stats := calculateLogStatistics(logs)
 
-	// Populate template data
+	// Populate Data map (templates use both Logs and AuditLogs)
 	data.Data["Logs"] = logs
-	// Back-compat for template using AuditLogs
 	data.Data["AuditLogs"] = logs
 	data.Data["CurrentPage"] = page
 	data.Data["TotalPages"] = totalPages

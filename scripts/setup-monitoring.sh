@@ -93,46 +93,17 @@ for service_file in $SYSTEMD_SYSTEM_DIR/agentless-monitor@*.service; do
   esac
 done
 
-# Install or update the unit template with absolute paths
-UNIT_CONTENT="[Unit]
-Description=Agent< Monitor for Device %%i
-After=network-online.target
-Wants=network-online.target
+# Install or update the unit template from template file
+TEMPLATE_FILE="$REPO_ROOT/systemd/agentless-monitor@.service.template"
+if [ ! -f "$TEMPLATE_FILE" ]; then
+  handle_error "Template file not found: $TEMPLATE_FILE"
+fi
 
-[Service]
-Type=simple
-User=agentless
-Group=agentless
-WorkingDirectory=%s
-Environment=HOME=/opt/agentless
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=%s -d %%i
-Restart=always
-RestartSec=10
-# Hardening (relaxed for script execution)
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=%s
-ProtectHome=false
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectKernelLogs=true
-ProtectControlGroups=true
-ProtectHostname=true
-ProtectClock=true
-LockPersonality=true
-RestrictSUIDSGID=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-SystemCallFilter=@system-service @network-io
-
-[Install]
-WantedBy=multi-user.target
-"
 log_progress "Installing systemd service template..."
-# shellcheck disable=SC2059
-printf "$UNIT_CONTENT" "$REPO_ROOT" "$MONITOR_SH" "$REPO_ROOT" | sudo_command tee "$UNIT_PATH" >/dev/null
+# Substitute variables in template and install service file
+sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" \
+    -e "s|__MONITOR_SCRIPT__|$MONITOR_SH|g" \
+    "$TEMPLATE_FILE" | sudo_command tee "$UNIT_PATH" >/dev/null
 
 systemctl_safe reload
 

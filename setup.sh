@@ -30,6 +30,15 @@ else
   log_info "User 'agentless' already exists"
 fi
 
+# Add agentless to adm group for audit log access
+log_progress "Adding agentless user to adm group for log access..."
+if ! groups agentless | grep -q '\badm\b'; then
+  sudo usermod -a -G adm agentless
+  log_success "User 'agentless' added to adm group"
+else
+  log_info "User 'agentless' already in adm group"
+fi
+
 # Configure passwordless sudo for agentless user
 log_progress "Configuring passwordless sudo for agentless user..."
 sudo bash -c 'cat > /etc/sudoers.d/agentless << "EOF"
@@ -80,6 +89,15 @@ log_progress "Creating required directories..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$APP_DIR/tmp"
 mkdir -p "$APP_DIR/bin"
+mkdir -p "$APP_DIR/config"
+
+# Ensure config file exists
+if [ ! -f "$APP_DIR/config/audit_priorities.conf" ]; then
+  if [ -f "$SOURCE_DIR/config/audit_priorities.conf" ]; then
+    cp "$SOURCE_DIR/config/audit_priorities.conf" "$APP_DIR/config/"
+    log_success "Audit priorities config installed"
+  fi
+fi
 
 # Create system-wide log directory
 log_progress "Creating system log directory..."
@@ -365,26 +383,26 @@ log_success "All application files now owned by agentless user"
 # Set up SSH keys for agentless user
 log_section "SSH Configuration"
 
-# Create .ssh directory for agentless user
-log_progress "Creating SSH directory for agentless user..."
-sudo mkdir -p /opt/agentless/.ssh
-sudo chown agentless:agentless /opt/agentless/.ssh
-sudo chmod 700 /opt/agentless/.ssh
+# Create .ssh directory in /etc/agentless
+log_progress "Creating SSH directory..."
+sudo mkdir -p /etc/agentless/.ssh
+sudo chown agentless:agentless /etc/agentless/.ssh
+sudo chmod 700 /etc/agentless/.ssh
 
 # Generate SSH keys for monitoring if they don't exist
-if [ ! -f "/opt/agentless/.ssh/ids_monitoring_key" ]; then
-  log_progress "Generating SSH keys for agentless user..."
-  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /opt/agentless/.ssh/ids_monitoring_key -N "" -C "ids_monitoring"
-  sudo chmod 600 /opt/agentless/.ssh/ids_monitoring_key
-  sudo chmod 644 /opt/agentless/.ssh/ids_monitoring_key.pub
-  log_success "SSH keys generated at /opt/agentless/.ssh/ids_monitoring_key"
+if [ ! -f "/etc/agentless/.ssh/monitor" ]; then
+  log_progress "Generating SSH keys for agentless monitoring..."
+  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /etc/agentless/.ssh/monitor -N "" -C "agentless_monitor"
+  sudo chmod 600 /etc/agentless/.ssh/monitor
+  sudo chmod 644 /etc/agentless/.ssh/monitor.pub
+  log_success "SSH keys generated at /etc/agentless/.ssh/monitor"
 else
-  log_info "SSH keys already exist at /opt/agentless/.ssh/ids_monitoring_key"
+  log_info "SSH keys already exist at /etc/agentless/.ssh/monitor"
 fi
 
 # Display public key for user reference
 log_info "Public key for device enrollment:"
-sudo cat /opt/agentless/.ssh/ids_monitoring_key.pub
+sudo cat /etc/agentless/.ssh/monitor.pub
 
 # Set up HTTPS certificates if they don't exist
 CERT_DIR="$APP_DIR/certs"
@@ -476,51 +494,17 @@ if [ -d "/etc/systemd/system" ]; then
     sudo rm -f "/etc/systemd/system/agentless.service"
   fi
   
-  # Create new service file with systemd secret management
-  sudo bash -c "cat > /etc/systemd/system/agentless.service << EOF
-[Unit]
-Description=Agent< Web Application
-After=network.target
-Documentation=https://github.com/nitrogency/agentLess
-
-[Service]
-Type=simple
-User=agentless
-Group=agentless
-WorkingDirectory=$APP_DIR
-
-# Load secrets from systemd environment file
-EnvironmentFile=$SECRETS_FILE
-
-# Load non-secret configuration
-EnvironmentFile=$APP_DIR/.env
-
-# Additional environment variables
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=GOPATH=$GOPATH
-
-# Execute application
-ExecStart=$APP_DIR/agentless
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-# ProtectHome removed - not needed for /opt installation
-ReadWritePaths=$APP_DIR/data $APP_DIR/tmp /var/log/agentless
-
-# Restart policy
-Restart=on-failure
-RestartSec=10
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=agentless-ids
-
-[Install]
-WantedBy=multi-user.target
-EOF"
+  # Create new service file from template with systemd secret management
+  TEMPLATE_FILE="$INSTALL_DIR/systemd/agentless.service.template"
+  if [ ! -f "$TEMPLATE_FILE" ]; then
+    handle_error "Template file not found: $TEMPLATE_FILE"
+  fi
+  
+  # Substitute variables in template and install service file
+  sed -e "s|__APP_DIR__|$APP_DIR|g" \
+      -e "s|__SECRETS_FILE__|$SECRETS_FILE|g" \
+      -e "s|__GOPATH__|$GOPATH|g" \
+      "$TEMPLATE_FILE" | sudo tee /etc/systemd/system/agentless.service > /dev/null
 
   log_progress "Reloading systemd..."
   sudo systemctl daemon-reload
@@ -628,4 +612,10 @@ if [ "$EXPORTER_INSTALLED" = "true" ]; then
   log_info "  - Logs: journalctl -u agentless-exporter -f"
   log_info "  - Export directory: /var/log/agentless-export/"
   log_info ""
+fi
+
+if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
+  sudo bash "$INSTALL_DIR/scripts/harden.sh"
+else
+  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
 fi

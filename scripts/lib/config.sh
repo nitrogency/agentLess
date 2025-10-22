@@ -19,7 +19,7 @@ readonly DEFAULT_DB_ENCRYPTION_KEY="default-dev-encryption-key-do-not-use-in-pro
 
 # File paths (relative to repo root)
 readonly DEFAULT_DB_PATH="data/site.db"
-readonly DEFAULT_SSH_KEY_PATH="/opt/agentless/.ssh/ids_monitoring_key"
+readonly DEFAULT_SSH_KEY_PATH="/etc/agentless/.ssh/monitor"
 
 # System paths
 readonly SYSTEMD_SYSTEM_DIR="/etc/systemd/system"

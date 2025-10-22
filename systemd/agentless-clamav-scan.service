@@ -1,0 +1,27 @@
+[Unit]
+Description=Agent< ClamAV Daily Scan
+After=clamav-daemon.service clamav-freshclam.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+Environment=SCAN_DIRS="/home /opt /var/www /tmp /var/tmp /usr/local"
+Environment=LOG_FILE="/var/log/clamav/clamav.log"
+Environment=QUARANTINE_DIR="/var/log/clamav/quarantine"
+
+ExecStartPre=/bin/mkdir -p /var/log/clamav
+ExecStartPre=/bin/mkdir -p ${QUARANTINE_DIR}
+ExecStartPre=/bin/chmod 700 ${QUARANTINE_DIR}
+
+ExecStartPre=/bin/sh -c 'echo "$(date +\"%%Y-%%m-%%d %%H:%%M:%%S\") - Starting daily scan" >> ${LOG_FILE}'
+ExecStart=/bin/sh -c 'for dir in ${SCAN_DIRS}; do if [ -d "$dir" ]; then /usr/bin/clamscan -r -i --move=${QUARANTINE_DIR} "$dir" 2>&1 | grep -E "FOUND|-------| moved to " >> ${LOG_FILE} 2>/dev/null || true; fi; done'
+ExecStartPost=/bin/sh -c 'echo "$(date +\"%%Y-%%m-%%d %%H:%%M:%%S\") - Daily scan completed" >> ${LOG_FILE}'
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agentless-clamav-scan
+
+[Install]
+WantedBy=multi-user.target

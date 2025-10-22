@@ -25,9 +25,8 @@ func DevicesHandler(c *gin.Context) {
 		data.Error = "Failed to load devices"
 		devices = []db.Device{}
 	}
-	// Populate PageData field used by templates
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Devices = devices
-	// Keep Data map for any legacy references
 	data.Data["Devices"] = devices
 	templates.RenderGinTemplate(c, "devices", data)
 }
@@ -36,6 +35,25 @@ func DevicesHandler(c *gin.Context) {
 func AddDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Add Device"
+
+	// Check permissions: user must be admin OR have CanAddDevices permission
+	isAdmin, _ := c.Get("is_admin")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		data.Error = "Authentication required"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
+	// If not admin, check CanAddDevices permission
+	if isAdmin != true {
+		user, err := db.GetUserByID(userID.(int64))
+		if err != nil || user == nil || !user.CanAddDevices {
+			data.Error = "You don't have permission to add devices."
+			templates.RenderGinTemplate(c, "404", data)
+			return
+		}
+	}
 
 	// Get available audit rulesets for both architectures
 	x64Rulesets, err := utils.GetAvailableRulesets("x64")
@@ -206,6 +224,25 @@ func AddDeviceHandler(c *gin.Context) {
 func EditDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Edit Device"
+
+	// Check permissions: user must be admin OR have CanModifyDevices permission
+	isAdmin, _ := c.Get("is_admin")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		data.Error = "Authentication required"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
+	// If not admin, check CanModifyDevices permission
+	if isAdmin != true {
+		user, err := db.GetUserByID(userID.(int64))
+		if err != nil || user == nil || !user.CanModifyDevices {
+			data.Error = "You don't have permission to modify devices."
+			templates.RenderGinTemplate(c, "404", data)
+			return
+		}
+	}
 
 	// Get available audit rulesets for both architectures
 	x64Rulesets, err := utils.GetAvailableRulesets("x64")
@@ -429,10 +466,8 @@ func EditDeviceHandler(c *gin.Context) {
 		return
 	}
 
-	// Populate device data for GET request
-	// For templates using top-level .Device
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.FormData["name"] = device.Name
 	data.FormData["type"] = device.Type
@@ -455,6 +490,25 @@ func EditDeviceHandler(c *gin.Context) {
 func DeleteDeviceHandler(c *gin.Context) {
 	data := templates.GetPageDataFromGin(c)
 	data.Title = "Delete Device"
+
+	// Check permissions: user must be admin OR have CanModifyDevices permission
+	isAdmin, _ := c.Get("is_admin")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		data.Error = "Authentication required"
+		templates.RenderGinTemplate(c, "404", data)
+		return
+	}
+
+	// If not admin, check CanModifyDevices permission
+	if isAdmin != true {
+		user, err := db.GetUserByID(userID.(int64))
+		if err != nil || user == nil || !user.CanModifyDevices {
+			data.Error = "You don't have permission to delete devices."
+			templates.RenderGinTemplate(c, "404", data)
+			return
+		}
+	}
 
 	// Get device ID from URL parameter
 	deviceIDStr := c.Param("id")
@@ -511,10 +565,8 @@ func DeleteDeviceHandler(c *gin.Context) {
 		}
 	}
 
-	// Populate device data
-	// For templates using top-level .Device
+	// Populate both direct field and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	templates.RenderGinTemplate(c, "delete-device-confirm", data)
 }
@@ -592,13 +644,10 @@ func MonitorDeviceHandler(c *gin.Context) {
 		totalPages = 1
 	}
 
-	// Populate data
-	// For templates using top-level .Device
+	// Populate both direct fields and Data map (templates use both patterns)
 	data.Device = *device
-	// Keep Data map for any legacy references
 	data.Data["Device"] = device
 	data.Data["Logs"] = logs
-	// Back-compat for templates expecting .Data.AuditLogs
 	data.Data["AuditLogs"] = logs
 	data.Data["CurrentPage"] = page
 	data.Data["TotalPages"] = totalPages

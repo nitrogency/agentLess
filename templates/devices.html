@@ -14,9 +14,11 @@
     <div class="success-message">{{.Success}}</div>
     {{end}}
 
+    {{if or .IsAdmin .CanAddDevices}}
     <div class="device-actions">
         <a href="/devices/add" class="btn btn-primary">Add Device</a>
     </div>
+    {{end}}
 
     <table class="users-table">
         <thead>
@@ -45,6 +47,8 @@
                         <span class="badge badge-success" title="SSH connection: OK">Connected</span>
                     {{else if eq .SSHStatus "failed"}}
                         <span class="badge badge-danger" title="SSH connection: Failed">Failed</span>
+                    {{else if eq .SSHStatus "n/a"}}
+                        <span class="badge badge-secondary" title="Localhost - no SSH check needed">N/A</span>
                     {{else if eq .SSHStatus "unknown"}}
                         <span class="badge badge-secondary" title="SSH not configured">Unknown</span>
                     {{else}}
@@ -89,8 +93,14 @@
                     {{if .IPAddress}}
                     <a href="/devices/monitor/{{.ID}}" class="btn btn-sm btn-primary">Monitor</a>
                     {{end}}
+                    {{if and (ne .IPAddress "127.0.0.1") (ne .IPAddress "localhost")}}
+                    {{if or $.IsAdmin $.CanModifyDevices}}
                     <a href="/devices/edit/{{.ID}}" class="btn btn-sm btn-secondary">Edit</a>
+                    {{end}}
+                    {{end}}
+                    {{if or $.IsAdmin $.CanModifyDevices}}
                     <a href="/devices/delete/{{.ID}}" class="btn btn-sm btn-secondary">Delete</a>
+                    {{end}}
                 </td>
             </tr>
             {{else}}

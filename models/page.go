@@ -11,6 +11,10 @@ type PageData struct {
 	Username            string
 	UserID              int64
 	IsAdmin             bool
+	CanAddDevices       bool
+	CanModifyDevices    bool
+	CanAddUsers         bool
+	CanModifyUsers      bool
 	Users               []db.User
 	Devices             []db.Device
 	User                *db.User

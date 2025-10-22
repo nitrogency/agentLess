@@ -124,7 +124,7 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     log_warn "SSH key not found at $SSH_KEY_PATH"
     if [ "$RANDOM_KEY" = true ]; then
         log_progress "Generating a new SSH key pair..."
-        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" -C "ids_monitoring_key"
+        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" -C "monitor"
         log_success "Generated new SSH key at $SSH_KEY_PATH"
     else
         log_error "Please specify a valid SSH key with -k or --key"
@@ -184,11 +184,24 @@ if ! id $REMOTE_USER &>/dev/null; then
     fi
 fi
 
-# Add the monitoring user to the adm group for audit log access
-if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
-    echo "\$SUDO_PASSWORD" | sudo -S usermod -a -G adm $REMOTE_USER
+# Add the monitoring user to appropriate groups for audit log access
+echo "Configuring log file access groups..."
+if getent group adm >/dev/null 2>&1; then
+    echo "Adding $REMOTE_USER to adm group..."
+    if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+        echo "\$SUDO_PASSWORD" | sudo -S usermod -a -G adm $REMOTE_USER
+    else
+        sudo usermod -a -G adm $REMOTE_USER
+    fi
+elif getent group systemd-journal >/dev/null 2>&1; then
+    echo "adm group not found, adding $REMOTE_USER to systemd-journal group..."
+    if [ "\$USE_SUDO_PASSWORD" = "true" ]; then
+        echo "\$SUDO_PASSWORD" | sudo -S usermod -a -G systemd-journal $REMOTE_USER
+    else
+        sudo usermod -a -G systemd-journal $REMOTE_USER
+    fi
 else
-    sudo usermod -a -G adm $REMOTE_USER
+    echo "Warning: Neither adm nor systemd-journal group found. Will rely on sudoers configuration."
 fi
 
 # Set up the .ssh directory
@@ -225,10 +238,34 @@ sudo grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || {
     fi
 }
 
-# Configure audit+clamav log access
-echo "Configuring audit and ClamAV log access for $REMOTE_USER..."
-sudo bash -c "echo \"$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log, /usr/bin/cat /var/log/audit/audit.log, /usr/bin/tail /var/log/clamav/clamav.log, /usr/bin/cat /var/log/clamav/clamav.log\" > /etc/sudoers.d/$REMOTE_USER"
-sudo chmod 440 /etc/sudoers.d/$REMOTE_USER
+# Configure audit+clamav log access via sudoers
+echo "Configuring passwordless sudo for log file access..."
+SUDOERS_FILE="/etc/sudoers.d/$REMOTE_USER"
+sudo bash -c "cat > \$SUDOERS_FILE" <<EOSUDOERS
+# Allow $REMOTE_USER to read audit and ClamAV logs without password
+# This is required for AgentLess IDS monitoring
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -n * /var/log/audit/audit.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -F /var/log/audit/audit.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -n * -F /var/log/audit/audit.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/cat /var/log/audit/audit.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/clamav/clamav.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -n * /var/log/clamav/clamav.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -F /var/log/clamav/clamav.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -n * -F /var/log/clamav/clamav.log
+$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/cat /var/log/clamav/clamav.log
+EOSUDOERS
+
+sudo chmod 440 "\$SUDOERS_FILE"
+
+# Validate sudoers file
+if sudo visudo -c -f "\$SUDOERS_FILE" >/dev/null 2>&1; then
+    echo "✓ Sudoers configuration validated successfully"
+else
+    echo "✗ Error: Invalid sudoers configuration, removing file..."
+    sudo rm -f "\$SUDOERS_FILE"
+    echo "Warning: Passwordless sudo configuration failed. Manual configuration may be required."
+fi
 
 # Install and configure ClamAV
 echo "Setting up ClamAV antivirus..."

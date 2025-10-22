@@ -42,15 +42,9 @@ func CSRFMiddleware() gin.HandlerFunc {
 			// Get token from session
 			sessionToken := session.Get(csrfTokenKey)
 			
-			// Debug logging
-			log.Printf("[CSRF] Method: %s, Path: %s", c.Request.Method, c.Request.URL.Path)
-			log.Printf("[CSRF] Form token: '%s' (len=%d)", formToken, len(formToken))
-			log.Printf("[CSRF] Session token: '%v' (type=%T)", sessionToken, sessionToken)
-			
 			// Validate token
 			if formToken == "" || sessionToken == nil || formToken != sessionToken.(string) {
-				log.Printf("[CSRF] VALIDATION FAILED - formEmpty=%v, sessionNil=%v, match=%v", 
-					formToken == "", sessionToken == nil, formToken == sessionToken)
+				log.Printf("CSRF validation failed for %s %s", c.Request.Method, c.Request.URL.Path)
 				templates.RenderGinTemplate(c, "error", models.PageData{
 					Title: "Security Error",
 					Error: "Invalid or missing CSRF token. Please try again.",
@@ -58,7 +52,6 @@ func CSRFMiddleware() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			log.Printf("[CSRF] Validation SUCCESS")
 			
 			// After successful validation, generate new token (token rotation)
 			token, err := GenerateCSRFToken()
@@ -83,7 +76,6 @@ func CSRFMiddleware() gin.HandlerFunc {
 		
 		if existingToken == nil {
 			// No token exists, generate new one
-			log.Printf("[CSRF] No token in session, generating new one for %s", c.Request.URL.Path)
 			newToken, err := GenerateCSRFToken()
 			if err != nil {
 				c.AbortWithStatus(http.StatusInternalServerError)
@@ -100,7 +92,6 @@ func CSRFMiddleware() gin.HandlerFunc {
 		} else {
 			// Use existing token
 			token = existingToken.(string)
-			log.Printf("[CSRF] Using existing token for %s: '%s'", c.Request.URL.Path, token[:20]+"...")
 		}
 		
 		// Make token available to templates

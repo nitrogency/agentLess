@@ -26,39 +26,27 @@ log_info "Repository root: $REPO_ROOT"
 check_dependency systemctl
 check_dependency sudo
 
-# Create service
+# Create service from template
 log_progress "Creating systemd service: $CLEANUP_SERVICE"
-sudo bash -c "cat > '$SERVICE_PATH' <<EOF
-[Unit]
-Description=Agent< - Cleanup old audit logs
-After=network-online.target
+SERVICE_TEMPLATE="$REPO_ROOT/systemd/agentless-cleanup.service.template"
+if [ ! -f "$SERVICE_TEMPLATE" ]; then
+  handle_error "Template file not found: $SERVICE_TEMPLATE"
+fi
 
-[Service]
-Type=oneshot
-WorkingDirectory=$REPO_ROOT
-ExecStart=/usr/bin/env bash -lc '$REPO_ROOT/scripts/clean.sh $RETENTION_DAYS'
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
+# Substitute variables in template and install service file
+sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" \
+    -e "s|__RETENTION_DAYS__|$RETENTION_DAYS|g" \
+    "$SERVICE_TEMPLATE" | sudo tee "$SERVICE_PATH" > /dev/null
 
-[Install]
-WantedBy=multi-user.target
-EOF"
-
-# Create timer
+# Create timer from template
 log_progress "Creating systemd timer: $CLEANUP_TIMER"
-sudo bash -c "cat > '$TIMER_PATH' <<EOF
-[Unit]
-Description=Runs audit log cleanup daily
+TIMER_TEMPLATE="$REPO_ROOT/systemd/agentless-cleanup.timer"
+if [ ! -f "$TIMER_TEMPLATE" ]; then
+  handle_error "Template file not found: $TIMER_TEMPLATE"
+fi
 
-[Timer]
-OnCalendar=daily
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF"
+# Copy timer file (no substitution needed)
+sudo cp "$TIMER_TEMPLATE" "$TIMER_PATH"
 
 # Reload systemd and enable timer
 log_progress "Enabling and starting cleanup timer"

@@ -213,6 +213,10 @@ func setupRoutes(router *gin.Engine) {
 		protected.GET("/notifications/summary", handlers.NotificationsSummaryHandler)
 		protected.POST("/notifications/mark-seen", handlers.NotificationsMarkSeenHandler)
 		protected.POST("/notifications/:id/mark-seen", handlers.NotificationMarkSeenHandler)
+
+		// User profile editing (users can edit their own profile)
+		protected.GET("/users/edit/:id", handlers.EditUserHandler)
+		protected.POST("/users/edit/:id", handlers.EditUserHandler)
 	}
 
 	// Admin routes
@@ -220,13 +224,11 @@ func setupRoutes(router *gin.Engine) {
 	admin.Use(middleware.RequireAuth())
 	admin.Use(middleware.RequireAdmin())
 	{
-		// User management
+		// User management (admin only)
 		admin.GET("/users", handlers.UsersHandler)
 		admin.POST("/users", handlers.UsersHandler)
 		admin.GET("/users/add", handlers.AddUserHandler)
 		admin.POST("/users/add", handlers.AddUserHandler)
-		admin.GET("/users/edit/:id", handlers.EditUserHandler)
-		admin.POST("/users/edit/:id", handlers.EditUserHandler)
 		admin.GET("/users/delete/:id", handlers.DeleteUserHandler)
 		admin.POST("/users/delete/:id", handlers.DeleteUserHandler)
 	}

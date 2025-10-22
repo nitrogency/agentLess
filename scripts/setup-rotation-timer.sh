@@ -34,55 +34,30 @@ if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
   exit 0
 fi
 
-# Create service
+# Create service from template
 log_progress "Creating rotation service..."
-sudo tee "$ROTATION_SERVICE" > /dev/null << EOF
-[Unit]
-Description=Agent< Secret Rotation Service
-Documentation=https://github.com/nitrogency/agentLess
+SERVICE_TEMPLATE="$REPO_ROOT/systemd/agentless-rotate-secrets.service.template"
+if [ ! -f "$SERVICE_TEMPLATE" ]; then
+  echo "Error: Template file not found: $SERVICE_TEMPLATE"
+  exit 1
+fi
 
-[Service]
-Type=oneshot
-ExecStart=/bin/bash $ROTATION_SCRIPT --auto
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=agentless-rotate
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Substitute variables in template and install service file
+sed -e "s|__ROTATION_SCRIPT__|$ROTATION_SCRIPT|g" \
+    "$SERVICE_TEMPLATE" | sudo tee "$ROTATION_SERVICE" > /dev/null
 
 log_success "Service created: $ROTATION_SERVICE"
 
-# Create timer
+# Create timer from template
 log_progress "Creating rotation timer (runs every 90 days)..."
-sudo tee "$ROTATION_TIMER" > /dev/null << EOF
-[Unit]
-Description=Agent< Secret Rotation Timer
-Documentation=https://github.com/nitrogency/agentLess
-Requires=agentless-rotate-secrets.service
+TIMER_TEMPLATE="$REPO_ROOT/systemd/agentless-rotate-secrets.timer"
+if [ ! -f "$TIMER_TEMPLATE" ]; then
+  echo "Error: Template file not found: $TIMER_TEMPLATE"
+  exit 1
+fi
 
-[Timer]
-# Run every 90 days
-OnCalendar=*-*-* 02:00:00
-# Start 90 days after boot if not already run
-OnBootSec=90d
-# Run 90 days after last activation
-OnUnitActiveSec=90d
-
-# Randomize start time by up to 1 hour to avoid system load spikes
-RandomizedDelaySec=1h
-
-# If missed (e.g., system was off), run on next boot
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
+# Copy timer file (no substitution needed)
+sudo cp "$TIMER_TEMPLATE" "$ROTATION_TIMER"
 
 log_success "Timer created: $ROTATION_TIMER"
 
