@@ -103,6 +103,18 @@ func InitAuditLogTable() error {
 		return err
 	}
 
+	// Performance optimization indexes for large datasets
+	_, err = db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_device_id ON audit_logs(device_id);
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_security_level ON audit_logs(security_level);
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_device_timestamp ON audit_logs(device_id, timestamp DESC);
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_device_level_timestamp ON audit_logs(device_id, security_level, timestamp DESC);
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
