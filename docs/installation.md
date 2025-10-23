@@ -1,5 +1,5 @@
 # Requirements and Prerequisites
-- For the server, a minimum of 2GB RAM and 2VCPUs is recommended. Storage requirements depends on the amount you plan to log. A minimum of 25GB is recommended.
+- For the server, a minimum of 2GB RAM and 2VCPUs is recommended. Storage requirements depends on the amount you plan to log. A minimum of 20GB is recommended.
 - Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but untested)
 - Go 1.16+ (for building the web application)
 - SQLite3 with SQLCipher extension
