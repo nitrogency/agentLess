@@ -1,4 +1,4 @@
-# Default rules
+# Default Linux rules
 Audit rules are loaded by the auditd service. These rules are located in `/etc/audit/rules.d/`. You can either make separate rules files and name them by priority (ex. `10-sshconf.rules`, `20-passwd.rules`), or put everything into one `audit.rules` file. The latter is the approach that the app uses. The reason for this is easier rule management - you only need to modify/maintain/check one rule file, and since the app is designed for smaller environments, multiple extensive rule files are not used. You can however, do so manually if you wish.
 
 The rule templates defined here are **VERY general**, and you should, if possible, customize them yourself according to your own environment (you might want to monitor `npm` usage or the `www-data` user if you're running a webserver, for example). These are some excellent sources for audit rules and their creation:
@@ -139,6 +139,14 @@ More niche advantages also include the ability to monitor the same file across i
 Since `exe=` rules don't attach themselves to an inode, this also means you can pre-emptively specify rules for files before they're even created. For example, if you don't have python installed on your system, but suspect someone could do so and then use that for launching a script, you can specify an `exe=` rule for `/usr/bin/python3` before it's installed. 
 
 It's worth noting that `exe=` rules are not supported by older versions of auditd. If you see an error like “unknown field: exe” when loading a rule, it likely means the installed audit service is too old to support it.
+
+## Custom rules
+
+You can write and save your custom rules to `/rulesets/` directory. These rules will automatically appear in the web interface upon refresh. If you wish to apply a custom ruleset (or change rules in general), you can just re-run the `enlist.sh` script after changing the ruleset through the UI.
+
+# Windows rules
+
+Windows monitoring uses the SwiftOnSecurity [SysmonConfig](https://github.com/SwiftOnSecurity/SysmonConfig). This is a general config that should cover most use-cases. Rules can only be changed locally. Be wary that re-running `enlist-windows.ps1` might overwrite any custom additions.
 
 # Sources
 

@@ -457,11 +457,39 @@ else
             fi
         fi
         
-        # Create daily ClamAV scan script
+        # Create daily ClamAV scan script from template
         echo "Configuring daily ClamAV scans..."
         sudo mkdir -p /etc/cron.daily
         
-        sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
+        # Get device ID from environment variable (if set by web UI)
+        DEVICE_ID="${DEVICE_ID:-unknown}"
+        
+        # Set defaults
+        CLAMAV_SCAN_DIRS="$(get_config clamav_scan_dirs)"
+        CLAMAV_QUARANTINE="$(get_config clamav_quarantine)"
+        
+        # Try to load device-specific config if available
+        DEVICE_CONFIG="/etc/agentless/devices/${DEVICE_ID}.conf"
+        if [ "$DEVICE_ID" != "unknown" ] && [ -f "$DEVICE_CONFIG" ]; then
+            echo "Loading device-specific ClamAV configuration from $DEVICE_CONFIG"
+            source "$DEVICE_CONFIG"
+            # Config may override CLAMAV_SCAN_DIRS and CLAMAV_QUARANTINE
+        fi
+        
+        # Use template if available, otherwise fallback to defaults
+        PROJECT_ROOT="$(get_repo_root)"
+        TEMPLATE_FILE="$PROJECT_ROOT/scripts/cron/clamav-scan.template"
+        
+        if [ -f "$TEMPLATE_FILE" ]; then
+            echo "Using ClamAV cron template"
+            sed -e "s|__DEVICE_ID__|${DEVICE_ID}|g" \
+                -e "s|__SCAN_DIRS__|${CLAMAV_SCAN_DIRS}|g" \
+                -e "s|__QUARANTINE_DIR__|${CLAMAV_QUARANTINE}|g" \
+                "$TEMPLATE_FILE" | sudo tee /etc/cron.daily/clamav-scan > /dev/null
+        else
+            echo "Warning: Template not found at $TEMPLATE_FILE, using default configuration"
+            # Fallback to hardcoded script
+            sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
 #!/bin/bash
 # Daily ClamAV scan - logs malware detections for monitoring
 
@@ -471,21 +499,28 @@ LOG_FILE="/var/log/clamav/clamav.log"
 # Ensure log directory exists
 mkdir -p /var/log/clamav
 
-# Run scan and append to log (avoid --log flag due to file locking by clamd)
+# Run scan and append to log
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting daily scan" >> "\$LOG_FILE"
 
 for dir in \$SCAN_DIRS; do
     if [ -d "\$dir" ]; then
-        # Scan and append results to log (only show infected files)
         clamscan -r -i "\$dir" 2>&1 | grep -E "FOUND|-------" >> "\$LOG_FILE" 2>/dev/null || true
     fi
 done
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Daily scan completed" >> "\$LOG_FILE"
 CRON_EOF
+        fi
         
         sudo chmod 755 /etc/cron.daily/clamav-scan
         echo "Daily ClamAV scan configured in /etc/cron.daily/clamav-scan"
+        
+        if [ "$DEVICE_ID" != "unknown" ] && [ -f "$DEVICE_CONFIG" ]; then
+            echo "Using device-specific scan directories: $CLAMAV_SCAN_DIRS"
+        else
+            echo "Using default scan directories"
+        fi
+        
         echo "Scans will run daily and log to /var/log/clamav/clamav.log"
         
         echo "ClamAV setup completed"

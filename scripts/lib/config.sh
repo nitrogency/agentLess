@@ -37,6 +37,8 @@ readonly AUDIT_RULES_SOURCE_PATH="rulesets/x64/audit_default.rules"
 
 # ClamAV configuration
 readonly CLAMAV_LOG_PATH="/var/log/clamav/clamav.log"
+readonly DEFAULT_CLAMAV_SCAN_DIRS="/home /opt /var/www /tmp /var/tmp /usr/local"
+readonly DEFAULT_CLAMAV_QUARANTINE=""  # Empty = no quarantine on endpoints
 
 # Log retention settings
 readonly DEFAULT_RETENTION_DAYS="30"
@@ -165,6 +167,12 @@ get_config() {
             ;;
         "clamav_log_path")
             echo "$CLAMAV_LOG_PATH"
+            ;;
+        "clamav_scan_dirs")
+            echo "${CLAMAV_SCAN_DIRS:-$DEFAULT_CLAMAV_SCAN_DIRS}"
+            ;;
+        "clamav_quarantine")
+            echo "${CLAMAV_QUARANTINE:-$DEFAULT_CLAMAV_QUARANTINE}"
             ;;
         "audit_log_path")
             echo "$AUDIT_LOG_PATH"
