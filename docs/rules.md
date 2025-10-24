@@ -144,9 +144,13 @@ It's worth noting that `exe=` rules are not supported by older versions of audit
 
 You can write and save your custom rules to `/rulesets/` directory. These rules will automatically appear in the web interface upon refresh. If you wish to apply a custom ruleset (or change rules in general), you can just re-run the `enlist.sh` script after changing the ruleset through the UI.
 
+You can change the alert priorities in the `/config/audit_priorities.conf` file.
+
 # Windows rules
 
 Windows monitoring uses the SwiftOnSecurity [SysmonConfig](https://github.com/SwiftOnSecurity/SysmonConfig). This is a general config that should cover most use-cases. Rules can only be changed locally. Be wary that re-running `enlist-windows.ps1` might overwrite any custom additions.
+
+You can change the alert priorities in the `/config/sysmon_priorities.conf` file.
 
 # Sources
 

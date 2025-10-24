@@ -1,6 +1,6 @@
 # Agent< IDS
 
-A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring through auditd and Windows monitoring through Sysmon. Logs are gathered through auditd and Sysmon rules, and then extracted to the webserver using SSH, where they can be displayed.
+A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring through auditd and Windows monitoring through Sysmon. Logs are gathered through auditd and Sysmon rules, and then extracted to the webserver using SSH, where they can be displayed. On Linux endpoints, ClamAV is also used for signature-based detection.
 
 ## Features
 
@@ -9,7 +9,7 @@ A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring t
 
 ## Prerequisites
 
-- Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but untested)
+- Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but **untested**)
 - Go 1.16+ (for building the web application)
 - SQLite3 with SQLCipher extension
 - SSH server on target devices
@@ -18,18 +18,4 @@ A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring t
 
 ## Installation
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/nitrogency/agentLess.git
-cd agentLess
-```   
-
-### 2. Run the setup script
-
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-
-You can find a more-detailed write-up of how the app works + some best-practices in the `docs` section.
+Installation instructions and other documentation regarding how the app works can be found in the `/docs` directory.
