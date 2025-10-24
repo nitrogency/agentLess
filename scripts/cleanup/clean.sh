@@ -6,12 +6,15 @@ set -euo pipefail
 
 # Source shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
 
 # Setup cleanup trap
 setup_cleanup_trap
+
+# Setup interrupt handling
+setup_interrupt_trap "clean.sh"
 
 # Configuration
 RETENTION_DAYS="${1:-$(get_config retention_days)}"

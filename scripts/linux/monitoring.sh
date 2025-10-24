@@ -3,7 +3,6 @@
 # monitoring.sh - minimal collector to feed audit lines into scripts/linux/monitoring.go
 #
 # Usage: monitoring.sh -d <device_id> -u <ssh_user> -i <ip> -k <ssh_key> -p <port>
-# Notes: keeps it simple on purpose; relies on Go program to classify and insert into DB.
 set -euo pipefail
 
 # Source shared libraries (minimal logging for this
@@ -92,33 +91,25 @@ fi
 log_debug "Starting monitoring for device $DEVICE_ID ($SSH_USER@$IP:$PORT)"
 log_debug "Using compiled monitor binary: $BIN_MONITOR"
 
-# Check if this is localhost - read logs directly without SSH
-if [[ "$IP" == "127.0.0.1" || "$IP" == "localhost" ]]; then
-  log_info "Detected localhost - reading logs directly (no SSH)"
-  
-  # Read logs directly (agentless user must be in adm group for audit log access)
-  (cd "$PROJECT_ROOT" && tail -n "$LOG_LIMIT" -F "$AUDIT_LOG_PATH" "$CLAMAV_LOG_PATH" 2>/dev/null | "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
-else
-  # Remote device - use SSH
-  REMOTE_CMD="(
-    if [ -r $AUDIT_LOG_PATH ]; then
-      tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
-    else
-      sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
-      sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
-    fi
-  ) & (
-    if [ -r $CLAMAV_LOG_PATH ]; then
-      tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
-    else
-      sudo -n tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH 2>/dev/null || \
-      sudo tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
-    fi
-  ); wait"
-  
-  log_debug "SSH options: ${SSH_OPTS[*]}"
-  log_debug "Remote command: $REMOTE_CMD"
-  
-  ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
-    (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)
-fi
+# Remote device - use SSH
+REMOTE_CMD="(
+  if [ -r $AUDIT_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  else
+    sudo -n tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH 2>/dev/null || \
+    sudo tail -n $LOG_LIMIT -F $AUDIT_LOG_PATH
+  fi
+) & (
+  if [ -r $CLAMAV_LOG_PATH ]; then
+    tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+  else
+    sudo -n tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH 2>/dev/null || \
+    sudo tail -n $LOG_LIMIT -F $CLAMAV_LOG_PATH
+  fi
+); wait"
+
+log_debug "SSH options: ${SSH_OPTS[*]}"
+log_debug "Remote command: $REMOTE_CMD"
+
+ssh "${SSH_OPTS[@]}" "$SSH_USER@$IP" "$REMOTE_CMD" 2>&1 | \
+  (cd "$PROJECT_ROOT" && "$BIN_MONITOR" -device "$DEVICE_ID" 2>&1)

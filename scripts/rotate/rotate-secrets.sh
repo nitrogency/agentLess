@@ -5,9 +5,14 @@
 
 set -e
 
-# Source logging library
+# Source libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+
+# Setup cleanup and interrupt handling
+setup_cleanup_trap
+setup_interrupt_trap "rotate-secrets.sh"
 
 # Configuration
 SECRETS_FILE="/etc/agentless/secrets.env"
@@ -22,7 +27,6 @@ fi
 log_section "Agent< Secret Rotation"
 log_warn "This will rotate SESSION_SECRET"
 log_warn "All active sessions will be invalidated"
-log_info "DB_ENCRYPTION_KEY will NOT be changed (must never change)"
 echo ""
 
 # Check if secrets file exists
@@ -63,10 +67,8 @@ log_success "Backup created"
 log_progress "Reading current configuration..."
 source "$SECRETS_FILE"
 
-# Store DB_ENCRYPTION_KEY and ADMIN credentials
+# Store DB_ENCRYPTION_KEY
 OLD_DB_KEY="$DB_ENCRYPTION_KEY"
-OLD_ADMIN_USER="$ADMIN_USERNAME"
-OLD_ADMIN_PASS="$ADMIN_PASSWORD"
 
 if [ -z "$OLD_DB_KEY" ]; then
   handle_error "DB_ENCRYPTION_KEY not found in secrets file" 1
@@ -81,18 +83,8 @@ log_success "New secret generated"
 log_progress "Writing new secrets file..."
 cat > "$SECRETS_FILE" << EOF
 # Agent< Secrets - Rotated on $(date)
-# Previous backup: $BACKUP_FILE
-# Do not share this file or commit to version control
-
-# Session secret for cookie encryption (ROTATED)
 SESSION_SECRET=$NEW_SESSION_SECRET
-
-# Database encryption key (PRESERVED - never rotated)
 DB_ENCRYPTION_KEY=$OLD_DB_KEY
-
-# Admin credentials (preserved)
-ADMIN_USERNAME=$OLD_ADMIN_USER
-ADMIN_PASSWORD=$OLD_ADMIN_PASS
 EOF
 
 chmod 600 "$SECRETS_FILE"
@@ -142,19 +134,18 @@ log_progress "Logging rotation event..."
 echo "[$(date)] Secret rotation completed successfully - Backup: $BACKUP_FILE" >> "$LOG_FILE"
 chmod 600 "$LOG_FILE"
 
-log_section "Rotation Complete"
 log_success "Secrets rotated successfully!"
-log_info ""
+echo ""
 log_info "Changes made:"
 log_info "  ✓ SESSION_SECRET: Rotated (all sessions invalidated)"
 log_info "  ✓ DB_ENCRYPTION_KEY: Preserved (unchanged)"
-log_info ""
+echo ""
 log_info "Backup location: $BACKUP_FILE"
 log_info "Rotation log: $LOG_FILE"
-log_info ""
+echo ""
 log_warn "Action required:"
 log_warn "  - Users must log in again (sessions invalidated)"
-log_info ""
+echo ""
 log_info "To verify service status:"
 log_info "  sudo systemctl status $APP_SERVICE"
 log_info "  sudo journalctl -u $APP_SERVICE -f"

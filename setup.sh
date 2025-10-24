@@ -278,10 +278,6 @@ SESSION_SECRET=$SESSION_KEY
 
 # Database encryption key (64 chars)
 DB_ENCRYPTION_KEY=$DB_KEY
-
-# Admin credentials (change after first login)
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=changeme
 EOF"
   
   # Set restrictive permissions (agentless user only)
@@ -495,7 +491,7 @@ if [ -d "/etc/systemd/system" ]; then
   fi
   
   # Create new service file from template with systemd secret management
-  TEMPLATE_FILE="$INSTALL_DIR/systemd/agentless.service.template"
+  TEMPLATE_FILE="$INSTALL_DIR/scripts/systemd/agentless.service.template"
   if [ ! -f "$TEMPLATE_FILE" ]; then
     handle_error "Template file not found: $TEMPLATE_FILE"
   fi
@@ -539,10 +535,10 @@ echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   log_info "Running in export mode. Setting up exporter..."
   EXPORTER_INSTALLED=true
-  if [ -f "$INSTALL_DIR/scripts/setup-exporter.sh" ]; then
-    sudo bash "$INSTALL_DIR/scripts/setup-exporter.sh"
+  if [ -f "$INSTALL_DIR/scripts/export/setup-exporter.sh" ]; then
+    sudo bash "$INSTALL_DIR/scripts/export/setup-exporter.sh"
   else
-    log_error "Export setup script not found at $INSTALL_DIR/scripts/setup-exporter.sh"
+    log_error "Export setup script not found at $INSTALL_DIR/scripts/export/setup-exporter.sh"
     EXPORTER_INSTALLED=false
   fi
 else
@@ -552,19 +548,19 @@ else
   
   # Remove export-related files and directories
   sudo rm -rf "$INSTALL_DIR/cmd/exporter" 2>/dev/null || true
-  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.service" 2>/dev/null || true
-  sudo rm -f "$INSTALL_DIR/systemd/agentless-exporter.timer" 2>/dev/null || true
-  sudo rm -f "$INSTALL_DIR/scripts/setup-exporter.sh" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/scripts/systemd/agentless-exporter.service" 2>/dev/null || true
+  sudo rm -f "$INSTALL_DIR/scripts/systemd/agentless-exporter.timer" 2>/dev/null || true
+  sudo rm -rf "$INSTALL_DIR/scripts/export" 2>/dev/null || true
   
   log_success "Export-related files removed"
 fi
-log_info ""
+echo ""
 
 log_success "Setup completed successfully!"
-log_info ""
+echo ""
 log_success "Agent< installed to: $INSTALL_DIR"
 log_success "The service is now running!"
-log_info ""
+echo ""
 
 # Clean up source directory if different from install directory
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
@@ -579,39 +575,39 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
     log_warn "Could not remove source directory: $SOURCE_DIR"
     log_warn "You may need to remove it manually with: rm -rf $SOURCE_DIR"
   fi
-  log_info ""
+  echo ""
 fi
 
 
 log_info "Access the web interface: https://localhost:8443"
 log_info "Your browser will show a security warning for the self-signed certificate."
 log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
-log_info ""
+echo ""
 log_info "Service Management:"
 log_info "  - Check status: sudo systemctl status agentless"
 log_info "  - View logs: sudo journalctl -u agentless -f"
 log_info "  - Restart: sudo systemctl restart agentless"
 log_info "  - Stop: sudo systemctl stop agentless"
-log_info ""
+echo ""
 log_info "Important locations:"
 log_info "  - Installation: $INSTALL_DIR (owned by agentless)"
 log_info "  - Secrets: /etc/agentless/secrets.env (agentless:agentless 400)"
 log_info "  - Config: $INSTALL_DIR/.env"
 log_info "  - Database: $INSTALL_DIR/data/site.db"
 log_info "  - Logs: /var/log/agentless/"
-log_info ""
+echo ""
 log_info "For monitoring setup:"
 log_info "  - Add devices through the web interface"
 log_info "  - Enroll device: sudo -u agentless bash $INSTALL_DIR/scripts/linux/enlist.sh [options]"
 log_info "  - Setup monitoring: sudo bash $INSTALL_DIR/scripts/setup-monitoring.sh"
-log_info ""
+echo ""
 
 if [ "$EXPORTER_INSTALLED" = "true" ]; then
   log_info "Log Exporter:"
   log_info "  - Status: systemctl status agentless-exporter.timer"
   log_info "  - Logs: journalctl -u agentless-exporter -f"
   log_info "  - Export directory: /var/log/agentless-export/"
-  log_info ""
+  echo ""
 fi
 
 if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then

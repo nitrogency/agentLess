@@ -19,6 +19,9 @@ fi
 # Setup cleanup trap
 setup_cleanup_trap
 
+# Setup interrupt handling
+setup_interrupt_trap "enlist.sh"
+
 # Configuration with library defaults
 REMOTE_USER="${REMOTE_USER:-$(get_config remote_user)}"
 REMOTE_GROUP="${REMOTE_GROUP:-$(get_config remote_group)}"
@@ -207,7 +210,7 @@ fi
 # Set up the .ssh directory
 sudo mkdir -p /home/$REMOTE_USER/.ssh
 
-# Add SSH key to authorized_keys (idempotent - won't duplicate)
+# Add SSH key to authorized_keys
 AUTHORIZED_KEYS="/home/$REMOTE_USER/.ssh/authorized_keys"
 sudo touch "\$AUTHORIZED_KEYS"
 
@@ -260,9 +263,9 @@ sudo chmod 440 "\$SUDOERS_FILE"
 
 # Validate sudoers file
 if sudo visudo -c -f "\$SUDOERS_FILE" >/dev/null 2>&1; then
-    echo "✓ Sudoers configuration validated successfully"
+    echo "Sudoers configuration validated successfully"
 else
-    echo "✗ Error: Invalid sudoers configuration, removing file..."
+    echo "Error: Invalid sudoers configuration, removing file..."
     sudo rm -f "\$SUDOERS_FILE"
     echo "Warning: Passwordless sudo configuration failed. Manual configuration may be required."
 fi
@@ -300,8 +303,8 @@ else
             fi
             ;;
         fedora|rhel|centos|rocky|almalinux)
-            echo "Installing ClamAV on RHEL/Fedora/CentOS/Rocky/AlmaLinux system..."
-            # Try dnf first (newer systems), fall back to yum
+            echo "Installing ClamAV on RHEL system..."
+            # Try dnf first, fall back to yum
             if command -v dnf >/dev/null 2>&1; then
                 # Enable EPEL repository for ClamAV
                 if ! sudo dnf repolist | grep -q epel; then
@@ -454,11 +457,39 @@ else
             fi
         fi
         
-        # Create daily ClamAV scan script
+        # Create daily ClamAV scan script from template
         echo "Configuring daily ClamAV scans..."
         sudo mkdir -p /etc/cron.daily
         
-        sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
+        # Get device ID from environment variable (if set by web UI)
+        DEVICE_ID="${DEVICE_ID:-unknown}"
+        
+        # Set defaults
+        CLAMAV_SCAN_DIRS="$(get_config clamav_scan_dirs)"
+        CLAMAV_QUARANTINE="$(get_config clamav_quarantine)"
+        
+        # Try to load device-specific config if available
+        DEVICE_CONFIG="/etc/agentless/devices/${DEVICE_ID}.conf"
+        if [ "$DEVICE_ID" != "unknown" ] && [ -f "$DEVICE_CONFIG" ]; then
+            echo "Loading device-specific ClamAV configuration from $DEVICE_CONFIG"
+            source "$DEVICE_CONFIG"
+            # Config may override CLAMAV_SCAN_DIRS and CLAMAV_QUARANTINE
+        fi
+        
+        # Use template if available, otherwise fallback to defaults
+        PROJECT_ROOT="$(get_repo_root)"
+        TEMPLATE_FILE="$PROJECT_ROOT/scripts/cron/clamav-scan.template"
+        
+        if [ -f "$TEMPLATE_FILE" ]; then
+            echo "Using ClamAV cron template"
+            sed -e "s|__DEVICE_ID__|${DEVICE_ID}|g" \
+                -e "s|__SCAN_DIRS__|${CLAMAV_SCAN_DIRS}|g" \
+                -e "s|__QUARANTINE_DIR__|${CLAMAV_QUARANTINE}|g" \
+                "$TEMPLATE_FILE" | sudo tee /etc/cron.daily/clamav-scan > /dev/null
+        else
+            echo "Warning: Template not found at $TEMPLATE_FILE, using default configuration"
+            # Fallback to hardcoded script
+            sudo tee /etc/cron.daily/clamav-scan > /dev/null << 'CRON_EOF'
 #!/bin/bash
 # Daily ClamAV scan - logs malware detections for monitoring
 
@@ -468,21 +499,28 @@ LOG_FILE="/var/log/clamav/clamav.log"
 # Ensure log directory exists
 mkdir -p /var/log/clamav
 
-# Run scan and append to log (avoid --log flag due to file locking by clamd)
+# Run scan and append to log
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting daily scan" >> "\$LOG_FILE"
 
 for dir in \$SCAN_DIRS; do
     if [ -d "\$dir" ]; then
-        # Scan and append results to log (only show infected files)
         clamscan -r -i "\$dir" 2>&1 | grep -E "FOUND|-------" >> "\$LOG_FILE" 2>/dev/null || true
     fi
 done
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Daily scan completed" >> "\$LOG_FILE"
 CRON_EOF
+        fi
         
         sudo chmod 755 /etc/cron.daily/clamav-scan
         echo "Daily ClamAV scan configured in /etc/cron.daily/clamav-scan"
+        
+        if [ "$DEVICE_ID" != "unknown" ] && [ -f "$DEVICE_CONFIG" ]; then
+            echo "Using device-specific scan directories: $CLAMAV_SCAN_DIRS"
+        else
+            echo "Using default scan directories"
+        fi
+        
         echo "Scans will run daily and log to /var/log/clamav/clamav.log"
         
         echo "ClamAV setup completed"
@@ -534,7 +572,7 @@ else
             fi
             ;;
         fedora|rhel|centos|rocky|almalinux)
-            echo "Installing auditd on RHEL/Fedora/CentOS/Rocky/AlmaLinux system..."
+            echo "Installing auditd on RHEL system..."
             # Try dnf first (newer systems), fall back to yum
             if command -v dnf >/dev/null 2>&1; then
                 if sudo dnf install -y audit; then
@@ -677,9 +715,7 @@ EOF
     
     # Run the script on the target with a pseudo-terminal allocation
     ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$SSH_KEY_PATH" -t -p "$SSH_PORT" "$LOGIN_USER@$TARGET_IP" "export USE_SUDO_PASSWORD=\"$USE_SUDO_PASSWORD\"; export SUDO_PASSWORD=\"$SUDO_PASSWORD\"; export SSH_PUB_KEY=\"\$(cat ~/ids_monitor.pub)\"; bash ~/setup_ids_monitor.sh && rm ~/setup_ids_monitor.sh ~/ids_monitor.pub"
-    
-    # Temp files will be cleaned up automatically by trap
-    
+        
     # Test connection with the new user
     log_progress "Testing connection with the monitoring user..."
     
@@ -701,19 +737,16 @@ EOF
         log_info "  1. SSH key authentication issues"
         log_info "  2. Incorrect permissions on the authorized_keys file"
         log_info "  3. SSH configuration on the target device"
-        log_info ""
+        echo ""
         log_info "Debug information from SSH connection attempt:"
         cat "$SSH_DEBUG_LOG" 2>/dev/null || echo "Could not read debug log"
-        log_info ""
+        echo ""
         log_error "Please check the SSH configuration manually."
         rm -f "$SSH_DEBUG_LOG"
         exit 1
     fi
-    
-    # Re-enable audit logging is handled in the script
 }
 
-# Register the device with the IDS server
 # Update device in database with enrollment info
 update_device_in_database() {
     log_progress "Updating device enrollment status in database..."
@@ -723,16 +756,9 @@ update_device_in_database() {
     # Prepend repo root if path is relative
     [[ "$DB_PATH" != /* ]] && DB_PATH="$(get_repo_root)/$DB_PATH"
     
-    # Find the device ID by IP address
-    echo "[DEBUG] About to SELECT DEVICE_ID for IP: $TARGET_IP" >&2
-    echo "[DEBUG] DB_PATH=$DB_PATH" >&2
-    echo "[DEBUG] DB_ENCRYPTION_KEY is set: ${DB_ENCRYPTION_KEY:+YES}" >&2
-    echo "[DEBUG] Calling execute_sqlite directly..." >&2
     execute_sqlite "SELECT id FROM devices WHERE ip_address = '$TARGET_IP' AND status != 'deleted' LIMIT 1;" "$DB_PATH" > /tmp/device_id.txt
-    echo "[DEBUG] execute_sqlite completed, reading result..." >&2
     DEVICE_ID=$(cat /tmp/device_id.txt)
     rm -f /tmp/device_id.txt
-    echo "[DEBUG] DEVICE_ID=$DEVICE_ID" >&2
     
     if [ -z "$DEVICE_ID" ]; then
         log_warn "Device with IP $TARGET_IP not found in the database"
@@ -740,21 +766,10 @@ update_device_in_database() {
         return 1
     fi
     
-    # Update device with hostname, OS info, and clear the needs_reenrollment flag
-    # Note: ssh_user and ssh_group are already set correctly when device was added via web UI
-    
-    # Debug: Print what we're about to do
-    echo "[DEBUG] About to UPDATE device $DEVICE_ID" >&2
-    echo "[DEBUG] HOSTNAME=$HOSTNAME" >&2
-    echo "[DEBUG] OS_INFO=$OS_INFO" >&2
-    echo "[DEBUG] DB_PATH=$DB_PATH" >&2
-    
     # Temporarily disable exit on error to capture the actual failure
     set +e
-    echo "[DEBUG] Calling execute_sqlite..." >&2
     execute_sqlite "UPDATE devices SET hostname = '$HOSTNAME', os_info = '$OS_INFO', needs_reenrollment = 0 WHERE id = $DEVICE_ID;" "$DB_PATH"
     local update_result=$?
-    echo "[DEBUG] execute_sqlite returned: $update_result" >&2
     set -e
     
     if [ $update_result -eq 0 ]; then
@@ -839,11 +854,9 @@ else
     log_warn "Could not determine device ID; skipping monitoring service restart/setup"
 fi
 
-log_success "Device enrollment completed successfully!"
 log_info "You can now monitor this device through your IDS dashboard."
 log_section "Important Credentials"
 log_info "SSH User: $REMOTE_USER"
 log_info "SSH Group: $REMOTE_GROUP"
 log_info "SSH Key: $SSH_KEY_PATH"
-
-# Note: setup-monitoring.sh will be run automatically if needed above
+log_success "Device enrollment completed successfully!"

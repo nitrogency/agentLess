@@ -5,9 +5,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source common libraries
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/common.sh"
-source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/../lib/logging.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+# Setup cleanup and interrupt handling
+setup_cleanup_trap
+setup_interrupt_trap "setup-exporter.sh"
 
 # Get project root
 PROJECT_ROOT="$(get_repo_root)"
@@ -83,8 +87,8 @@ fi
 log_progress "[4/6] Installing systemd units..."
 
 # Copy systemd files
-cp "$PROJECT_ROOT/systemd/agentless-exporter.service" /etc/systemd/system/
-cp "$PROJECT_ROOT/systemd/agentless-exporter.timer" /etc/systemd/system/
+cp "$PROJECT_ROOT/scripts/systemd/agentless-exporter.service" /etc/systemd/system/
+cp "$PROJECT_ROOT/scripts/systemd/agentless-exporter.timer" /etc/systemd/system/
 
 # Reload systemd
 systemctl daemon-reload

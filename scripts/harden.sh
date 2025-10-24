@@ -7,15 +7,19 @@ source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 
+# Setup cleanup and interrupt handling
+setup_cleanup_trap
+setup_interrupt_trap "harden.sh"
+
 SSH_CFG="/etc/ssh/sshd_config"
-SSH_PORT="4222"
+SSH_PORT="$(get_config hardened_ssh_port)"
 
 log_section "System Hardening Script"
 log_info "Applies some security hardening measures to your monitor host."
 log_info "This script assumes that:"
 log_info "- You are using a separate VM/host for just monitoring purposes (only the Agent< server, no other services)."
 log_info "- You haven't done any additional configuration other than running the setup script."
-log_info "- You have a regular user created with sudo permissions."
+log_info "- You have a regular user created with sudo permissions, and you are running this script as said user."
 
 read -p "Continue? (y/N): " -n 1 -r
 echo
@@ -107,19 +111,19 @@ HARDEN_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$HARDEN_SCRIPT_DIR")"
 
 # Install systemd service and timer files
-if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" ]; then
-    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.service" /etc/systemd/system/
+if [ -f "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.service" ]; then
+    cp "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.service" /etc/systemd/system/
     log_info "Installed ClamAV scan service"
 else
-    log_error "agentless-clamav-scan.service not found at $PROJECT_ROOT/systemd/"
+    log_error "agentless-clamav-scan.service not found at $PROJECT_ROOT/scripts/systemd/"
     exit 1
 fi
 
-if [ -f "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" ]; then
-    cp "$PROJECT_ROOT/systemd/agentless-clamav-scan.timer" /etc/systemd/system/
+if [ -f "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.timer" ]; then
+    cp "$PROJECT_ROOT/scripts/systemd/agentless-clamav-scan.timer" /etc/systemd/system/
     log_info "Installed ClamAV scan timer"
 else
-    log_error "agentless-clamav-scan.timer not found at $PROJECT_ROOT/systemd/"
+    log_error "agentless-clamav-scan.timer not found at $PROJECT_ROOT/scripts/systemd/"
     exit 1
 fi
 
@@ -165,10 +169,6 @@ grep -q '^X11Forwarding no' "$SSH_CFG"       || echo 'X11Forwarding no' >> "$SSH
 # Remove any duplicate lines
 awk '!seen[$0]++' "$SSH_CFG" > "$SSH_CFG.tmp" && mv "$SSH_CFG.tmp" "$SSH_CFG"
 
-# Show the modified SSH settings for debugging
-log_info "Current SSH settings after modification:"
-grep -E "^(Port|PermitRootLogin|MaxAuthTries|X11Forwarding)" "$SSH_CFG" || log_info "No matching settings found"
-
 # Create SSH privilege separation directory if it doesn't exist
 if [ ! -d "/run/sshd" ]; then
     log_info "Creating SSH privilege separation directory"
@@ -211,7 +211,6 @@ log_success "Firewall enabled."
 
 log_info "Configuring Fail2ban..."
 
-# App directory is always /opt/agentless (standard installation location)
 APP_DIR="/opt/agentless"
 
 if [ ! -d "$APP_DIR" ]; then
@@ -226,12 +225,22 @@ sudo chmod 755 "$LOG_DIR"
 sudo touch "$LOG_DIR/security.log"
 sudo chmod 644 "$LOG_DIR/security.log"
 
+# Load fail2ban configuration from config.sh
+F2B_SSH_MAXRETRY="$(get_config fail2ban_ssh_maxretry)"
+F2B_SSH_BANTIME="$(get_config fail2ban_ssh_bantime)"
+F2B_WEB_MAXRETRY="$(get_config fail2ban_web_maxretry)"
+F2B_WEB_BANTIME="$(get_config fail2ban_web_bantime)"
+F2B_FINDTIME="$(get_config fail2ban_findtime)"
+
 log_info "Creating Fail2ban configuration..."
+log_info "SSH: Ban after $F2B_SSH_MAXRETRY attempts for $F2B_SSH_BANTIME seconds"
+log_info "Web: Ban after $F2B_WEB_MAXRETRY attempts for $F2B_WEB_BANTIME seconds"
+
 cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
-bantime = 3600
-findtime = 600
-maxretry = 3
+bantime = $F2B_SSH_BANTIME
+findtime = $F2B_FINDTIME
+maxretry = $F2B_SSH_MAXRETRY
 backend = systemd
 
 [sshd]
@@ -239,16 +248,16 @@ enabled = true
 port = ssh
 filter = sshd
 logpath = /var/log/auth.log
-maxretry = 3
-bantime = 3600
+maxretry = $F2B_SSH_MAXRETRY
+bantime = $F2B_SSH_BANTIME
 
 [agentless-web]
 enabled = true
 port = 8443
 filter = agentless-web
 logpath = ${LOG_DIR}/security.log
-maxretry = 5
-bantime = 1800
+maxretry = $F2B_WEB_MAXRETRY
+bantime = $F2B_WEB_BANTIME
 EOF
 
 log_info "Creating Fail2ban filter..."
@@ -326,34 +335,12 @@ EOF
 systemctl enable auditd
 systemctl restart auditd
 
-# Load the rules (allow non-zero exit on "No change")
+# Load the rules
 augenrules --load || true
 
 log_success "Auditd installed and configured with default rules."
 
 log_info "Disabling unnecessary services..."
-
-SERVICES_TO_DISABLE=(
-    "avahi-daemon"
-    "cups"
-    "bluetooth"
-    "rpcbind"
-    "nfs-client"
-    "ypbind"
-    "rsh"
-    "rlogin"
-    "rexec"
-    "talk"
-    "ntalk"
-    "telnet"
-    "chargen-dgram"
-    "chargen-stream"
-    "daytime-dgram"  
-    "daytime-stream"
-    "echo-dgram"
-    "echo-stream"
-    "tcpmux-server"
-)
 
 for service in "${SERVICES_TO_DISABLE[@]}"; do
     if systemctl is-enabled "$service" >/dev/null 2>&1; then
@@ -365,8 +352,7 @@ done
 
 log_success "Unnecessary services disabled."
 
-# Note: Localhost is NOT enrolled for self-monitoring
-# The IDS server's audit logs remain in /var/log/audit for manual review if needed
-log_info "IDS server audit logs available at: /var/log/audit/audit.log"
+log_info "Server audit logs available at: /var/log/audit/audit.log"
+log_info "You can search through them using ausearch."
 log_info "ClamAV logs available at: /var/log/clamav/"
 

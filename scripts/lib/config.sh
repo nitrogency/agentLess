@@ -5,12 +5,11 @@
 #
 
 # Version and project info
-readonly AGENTLESS_VERSION="1.0.0"
 readonly PROJECT_NAME="Agent<"
 
 # Default values for device enrollment
-readonly DEFAULT_REMOTE_USER="ids_monitor"
-readonly DEFAULT_REMOTE_GROUP="ids_monitor"
+readonly DEFAULT_REMOTE_USER="monitor"
+readonly DEFAULT_REMOTE_GROUP="monitor"
 readonly DEFAULT_SSH_PORT="22"
 readonly DEFAULT_LOGIN_USER="root"
 
@@ -38,6 +37,8 @@ readonly AUDIT_RULES_SOURCE_PATH="rulesets/x64/audit_default.rules"
 
 # ClamAV configuration
 readonly CLAMAV_LOG_PATH="/var/log/clamav/clamav.log"
+readonly DEFAULT_CLAMAV_SCAN_DIRS="/home /opt /var/www /tmp /var/tmp /usr/local"
+readonly DEFAULT_CLAMAV_QUARANTINE=""  # Empty = no quarantine on endpoints
 
 # Log retention settings
 readonly DEFAULT_RETENTION_DAYS="30"
@@ -46,6 +47,54 @@ readonly DEFAULT_LOG_LIMIT="1000"
 # Network and SSH settings
 readonly DEFAULT_SSH_CONNECT_TIMEOUT="5"
 readonly DEFAULT_SSH_COMMAND_TIMEOUT="10"
+
+# Harden script settings
+readonly DEFAULT_HARDENED_SSH_PORT="4222"
+
+# Fail2ban settings
+readonly DEFAULT_FAIL2BAN_SSH_MAXRETRY="3"
+readonly DEFAULT_FAIL2BAN_SSH_BANTIME="3600"     # 1 hour in seconds
+readonly DEFAULT_FAIL2BAN_WEB_MAXRETRY="5"
+readonly DEFAULT_FAIL2BAN_WEB_BANTIME="1800"     # 30 minutes in seconds
+readonly DEFAULT_FAIL2BAN_FINDTIME="600"         # 10 minutes in seconds
+
+readonly SERVICES_TO_DISABLE=(
+    "avahi-daemon"      # Zeroconf/Bonjour
+    "cups"              # Printing
+    "bluetooth"         # Bluetooth
+    "rpcbind"           # RPC portmapper
+    "nfs-client"        # NFS client
+    "ypbind"            # NIS client
+    "rsh"               # Remote shell
+    "rlogin"            # Remote login
+    "rexec"             # Remote exec
+    "talk"              # Talk daemon
+    "ntalk"             # Network talk
+    "telnet"            # Telnet
+    "chargen-dgram"     # Character generator (UDP)
+    "chargen-stream"    # Character generator (TCP)
+    "daytime-dgram"     # Daytime (UDP)
+    "daytime-stream"    # Daytime (TCP)
+    "echo-dgram"        # Echo (UDP)
+    "echo-stream"       # Echo (TCP)
+    "tcpmux-server"     # TCP multiplexer
+    "snmpd"             # SNMP daemon
+    "apache2"           # Apache web server
+    "httpd"             # Apache/HTTPD
+    "nginx"             # Nginx web server
+    "postfix"           # Postfix mail server
+    "exim4"             # Exim mail server
+    "sendmail"          # Sendmail
+    "vsftpd"            # FTP server
+    "proftpd"           # FTP server
+    "tftp"              # TFTP server
+    "inetd"             # Internet super-server
+    "xinetd"            # Extended internet super-server
+    "smbd"              # Samba (SMB)
+    "nmbd"              # Samba (NetBIOS)
+    "ntp"               # NTP (use systemd-timesyncd instead)
+    "ntpd"              # NTP daemon
+)
 
 # Windows-specific settings
 readonly DEFAULT_WINDOWS_COLLECTION_INTERVAL="30"
@@ -67,6 +116,24 @@ get_config() {
             ;;
         "ssh_port")
             echo "${SSH_PORT:-$DEFAULT_SSH_PORT}"
+            ;;
+        "hardened_ssh_port")
+            echo "${HARDENED_SSH_PORT:-$DEFAULT_HARDENED_SSH_PORT}"
+            ;;
+        "fail2ban_ssh_maxretry")
+            echo "${FAIL2BAN_SSH_MAXRETRY:-$DEFAULT_FAIL2BAN_SSH_MAXRETRY}"
+            ;;
+        "fail2ban_ssh_bantime")
+            echo "${FAIL2BAN_SSH_BANTIME:-$DEFAULT_FAIL2BAN_SSH_BANTIME}"
+            ;;
+        "fail2ban_web_maxretry")
+            echo "${FAIL2BAN_WEB_MAXRETRY:-$DEFAULT_FAIL2BAN_WEB_MAXRETRY}"
+            ;;
+        "fail2ban_web_bantime")
+            echo "${FAIL2BAN_WEB_BANTIME:-$DEFAULT_FAIL2BAN_WEB_BANTIME}"
+            ;;
+        "fail2ban_findtime")
+            echo "${FAIL2BAN_FINDTIME:-$DEFAULT_FAIL2BAN_FINDTIME}"
             ;;
         "login_user")
             echo "${LOGIN_USER:-$DEFAULT_LOGIN_USER}"
@@ -100,6 +167,12 @@ get_config() {
             ;;
         "clamav_log_path")
             echo "$CLAMAV_LOG_PATH"
+            ;;
+        "clamav_scan_dirs")
+            echo "${CLAMAV_SCAN_DIRS:-$DEFAULT_CLAMAV_SCAN_DIRS}"
+            ;;
+        "clamav_quarantine")
+            echo "${CLAMAV_QUARANTINE:-$DEFAULT_CLAMAV_QUARANTINE}"
             ;;
         "audit_log_path")
             echo "$AUDIT_LOG_PATH"
@@ -170,7 +243,6 @@ validate_config() {
 # Print configuration summary
 print_config() {
     log_info "=== Agent< Config ==="
-    log_info "Version: $AGENTLESS_VERSION"
     log_info "Remote User: $(get_config remote_user)"
     log_info "Remote Group: $(get_config remote_group)"
     log_info "SSH Port: $(get_config ssh_port)"

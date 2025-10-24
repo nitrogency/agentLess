@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # start-monitoring.sh - Unified monitoring launcher
-# Detects device OS type and launches appropriate monitoring script
+# Detects device OS type and launches appropriate monitoring script in /linux or /windows
 #
 # Usage: start-monitoring.sh -d <device_id>
 set -euo pipefail
@@ -88,7 +88,7 @@ case "$OS_TYPE" in
         ;;
     
     *)
-        log_error "Unknown OS type: $OS_TYPE (supported: linux, windows)"
+        log_error "Unknown OS type: $OS_TYPE"
         exit 1
         ;;
 esac

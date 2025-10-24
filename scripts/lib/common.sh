@@ -2,7 +2,6 @@
 #
 # common.sh - Shared functions
 # Source this file in other scripts: source "$(dirname "$0")/lib/common.sh"
-#
 
 # Check if a command/dependency exists
 check_dependency() {
@@ -130,13 +129,13 @@ systemctl_safe() {
     esac
 }
 
-# Create secure temporary file
+# Create temporary file
 create_temp_file() {
     local prefix="${1:-agentless}"
     mktemp "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
 }
 
-# Create secure temporary directory
+# Create temporary directory
 create_temp_dir() {
     local prefix="${1:-agentless}"
     mktemp -d "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
@@ -181,7 +180,7 @@ safe_path() {
     printf '%q' "$1"
 }
 
-# Create user if not exists (idempotent)
+# Create user if not exists
 create_user_if_not_exists() {
     local username="$1"
     local group="$2"
@@ -195,7 +194,7 @@ create_user_if_not_exists() {
     fi
 }
 
-# Create group if not exists (idempotent)
+# Create group if not exists
 create_group_if_not_exists() {
     local groupname="$1"
     
@@ -207,7 +206,7 @@ create_group_if_not_exists() {
     fi
 }
 
-# Add user to group (idempotent)
+# Add user to group
 add_user_to_group() {
     local username="$1"
     local groupname="$2"
@@ -245,4 +244,28 @@ register_temp_dir() {
 # Set up trap for cleanup
 setup_cleanup_trap() {
     trap cleanup_temp_files EXIT INT TERM
+}
+
+# Handle interrupt signals gracefully
+handle_interrupt() {
+    local script_name="${1:-script}"
+    echo ""
+    echo "Interrupt received. Cleaning up and exiting..."
+    
+    # Clean up temporary files if they exist
+    cleanup_temp_files 2>/dev/null || true
+    
+    # Log interruption if log function exists
+    if type log_info >/dev/null 2>&1; then
+        log_info "$script_name interrupted by user"
+    fi
+    
+    echo "Exited."
+    exit 130  # Standard exit code for SIGINT (128 + 2)
+}
+
+# Set up interrupt trap for user-facing scripts
+setup_interrupt_trap() {
+    local script_name="${1:-script}"
+    trap "handle_interrupt '$script_name'" INT TERM
 }

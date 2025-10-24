@@ -69,52 +69,17 @@ func classify(eventID int) string {
 	return "low"
 }
 
-// setDefaultPriorities sets hardcoded defaults as fallback
-func setDefaultPriorities() {
-	// High priority defaults
-	highEventIDs = map[int]struct{}{
-		8:  {}, // CreateRemoteThread
-		10: {}, // ProcessAccess
-		19: {}, // WmiEventFilter
-		20: {}, // WmiEventConsumer
-		21: {}, // WmiEventConsumerToFilter
-		25: {}, // ProcessTampering
-	}
-
-	// Medium priority defaults
-	mediumEventIDs = map[int]struct{}{
-		1:  {}, // ProcessCreate
-		12: {}, // RegistryEventObjectCreateDelete
-		13: {}, // RegistryEventValueSet
-		14: {}, // RegistryEventKeyRename
-		15: {}, // FileCreateStreamHash
-		17: {}, // PipeEventCreated
-		18: {}, // PipeEventConnected
-		23: {}, // FileDelete
-		26: {}, // FileDeleteDetected
-	}
-
-	// Low priority defaults
-	lowEventIDs = map[int]struct{}{
-		2:  {}, // FileCreationTimeChanged
-		3:  {}, // NetworkConnect
-		4:  {}, // SysmonServiceStateChanged
-		5:  {}, // ProcessTerminate
-		6:  {}, // DriverLoad
-		7:  {}, // ImageLoad
-		9:  {}, // RawAccessRead
-		11: {}, // FileCreate
-		16: {}, // SysmonConfigStateChanged
-		22: {}, // DnsQuery
-		24: {}, // ClipboardChange
-	}
-}
 
 // loadPriorities loads event priorities from configuration file
 func loadPriorities(path string) error {
+	// Clear any existing priorities
+	highEventIDs = make(map[int]struct{})
+	mediumEventIDs = make(map[int]struct{})
+	lowEventIDs = make(map[int]struct{})
+
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open config file: %w", err)
 	}
 	defer f.Close()
 
@@ -224,15 +189,13 @@ func main() {
 		}
 	}
 
-	// Set defaults first
-	setDefaultPriorities()
-
-	// Load from config file if available
+	// Load priorities from config file (required)
 	if err := loadPriorities(*configPath); err != nil {
-		if *debug {
-			fmt.Fprintf(os.Stderr, "Warning: Could not load config from %s: %v. Using defaults.\n", *configPath, err)
-		}
-	} else if *debug {
+		fmt.Fprintf(os.Stderr, "error: failed to load priorities from %s: %v\n", *configPath, err)
+		fmt.Fprintln(os.Stderr, "Priority configuration file is required. Please ensure config/sysmon_priorities.conf exists.")
+		os.Exit(1)
+	}
+	if *debug {
 		fmt.Fprintf(os.Stderr, "Loaded priorities from: %s\n", *configPath)
 	}
 

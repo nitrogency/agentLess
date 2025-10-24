@@ -1,0 +1,27 @@
+#!/bin/bash
+# Daily ClamAV scan - logs malware detections for monitoring
+# Auto-generated for Device __DEVICE_ID__
+
+SCAN_DIRS="__SCAN_DIRS__"
+LOG_FILE="/var/log/clamav/clamav.log"
+QUARANTINE_DIR="__QUARANTINE_DIR__"
+
+# Ensure log directory exists
+mkdir -p /var/log/clamav
+
+# Run scan and append to log
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting daily scan" >> "$LOG_FILE"
+
+for dir in $SCAN_DIRS; do
+    if [ -d "$dir" ]; then
+        # If quarantine is set, use --move, otherwise just log
+        if [ -n "$QUARANTINE_DIR" ]; then
+            mkdir -p "$QUARANTINE_DIR"
+            clamscan -r -i --move="$QUARANTINE_DIR" "$dir" 2>&1 | grep -E "FOUND|-------| moved to " >> "$LOG_FILE" 2>/dev/null || true
+        else
+            clamscan -r -i "$dir" 2>&1 | grep -E "FOUND|-------" >> "$LOG_FILE" 2>/dev/null || true
+        fi
+    fi
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Daily scan completed" >> "$LOG_FILE"
