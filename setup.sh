@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts"
 source "$SCRIPT_DIR/lib/logging.sh"
 
-log_section "Agent< IDS Setup"
+log_section "Setup"
 log_info "This script will install all required dependencies and set up the application."
 
 # Function to check if command exists
@@ -249,7 +249,6 @@ if [ -z "$GOPATH" ]; then
 fi
 
 # Create systemd environment file for secrets
-log_section "Secret Management"
 SECRETS_DIR="/etc/agentless"
 SECRETS_FILE="$SECRETS_DIR/secrets.env"
 
@@ -328,8 +327,6 @@ log_progress "Setting script permissions..."
 chmod +x "$SCRIPT_DIR"/*.sh
 log_success "Script permissions set"
 
-# Install Go dependencies
-log_section "Building Application"
 log_progress "Installing Go dependencies..."
 cd "$APP_DIR"
 go mod download
@@ -376,9 +373,6 @@ sudo chown -R agentless:agentless "$INSTALL_DIR"
 sudo chown agentless:agentless /var/log/agentless
 log_success "All application files now owned by agentless user"
 
-# Set up SSH keys for agentless user
-log_section "SSH Configuration"
-
 # Create .ssh directory in /etc/agentless
 log_progress "Creating SSH directory..."
 sudo mkdir -p /etc/agentless/.ssh
@@ -422,7 +416,7 @@ req_extensions = v3_req
 C=US
 ST=State
 L=City
-O=Agent< IDS
+O=Agent<
 OU=None
 CN=$HOSTNAME
 
@@ -524,7 +518,7 @@ if [ -d "/etc/systemd/system" ]; then
 fi
 
 # Ask about export mode installation
-log_section "Log Export Configuration"
+log_section "Log Exporter Configuration"
 log_info "The log exporter allows you to export audit logs to external log aggregation"
 log_info "platforms (Elasticsearch, OpenSearch, Splunk, etc.) in JSON Lines format."
 log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
@@ -590,16 +584,11 @@ log_info "  - Restart: sudo systemctl restart agentless"
 log_info "  - Stop: sudo systemctl stop agentless"
 echo ""
 log_info "Important locations:"
-log_info "  - Installation: $INSTALL_DIR (owned by agentless)"
-log_info "  - Secrets: /etc/agentless/secrets.env (agentless:agentless 400)"
+log_info "  - Installation: $INSTALL_DIR"
+log_info "  - Secrets: /etc/agentless/secrets.env"
 log_info "  - Config: $INSTALL_DIR/.env"
 log_info "  - Database: $INSTALL_DIR/data/site.db"
 log_info "  - Logs: /var/log/agentless/"
-echo ""
-log_info "For monitoring setup:"
-log_info "  - Add devices through the web interface"
-log_info "  - Enroll device: sudo -u agentless bash $INSTALL_DIR/scripts/linux/enlist.sh [options]"
-log_info "  - Setup monitoring: sudo bash $INSTALL_DIR/scripts/setup-monitoring.sh"
 echo ""
 
 if [ "$EXPORTER_INSTALLED" = "true" ]; then
