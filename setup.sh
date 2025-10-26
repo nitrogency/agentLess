@@ -124,9 +124,6 @@ fi
 
 log_info "Detected OS: $OS_NAME $OS_VERSION"
 
-# Install dependencies based on OS
-log_section "System Dependencies"
-
 case $OS_ID in
   ubuntu|debian)
     log_progress "Installing dependencies for Ubuntu/Debian..."
@@ -468,7 +465,6 @@ else
 fi
 
 # Create a systemd service file for the application
-log_section "Systemd Service Setup"
 if [ -d "/etc/systemd/system" ]; then
   log_progress "Creating systemd service file..."
   
@@ -558,7 +554,6 @@ echo ""
 
 # Clean up source directory if different from install directory
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
-  log_section "Cleanup"
   log_info "Removing source directory..."
 
   # Remove source directory
@@ -572,6 +567,11 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
   echo ""
 fi
 
+if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
+  sudo bash "$INSTALL_DIR/scripts/harden.sh"
+else
+  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
+fi
 
 log_info "Access the web interface: https://localhost:8443"
 log_info "Your browser will show a security warning for the self-signed certificate."
@@ -599,8 +599,3 @@ if [ "$EXPORTER_INSTALLED" = "true" ]; then
   echo ""
 fi
 
-if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
-  sudo bash "$INSTALL_DIR/scripts/harden.sh"
-else
-  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
-fi

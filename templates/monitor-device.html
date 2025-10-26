@@ -24,12 +24,11 @@
     {{if .Device.NeedsReenrollment}}
     <div class="alert alert-warning" style="margin-bottom: 20px;">
         <strong>Configuration Update Required</strong><br>
-        This device has configuration changes that require re-enrollment. Please run the enlist script to apply changes:<br><br>
+        This device has configuration changes that require re-enrollment. Please run the following script to apply changes:<br><br>
         {{if eq .Device.OSType "linux"}}
         <pre class="code-block" style="margin: 10px 0 0 0;">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
         {{else if eq .Device.OSType "windows"}}
-        <p style="margin: 10px 0 0 0;">On the Windows target, run in PowerShell as Administrator:<br>
-        <code>Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process; .\enlist-windows.ps1</code></p>
+        <pre class="code-block" style="margin: 10px 0 0 0;">sudo bash /opt/agentless/scripts/setup-monitoring.sh</pre>
         {{end}}
     </div>
     {{end}}
