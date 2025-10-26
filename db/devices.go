@@ -61,28 +61,6 @@ func InitDeviceTable() error {
 		return err
 	}
 
-	// Add os_type column if it doesn't exist (for existing databases)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN os_type TEXT DEFAULT 'linux'`)
-	// Ignore error if column already exists
-
-	// Add firewall columns if they don't exist (for existing databases)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_mode TEXT DEFAULT 'disabled'`)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN firewall_allowed_ips TEXT`)
-	// Ignore errors if columns already exist
-
-	// Add audit ruleset columns if they don't exist (for existing databases)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_arch TEXT DEFAULT 'x64'`)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN audit_ruleset TEXT DEFAULT 'audit_default.rules'`)
-	// Ignore errors if columns already exist
-
-	// Add needs_reenrollment column if it doesn't exist (for existing databases)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN needs_reenrollment INTEGER DEFAULT 0`)
-	// Ignore error if column already exists
-
-	// Add status columns for ICMP and SSH checks
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN icmp_status TEXT DEFAULT 'unknown'`)
-	_, _ = db.Exec(`ALTER TABLE devices ADD COLUMN ssh_status TEXT DEFAULT 'unknown'`)
-	// Ignore errors if columns already exist
 
 	return nil
 }
@@ -333,16 +311,6 @@ func GetDeviceNameByID(id int64) string {
 	return deviceName
 }
 
-// UpdateDevice updates a device's information
-func UpdateDevice(id int64, name, deviceType, status string) error {
-	_, err := db.Exec(`
-		UPDATE devices
-		SET name = ?, type = ?, status = ?, last_updated = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`, name, deviceType, status, id)
-	return err
-}
-
 // UpdateMonitoredDeviceWithOSAndReenrollment updates a monitored device's information including OS type and reenrollment flag
 func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, status, ipAddress, sshUser, sshKeyPath string, sshPort int, hostname, osInfo, osType, sshGroup string, setupUser, auditArch, auditRuleset string, needsReenrollment bool) error {
 	_, err := db.Exec(`
@@ -354,27 +322,6 @@ func UpdateMonitoredDeviceWithOSAndReenrollment(id int64, name, deviceType, stat
 		    audit_arch = ?, audit_ruleset = ?, needs_reenrollment = ?
 		WHERE id = ?
 	`, name, deviceType, status, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset, boolToInt(needsReenrollment), id)
-	return err
-}
-
-// UpdateDeviceStatus updates just the status of a device
-// Will not update devices that are already marked as 'deleted'
-func UpdateDeviceStatus(id int64, status string) error {
-	_, err := db.Exec(`
-		UPDATE devices 
-		SET status = ?, last_updated = CURRENT_TIMESTAMP
-		WHERE id = ? AND status != 'deleted'
-	`, status, id)
-	return err
-}
-
-// UpdateDeviceSSHKey updates just the SSH key path for a device
-func UpdateDeviceSSHKey(id int64, sshKeyPath string) error {
-	_, err := db.Exec(`
-		UPDATE devices 
-		SET ssh_key_path = ?, last_updated = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`, sshKeyPath, id)
 	return err
 }
 
