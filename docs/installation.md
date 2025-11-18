@@ -91,22 +91,8 @@ By default, the app does not support HTTP. During setup, a self-signed certifica
 └── main.go              # Application entry point
 ```
 
-## Installation debugging
+## Troubleshooting
 
-If you run into any issues regarding the database, make sure you're using sqlcipher when querying manually - queries using sqlite3 will fail as it won't recognize the file as a database.
+If you run into any issues regarding the database, make sure you're using sqlcipher when querying manually - queries using sqlite3 will fail as it won't recognize the file as a database. 
 
-Most of the scripts support debug level logging. Enable debug output by setting the `DEBUG` environment variable:
-
-```bash
-# Enable debug for script
-DEBUG=1 sudo bash scripts/setup-monitoring.sh
-
-# Or use LOG_LEVEL
-LOG_LEVEL=debug sudo bash scripts/harden.sh
-```
-Debug output goes to both console and log files in `/var/log/agentless/`.
-
-For the Go binaries, use the `-debug` flag:
-```bash
-./bin/monitor-windows -device 1 -debug
-```
+Most of the scripts support logging. Output can be found in in `/var/log/agentless/`.
