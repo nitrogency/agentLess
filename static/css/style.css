@@ -120,7 +120,6 @@ nav {
 /* Main content */
 main {
     flex: 1;
-    max-width: 1200px;
     margin: 2rem auto;
     padding: 0 2rem;
     width: 100%;
