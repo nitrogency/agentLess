@@ -45,21 +45,11 @@ func InitUserTable() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	`)
-	
-	// Add search_terms column if it doesn't exist (for existing databases)
-	if err == nil {
-		_, _ = db.Exec(`ALTER TABLE users ADD COLUMN search_terms TEXT NOT NULL DEFAULT ''`)
-	}
 
 	if err != nil {
 		return err
 	}
 
-	// Attempt to add new columns for flicker preferences if upgrading from older schema
-	// These will fail harmlessly if the columns already exist
-	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_low INTEGER NOT NULL DEFAULT 0;")
-	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_medium INTEGER NOT NULL DEFAULT 1;")
-	_, _ = db.Exec("ALTER TABLE users ADD COLUMN flicker_high INTEGER NOT NULL DEFAULT 1;")
 
 	return nil
 }
@@ -191,18 +181,6 @@ func GetAllUsers() ([]User, error) {
 func UpdateUser(id int64, username string, isAdmin bool, canAddDevices bool, canModifyDevices bool, canAddUsers bool, canModifyUsers bool, flickerLow bool, flickerMedium bool, flickerHigh bool, searchTerms string) error {
 	_, err := db.Exec("UPDATE users SET username = ?, is_admin = ?, can_add_devices = ?, can_modify_devices = ?, can_add_users = ?, can_modify_users = ?, flicker_low = ?, flicker_medium = ?, flicker_high = ?, search_terms = ? WHERE id = ?",
 		username, isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers, flickerLow, flickerMedium, flickerHigh, searchTerms, id)
-	return err
-}
-
-// UpdateUserPassword updates a user's password
-func UpdateUserPassword(id int64, newPassword string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec("UPDATE users SET password_hash = ? WHERE id = ?",
-		string(hashedPassword), id)
 	return err
 }
 

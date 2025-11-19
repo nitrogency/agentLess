@@ -9,7 +9,7 @@ param(
     [string]$ServerIP,
     
     [Parameter(Mandatory=$false)]
-    [string]$MonitoringUser = "ids-monitor",
+    [string]$MonitoringUser = "monitor",
     
     [Parameter(Mandatory=$false)]
     [string]$SysmonConfigURL = "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml",
@@ -61,8 +61,8 @@ try {
 Write-Host "[2/5] Creating monitoring user and setting up SSH..." -ForegroundColor Yellow
 try {
     Write-Host "  Please provide the SSH public key from the IDS server:" -ForegroundColor Cyan
-    Write-Host "  (You can find it at: ~/.ssh/id_rsa.pub on the server)" -ForegroundColor Cyan
-    Write-Host "  Paste the public key and press Enter:" -ForegroundColor Cyan
+    Write-Host "  (You can find it at the /etc/agentless/.ssh/ directory on the server)" -ForegroundColor Cyan
+    Write-Host "  Paste the public key you wish to use and press Enter:" -ForegroundColor Cyan
     $pub = Read-Host
 
     if (-not (Get-LocalUser -Name $MonitoringUser -ErrorAction SilentlyContinue)) { net user $MonitoringUser (New-Guid).Guid /add | Out-Null }

@@ -324,7 +324,6 @@ log_progress "Setting script permissions..."
 chmod +x "$SCRIPT_DIR"/*.sh
 log_success "Script permissions set"
 
-# Install Go dependencies
 log_progress "Installing Go dependencies..."
 cd "$APP_DIR"
 go mod download
@@ -403,7 +402,7 @@ if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -n1)
   
   # Create certificate configuration file
-  cat > "$CERT_DIR/cert.conf" << EOF
+  sudo cat > "$CERT_DIR/cert.conf" << EOF
 [req]
 default_bits = 4096
 prompt = no
@@ -414,7 +413,7 @@ req_extensions = v3_req
 C=US
 ST=State
 L=City
-O=Agent< IDS
+O=Agent<
 OU=None
 CN=$HOSTNAME
 
@@ -435,16 +434,16 @@ EOF
   fi
   
   # Generate private key
-  openssl genrsa -out "$CERT_DIR/server.key" 4096
+  sudo openssl genrsa -out "$CERT_DIR/server.key" 4096
   
   # Generate certificate signing request and self-signed certificate
-  openssl req -new -x509 -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
+  sudo openssl req -new -x509 -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
     -days 365 -config "$CERT_DIR/cert.conf" -extensions v3_req
   
   # Set appropriate permissions
-  chmod 600 "$CERT_DIR/server.key"
-  chmod 644 "$CERT_DIR/server.crt"
-  chmod 644 "$CERT_DIR/cert.conf"
+  sudo chmod 600 "$CERT_DIR/server.key"
+  sudo chmod 644 "$CERT_DIR/server.crt"
+  sudo chmod 644 "$CERT_DIR/cert.conf"
   
   log_success "SSL certificates generated successfully"
   log_info "Certificate: $CERT_DIR/server.crt"
@@ -465,6 +464,7 @@ else
   log_warn "Some monitoring features may not work correctly"
 fi
 
+# Create a systemd service file for the application
 if [ -d "/etc/systemd/system" ]; then
   log_progress "Creating systemd service file..."
   
@@ -514,7 +514,7 @@ if [ -d "/etc/systemd/system" ]; then
 fi
 
 # Ask about export mode installation
-log_section "Log Export Configuration"
+log_section "Log Exporter Configuration"
 log_info "The log exporter allows you to export audit logs to external log aggregation"
 log_info "platforms (Elasticsearch, OpenSearch, Splunk, etc.) in JSON Lines format."
 log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
@@ -567,10 +567,12 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
   echo ""
 fi
 
+if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
+  sudo bash "$INSTALL_DIR/scripts/harden.sh"
+else
+  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
+fi
 
-log_info "Access the web interface: https://localhost:8443"
-log_info "Your browser will show a security warning for the self-signed certificate."
-log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
 echo ""
 log_info "Service Management:"
 log_info "  - Check status: sudo systemctl status agentless"
@@ -579,16 +581,13 @@ log_info "  - Restart: sudo systemctl restart agentless"
 log_info "  - Stop: sudo systemctl stop agentless"
 echo ""
 log_info "Important locations:"
-log_info "  - Installation: $INSTALL_DIR (owned by agentless)"
-log_info "  - Secrets: /etc/agentless/secrets.env (agentless:agentless 400)"
+log_info "  - Installation: $INSTALL_DIR"
+log_info "  - Secrets: /etc/agentless/secrets.env"
 log_info "  - Config: $INSTALL_DIR/.env"
 log_info "  - Database: $INSTALL_DIR/data/site.db"
 log_info "  - Logs: /var/log/agentless/"
-echo ""
-log_info "For monitoring setup:"
-log_info "  - Add devices through the web interface"
-log_info "  - Enroll device: sudo -u agentless bash $INSTALL_DIR/scripts/linux/enlist.sh [options]"
-log_info "  - Setup monitoring: sudo bash $INSTALL_DIR/scripts/setup-monitoring.sh"
+log_success "Installation complete!"
+log_success "Access the web interface: https://localhost:8443"
 echo ""
 
 if [ "$EXPORTER_INSTALLED" = "true" ]; then

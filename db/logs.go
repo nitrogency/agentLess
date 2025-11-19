@@ -77,11 +77,6 @@ func InitAuditLogTable() error {
 		return err
 	}
 
-	// Add audit_id column if it doesn't exist (for existing databases)
-	_, err = db.Exec(`
-		ALTER TABLE audit_logs ADD COLUMN audit_id TEXT
-	`)
-	// Ignore error if column already exists
 
 	// Create index on audit_id for faster duplicate checking
 	_, err = db.Exec(`
@@ -116,52 +111,6 @@ func InitAuditLogTable() error {
 	}
 
 	return nil
-}
-
-// GetAllAuditLogs returns all audit logs
-func GetAllAuditLogs() ([]AuditLog, error) {
-	rows, err := db.Query(`
-		SELECT id, device_id, timestamp, event_time, type, key, message, raw_log, security_level, audit_id
-		FROM audit_logs
-		ORDER BY timestamp DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var logs []AuditLog
-	for rows.Next() {
-		var log AuditLog
-		var timestamp string
-		var securityLevelStr string
-
-		err := rows.Scan(
-			&log.ID,
-			&log.DeviceID,
-			&timestamp,
-			&log.EventTime,
-			&log.Type,
-			&log.Key,
-			&log.Message,
-			&log.RawLog,
-			&securityLevelStr,
-			&log.AuditID,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse timestamp
-		log.Timestamp = parseTimestamp(timestamp)
-
-		// Convert security level string to SecurityLevel type
-		log.SecurityLevel = SecurityLevel(securityLevelStr)
-
-		logs = append(logs, log)
-	}
-
-	return logs, nil
 }
 
 // GetAuditLogsByDeviceID returns audit logs for a specific device
@@ -385,18 +334,6 @@ func GetAuditLogs(deviceID int64, page, pageSize int, searchTerm, securityLevel 
 	}
 
 	return logs, totalCount, nil
-}
-
-// SecurityLevelFromString converts a string security level to the SecurityLevel type
-func SecurityLevelFromString(level string) SecurityLevel {
-	switch strings.ToLower(level) {
-	case "high":
-		return HighSecurity
-	case "medium":
-		return MediumSecurity
-	default:
-		return LowSecurity
-	}
 }
 
 // InsertAuditLog inserts a new audit log entry with the provided security level
