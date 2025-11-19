@@ -445,8 +445,6 @@ func EditDeviceHandler(c *gin.Context) {
 			SSHGroup:           sshGroup,
 			AuditArch:          auditArch,
 			AuditRuleset:       auditRuleset,
-			FirewallMode:       device.FirewallMode, // Firewall settings come from existing device
-			FirewallAllowedIPs: device.FirewallAllowedIPs,
 			SetupUser:          setupUser,
 		}
 		needsReenrollment := db.NeedsReenrollmentChanged(device, newDevice)

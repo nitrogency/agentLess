@@ -13,13 +13,23 @@ check_dependency() {
 }
 
 wait_for_apt_lock() {
-    # Wait until no process holds the dpkg/apt lock
+    local attempts=0
+
     while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
        || fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
-        log_info "APT is locked by another process. Waiting 5 seconds..."
+
+        attempts=$((attempts + 1))
+        log_info "APT is locked (attempt $attempts/5). Waiting 5 seconds..."
         sleep 5
+
+        if [ "$attempts" -ge 5 ]; then
+            log_warn "APT lock persists after 5 attempts. Stopping unattended-upgrades..."
+            sudo systemctl stop unattended-upgrades || true
+            break
+        fi
     done
 }
+
 
 
 # Get the directory containing the calling script
