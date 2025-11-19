@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts"
 source "$SCRIPT_DIR/lib/logging.sh"
 
-log_section "Agent< IDS Setup"
+log_section "Setup"
 log_info "This script will install all required dependencies and set up the application."
 
 # Function to check if command exists
@@ -123,9 +123,6 @@ else
 fi
 
 log_info "Detected OS: $OS_NAME $OS_VERSION"
-
-# Install dependencies based on OS
-log_section "System Dependencies"
 
 case $OS_ID in
   ubuntu|debian)
@@ -249,7 +246,6 @@ if [ -z "$GOPATH" ]; then
 fi
 
 # Create systemd environment file for secrets
-log_section "Secret Management"
 SECRETS_DIR="/etc/agentless"
 SECRETS_FILE="$SECRETS_DIR/secrets.env"
 
@@ -329,7 +325,6 @@ chmod +x "$SCRIPT_DIR"/*.sh
 log_success "Script permissions set"
 
 # Install Go dependencies
-log_section "Building Application"
 log_progress "Installing Go dependencies..."
 cd "$APP_DIR"
 go mod download
@@ -375,9 +370,6 @@ log_progress "Changing ownership of all application files to agentless user..."
 sudo chown -R agentless:agentless "$INSTALL_DIR"
 sudo chown agentless:agentless /var/log/agentless
 log_success "All application files now owned by agentless user"
-
-# Set up SSH keys for agentless user
-log_section "SSH Configuration"
 
 # Create .ssh directory in /etc/agentless
 log_progress "Creating SSH directory..."
@@ -473,8 +465,6 @@ else
   log_warn "Some monitoring features may not work correctly"
 fi
 
-# Create a systemd service file for the application
-log_section "Systemd Service Setup"
 if [ -d "/etc/systemd/system" ]; then
   log_progress "Creating systemd service file..."
   
@@ -564,7 +554,6 @@ echo ""
 
 # Clean up source directory if different from install directory
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
-  log_section "Cleanup"
   log_info "Removing source directory..."
 
   # Remove source directory
