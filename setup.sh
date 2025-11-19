@@ -363,22 +363,15 @@ else
   log_success "Windows monitoring binary built successfully"
 fi
 
-# Set ownership of all application files to agentless user
-log_progress "Changing ownership of all application files to agentless user..."
-sudo chown -R agentless:agentless "$INSTALL_DIR"
-sudo chown agentless:agentless /var/log/agentless
-log_success "All application files now owned by agentless user"
-
 # Create .ssh directory in /etc/agentless
 log_progress "Creating SSH directory..."
 sudo mkdir -p /etc/agentless/.ssh
-sudo chown agentless:agentless /etc/agentless/.ssh
 sudo chmod 700 /etc/agentless/.ssh
 
 # Generate SSH keys for monitoring if they don't exist
 if [ ! -f "/etc/agentless/.ssh/monitor" ]; then
   log_progress "Generating SSH keys for agentless monitoring..."
-  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /etc/agentless/.ssh/monitor -N "" -C "agentless_monitor"
+  sudo ssh-keygen -t rsa -b 4096 -f /etc/agentless/.ssh/monitor -N "" -C "agentless_monitor"
   sudo chmod 600 /etc/agentless/.ssh/monitor
   sudo chmod 644 /etc/agentless/.ssh/monitor.pub
   log_success "SSH keys generated at /etc/agentless/.ssh/monitor"
@@ -388,13 +381,13 @@ fi
 
 # Display public key for user reference
 log_info "Public key for device enrollment:"
-cat /etc/agentless/.ssh/monitor.pub
+sudo cat /etc/agentless/.ssh/monitor.pub
 
 # Set up HTTPS certificates if they don't exist
 CERT_DIR="$APP_DIR/certs"
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   log_progress "Generating self-signed SSL certificates for HTTPS..."
-  sudo -u agentless mkdir -p "$CERT_DIR"
+  mkdir -p "$CERT_DIR"
   
   # Get the hostname/IP for the certificate
   HOSTNAME=$(hostname -f 2>/dev/null || hostname)
@@ -463,6 +456,13 @@ else
   log_warn "Some monitoring features may not work correctly"
 fi
 
+# Set ownership of all application files to agentless user
+log_progress "Changing ownership of all application files to agentless user..."
+sudo chown -R agentless:agentless "$INSTALL_DIR"
+sudo chown -R agentless:agentless /etc/agentless/.ssh
+sudo chown agentless:agentless /var/log/agentless
+log_success "All application files now owned by agentless user"
+
 # Create a systemd service file for the application
 if [ -d "/etc/systemd/system" ]; then
   log_progress "Creating systemd service file..."
@@ -504,7 +504,7 @@ if [ -d "/etc/systemd/system" ]; then
   sudo systemctl start agentless
   
   # Wait a moment and check if it started successfully
-  sleep 2
+  sleep 5
   if sudo systemctl is-active --quiet agentless; then
     log_success "Service started successfully!"
   else
@@ -515,7 +515,7 @@ fi
 # Ask about export mode installation
 log_section "Log Exporter Configuration"
 log_info "The log exporter allows you to export audit logs to external log aggregation"
-log_info "platforms (Elasticsearch, OpenSearch, Splunk, etc.) in JSON Lines format."
+log_info "platforms (Elasticsearch, OpenSearch etc.) in JSON Lines format."
 log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
 log_info "ONLY USE THIS IF YOU DON'T INTEND TO USE THE BUILT-IN WEB DASHBOARD FOR LOG VIEWING!"
 read -p "Do you want to install the log exporter? (y/n): " -n 1 -r
