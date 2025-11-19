@@ -20,9 +20,10 @@ cd agentLess
 ### 2. Run the setup script
 
 This sets up the necessary requirements and builds the application.
+**Make sure you rune as sudo.**
 ```bash
 chmod +x setup.sh
-./setup.sh
+sudo ./setup.sh
 ```
 
 After setup, the web interface should be accessible at https://localhost:8443.
