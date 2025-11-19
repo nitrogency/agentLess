@@ -129,7 +129,6 @@ log_success "Monitoring services setup completed!"
 log_info "Services installed: agentless-monitor@<device-id>.service"
 
 # Set up cleanup timer for log retention
-log_section "Log Cleanup Timer Setup"
 log_progress "Setting up cleanup timer for log retention..."
 CLEANUP_SCRIPT="$SCRIPT_DIR/cleanup/cleanup-timer.sh"
 if [ -f "$CLEANUP_SCRIPT" ]; then

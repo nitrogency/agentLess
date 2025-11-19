@@ -811,7 +811,6 @@ register_with_server() {
 }
 
 # Main execution
-log_section "Device Info"
 log_info "Target IP: $TARGET_IP"
 log_info "Remote User: $REMOTE_USER"
 log_info "Remote Group: $REMOTE_GROUP"
@@ -857,7 +856,6 @@ else
 fi
 
 log_info "You can now monitor this device through your IDS dashboard."
-log_section "Important Credentials"
 log_info "SSH User: $REMOTE_USER"
 log_info "SSH Group: $REMOTE_GROUP"
 log_info "SSH Key: $SSH_KEY_PATH"
