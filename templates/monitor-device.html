@@ -4,14 +4,7 @@
 
 {{define "content"}}
 <div class="container-wide">
-    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-        <h2 style="margin: 0;">Device Monitoring: {{.Device.Name}}</h2>
-        {{if .Device.NeedsReenrollment}}
-        <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">Re-enrollment Required</span>
-        {{else}}
-        <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">Config OK</span>
-        {{end}}
-    </div>
+    <h2>Device Monitoring: {{.Device.Name}}</h2>
     
     {{if .Error}}
     <div class="error-message">{{.Error}}</div>
@@ -36,6 +29,11 @@
     <div class="device-config-card">
         <div class="card-header">
             <h3>Device Configuration</h3>
+            {{if .Device.NeedsReenrollment}}
+                <span class="badge badge-warning" style="font-size: 14px; padding: 6px 12px;">Re-enrollment Required</span>
+                {{else}}
+                <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">Config OK</span>
+            {{end}}
         </div>
         <div class="card-body">
             <!-- Basic Information -->
