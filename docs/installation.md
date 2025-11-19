@@ -20,7 +20,7 @@ cd agentLess
 ### 2. Run the setup script
 
 This sets up the necessary requirements and builds the application.
-**Make sure you rune as sudo.**
+**Make sure you run as sudo.**
 ```bash
 chmod +x setup.sh
 sudo ./setup.sh
