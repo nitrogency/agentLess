@@ -24,7 +24,7 @@ if [ "$EUID" -ne 0 ]; then
   handle_error "This script must be run as root or with sudo" 1
 fi
 
-log_section "Agent< Secret Rotation"
+log_section "Secret Rotation"
 log_warn "This will rotate SESSION_SECRET"
 log_warn "All active sessions will be invalidated"
 echo ""
@@ -90,9 +90,6 @@ EOF
 chmod 600 "$SECRETS_FILE"
 chown root:root "$SECRETS_FILE"
 log_success "New secrets file written"
-
-# Restart services
-log_section "Restarting Services"
 
 # Restart main application
 log_progress "Restarting Agent< service..."

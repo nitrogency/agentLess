@@ -19,7 +19,7 @@ ROTATION_SCRIPT="$REPO_ROOT/scripts/rotate/rotate-secrets.sh"
 ROTATION_SERVICE="/etc/systemd/system/agentless-rotate-secrets.service"
 ROTATION_TIMER="/etc/systemd/system/agentless-rotate-secrets.timer"
 
-log_section "Agent< Secret Rotation Timer Setup"
+log_section "Secret Rotation Timer Setup"
 
 # Check if running as root
 check_root
@@ -79,7 +79,6 @@ systemctl_safe reload
 log_progress "Enabling rotation timer..."
 systemctl_safe enable-start "agentless-rotate-secrets.timer"
 
-log_section "Setup Complete"
 log_success "Automatic secret rotation enabled!"
 echo ""
 log_info "Configuration:"
