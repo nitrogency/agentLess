@@ -514,8 +514,7 @@ fi
 
 # Ask about export mode installation
 log_section "Log Exporter Configuration"
-log_info "The log exporter allows you to export audit logs to external log aggregation"
-log_info "platforms (Elasticsearch, OpenSearch etc.) in JSON Lines format."
+log_info "The log exporter allows you to export audit logs to external log aggregation platforms (Elasticsearch, OpenSearch etc.) in JSON Lines format."
 log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
 log_info "ONLY USE THIS IF YOU DON'T INTEND TO USE THE BUILT-IN WEB DASHBOARD FOR LOG VIEWING!"
 read -p "Do you want to install the log exporter? (y/n): " -n 1 -r
@@ -566,11 +565,9 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
   echo ""
 fi
 
-if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
-  sudo bash "$INSTALL_DIR/scripts/harden.sh"
-else
-  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
-fi
+sleep 5
+sudo bash "$INSTALL_DIR/scripts/harden.sh"
+
 
 echo ""
 log_info "Service Management:"

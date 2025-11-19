@@ -38,6 +38,7 @@ fi
 log_info "Starting..."
 
 log_info "Running system updates..."
+wait_for_apt_lock
 apt update && apt upgrade -y
 apt install -y unattended-upgrades apt-listchanges
 dpkg-reconfigure -plow unattended-upgrades
