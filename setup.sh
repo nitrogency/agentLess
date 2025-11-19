@@ -598,3 +598,8 @@ if [ "$EXPORTER_INSTALLED" = "true" ]; then
   echo ""
 fi
 
+if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
+  sudo bash "$INSTALL_DIR/scripts/harden.sh"
+else
+  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
+fi
