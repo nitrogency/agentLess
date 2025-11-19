@@ -402,7 +402,7 @@ if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -n1)
   
   # Create certificate configuration file
-  cat > "$CERT_DIR/cert.conf" << EOF
+  sudo cat > "$CERT_DIR/cert.conf" << EOF
 [req]
 default_bits = 4096
 prompt = no
@@ -434,16 +434,16 @@ EOF
   fi
   
   # Generate private key
-  openssl genrsa -out "$CERT_DIR/server.key" 4096
+  sudo openssl genrsa -out "$CERT_DIR/server.key" 4096
   
   # Generate certificate signing request and self-signed certificate
-  openssl req -new -x509 -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
+  sudo openssl req -new -x509 -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
     -days 365 -config "$CERT_DIR/cert.conf" -extensions v3_req
   
   # Set appropriate permissions
-  chmod 600 "$CERT_DIR/server.key"
-  chmod 644 "$CERT_DIR/server.crt"
-  chmod 644 "$CERT_DIR/cert.conf"
+  sudo chmod 600 "$CERT_DIR/server.key"
+  sudo chmod 644 "$CERT_DIR/server.crt"
+  sudo chmod 644 "$CERT_DIR/cert.conf"
   
   log_success "SSL certificates generated successfully"
   log_info "Certificate: $CERT_DIR/server.crt"
@@ -573,9 +573,6 @@ else
   log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
 fi
 
-log_info "Access the web interface: https://localhost:8443"
-log_info "Your browser will show a security warning for the self-signed certificate."
-log_info "This is normal - click 'Advanced' and 'Proceed' to continue."
 echo ""
 log_info "Service Management:"
 log_info "  - Check status: sudo systemctl status agentless"
@@ -589,6 +586,8 @@ log_info "  - Secrets: /etc/agentless/secrets.env"
 log_info "  - Config: $INSTALL_DIR/.env"
 log_info "  - Database: $INSTALL_DIR/data/site.db"
 log_info "  - Logs: /var/log/agentless/"
+log_success "Installation complete!"
+log_success "Access the web interface: https://localhost:8443"
 echo ""
 
 if [ "$EXPORTER_INSTALLED" = "true" ]; then
