@@ -501,7 +501,7 @@ li {
 
 /* User Management Styles */
 .users-container {
-    max-width: 1200px;
+    width: 80%;
     margin: 0 auto;
     padding: 20px;
     background-color: var(--secondary-dark);
@@ -575,7 +575,7 @@ li {
 
 /* Device Management Styles */
 .devices-container {
-    min-width: 1200px;
+    width: 80%;
     margin: 0 auto;
     padding: 20px;
     background-color: var(--secondary-dark);
@@ -1018,14 +1018,24 @@ select.form-control {
 
 /* Container and Layout */
 .container {
-    max-width: 1200px;
+    width: 80%;
     margin: 0 auto;
     padding: 0 var(--space-4);
 }
 
 .container-wide {
-    width: 150%;
-    margin-left: -25%;
+    width: 100%;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--secondary-dark);
+    color: var(--text-primary);    
+}
+
+.container-wide h2 {
+    color: var(--primary);
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 10px;
 }
 
 /* Bootstrap-style Grid System */
