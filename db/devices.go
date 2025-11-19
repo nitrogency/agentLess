@@ -26,8 +26,6 @@ type Device struct {
 	OSType             string // "linux" or "windows"
 	SSHGroup           string
 	SetupUser          string
-	FirewallMode       string // "disabled", "ssh_all", "ssh_restricted"
-	FirewallAllowedIPs string // Comma-separated IPs for ssh_restricted mode
 	AuditArch          string // "x32" or "x64"
 	AuditRuleset       string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
 	NeedsReenrollment  bool   // Flag indicating configuration changes require re-running enlist script
@@ -37,29 +35,32 @@ type Device struct {
 
 // InitDeviceTable initializes the devices table
 func InitDeviceTable() error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS devices (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			type TEXT NOT NULL,
-			status TEXT NOT NULL DEFAULT 'unknown',
-			last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-			ip_address TEXT,
-			ssh_user TEXT,
-			ssh_key_path TEXT,
-			ssh_port INTEGER DEFAULT 22,
-			hostname TEXT,
-			os_info TEXT,
-			os_type TEXT DEFAULT 'linux',
-			ssh_group TEXT,
-			setup_user TEXT DEFAULT 'root',
-			firewall_mode TEXT DEFAULT 'disabled',
-			firewall_allowed_ips TEXT
-		)
-	`)
-	if err != nil {
-		return err
-	}
+    _, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'unknown',
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ip_address TEXT,
+            ssh_user TEXT,
+            ssh_key_path TEXT,
+            ssh_port INTEGER DEFAULT 22,
+            hostname TEXT,
+            os_info TEXT,
+            os_type TEXT DEFAULT 'linux',
+            ssh_group TEXT,
+            setup_user TEXT DEFAULT 'root',
+            audit_arch TEXT DEFAULT 'x64',
+            audit_ruleset TEXT DEFAULT 'audit_default.rules',
+            needs_reenrollment INTEGER DEFAULT 0,
+            icmp_status TEXT DEFAULT 'unknown',
+            ssh_status TEXT DEFAULT 'unknown'
+        )
+    `)
+    if err != nil {
+        return err
+    }
 
 
 	return nil
@@ -81,10 +82,9 @@ func CreateMonitoredDeviceWithOS(name, deviceType, ipAddress, sshUser, sshKeyPat
 			name, type, status, last_updated, 
 			ip_address, ssh_user, ssh_key_path, ssh_port, 
 			hostname, os_info, os_type, ssh_group,
-			setup_user, firewall_mode, firewall_allowed_ips,
-			audit_arch, audit_ruleset
+			setup_user, audit_arch, audit_ruleset
 		)
-		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disabled', '', ?, ?)
+		VALUES (?, ?, 'unknown', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, name, deviceType, ipAddress, sshUser, sshKeyPath, sshPort, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset)
 	return err
 }
@@ -103,7 +103,7 @@ func GetAllDevices() ([]Device, error) {
 		SELECT id, name, type, status, last_updated, 
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, setup_user,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment,
+		       audit_arch, audit_ruleset, needs_reenrollment,
 		       COALESCE(icmp_status, 'unknown'), COALESCE(ssh_status, 'unknown')
 		FROM devices
 		ORDER BY id DESC
@@ -116,14 +116,14 @@ func GetAllDevices() ([]Device, error) {
 	var devices []Device
 	for rows.Next() {
 		var d Device
-		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
+		var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset sql.NullString
 		var sshPort, needsReenrollment sql.NullInt64
 
 		err := rows.Scan(
 			&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 			&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 			&sshGroup, &setupUser,
-			&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
+			&auditArch, &auditRuleset, &needsReenrollment,
 			&d.ICMPStatus, &d.SSHStatus,
 		)
 		if err != nil {
@@ -162,14 +162,6 @@ func GetAllDevices() ([]Device, error) {
 		if setupUser.Valid {
 			d.SetupUser = setupUser.String
 		}
-		if firewallMode.Valid {
-			d.FirewallMode = firewallMode.String
-		} else {
-			d.FirewallMode = "disabled" // Default
-		}
-		if firewallAllowedIPs.Valid {
-			d.FirewallAllowedIPs = firewallAllowedIPs.String
-		}
 		if auditArch.Valid {
 			d.AuditArch = auditArch.String
 		} else {
@@ -192,14 +184,14 @@ func GetAllDevices() ([]Device, error) {
 // GetDeviceByID returns a device by its ID
 func GetDeviceByID(id int64) (*Device, error) {
 	var d Device
-	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, firewallMode, firewallAllowedIPs, auditArch, auditRuleset sql.NullString
+	var ipAddress, sshUser, sshKeyPath, hostname, osInfo, osType, sshGroup, setupUser, auditArch, auditRuleset sql.NullString
 	var sshPort, needsReenrollment sql.NullInt64
 
 	err := db.QueryRow(`
 		SELECT id, name, type, status, last_updated,
 		       ip_address, ssh_user, ssh_key_path, ssh_port, hostname, os_info, os_type,
 		       ssh_group, setup_user,
-		       firewall_mode, firewall_allowed_ips, audit_arch, audit_ruleset, needs_reenrollment,
+		       audit_arch, audit_ruleset, needs_reenrollment,
 		       COALESCE(icmp_status, 'unknown'), COALESCE(ssh_status, 'unknown')
 		FROM devices
 		WHERE id = ?
@@ -207,7 +199,7 @@ func GetDeviceByID(id int64) (*Device, error) {
 		&d.ID, &d.Name, &d.Type, &d.Status, &d.LastUpdated,
 		&ipAddress, &sshUser, &sshKeyPath, &sshPort, &hostname, &osInfo, &osType,
 		&sshGroup, &setupUser,
-		&firewallMode, &firewallAllowedIPs, &auditArch, &auditRuleset, &needsReenrollment,
+		&auditArch, &auditRuleset, &needsReenrollment,
 		&d.ICMPStatus, &d.SSHStatus,
 	)
 
@@ -249,14 +241,6 @@ func GetDeviceByID(id int64) (*Device, error) {
 	}
 	if setupUser.Valid {
 		d.SetupUser = setupUser.String
-	}
-	if firewallMode.Valid {
-		d.FirewallMode = firewallMode.String
-	} else {
-		d.FirewallMode = "disabled" // Default
-	}
-	if firewallAllowedIPs.Valid {
-		d.FirewallAllowedIPs = firewallAllowedIPs.String
 	}
 	if auditArch.Valid {
 		d.AuditArch = auditArch.String
@@ -591,12 +575,6 @@ func NeedsReenrollmentChanged(oldDevice, newDevice *Device) bool {
 		return true
 	}
 	if oldDevice.AuditRuleset != newDevice.AuditRuleset {
-		return true
-	}
-	if oldDevice.FirewallMode != newDevice.FirewallMode {
-		return true
-	}
-	if oldDevice.FirewallAllowedIPs != newDevice.FirewallAllowedIPs {
 		return true
 	}
 	if oldDevice.SetupUser != newDevice.SetupUser {

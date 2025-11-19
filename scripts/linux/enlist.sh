@@ -2,7 +2,7 @@
 # enlist.sh - Enroll a remote device for monitoring
 # This script sets up SSH access and audit monitoring on a target device
 
-set -euo pipefail
+set -eo pipefail
 
 # Source shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,6 +15,8 @@ if [ -f "/etc/agentless/secrets.env" ]; then
     # shellcheck disable=SC1091
     source /etc/agentless/secrets.env
 fi
+
+DEVICE_ID="${DEVICE_ID:-unknown}"
 
 # Setup cleanup trap
 setup_cleanup_trap
