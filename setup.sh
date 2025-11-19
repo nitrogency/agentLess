@@ -281,7 +281,6 @@ EOF"
   sudo chown agentless:agentless "$SECRETS_FILE"
   
   log_success "Systemd secrets file created: $SECRETS_FILE"
-  log_info "Secrets are stored securely with 400 permissions (agentless:agentless)"
 else
   log_info "Secrets file already exists: $SECRETS_FILE"
 fi
@@ -364,22 +363,15 @@ else
   log_success "Windows monitoring binary built successfully"
 fi
 
-# Set ownership of all application files to agentless user
-log_progress "Changing ownership of all application files to agentless user..."
-sudo chown -R agentless:agentless "$INSTALL_DIR"
-sudo chown agentless:agentless /var/log/agentless
-log_success "All application files now owned by agentless user"
-
 # Create .ssh directory in /etc/agentless
 log_progress "Creating SSH directory..."
 sudo mkdir -p /etc/agentless/.ssh
-sudo chown agentless:agentless /etc/agentless/.ssh
 sudo chmod 700 /etc/agentless/.ssh
 
 # Generate SSH keys for monitoring if they don't exist
 if [ ! -f "/etc/agentless/.ssh/monitor" ]; then
   log_progress "Generating SSH keys for agentless monitoring..."
-  sudo -u agentless ssh-keygen -t rsa -b 4096 -f /etc/agentless/.ssh/monitor -N "" -C "agentless_monitor"
+  sudo ssh-keygen -t rsa -b 4096 -f /etc/agentless/.ssh/monitor -N "" -C "agentless_monitor"
   sudo chmod 600 /etc/agentless/.ssh/monitor
   sudo chmod 644 /etc/agentless/.ssh/monitor.pub
   log_success "SSH keys generated at /etc/agentless/.ssh/monitor"
@@ -402,7 +394,7 @@ if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -n1)
   
   # Create certificate configuration file
-  sudo cat > "$CERT_DIR/cert.conf" << EOF
+  cat > "$CERT_DIR/cert.conf" << EOF
 [req]
 default_bits = 4096
 prompt = no
@@ -464,6 +456,13 @@ else
   log_warn "Some monitoring features may not work correctly"
 fi
 
+# Set ownership of all application files to agentless user
+log_progress "Changing ownership of all application files to agentless user..."
+sudo chown -R agentless:agentless "$INSTALL_DIR"
+sudo chown -R agentless:agentless /etc/agentless/.ssh
+sudo chown agentless:agentless /var/log/agentless
+log_success "All application files now owned by agentless user"
+
 # Create a systemd service file for the application
 if [ -d "/etc/systemd/system" ]; then
   log_progress "Creating systemd service file..."
@@ -505,7 +504,7 @@ if [ -d "/etc/systemd/system" ]; then
   sudo systemctl start agentless
   
   # Wait a moment and check if it started successfully
-  sleep 2
+  sleep 5
   if sudo systemctl is-active --quiet agentless; then
     log_success "Service started successfully!"
   else
@@ -515,8 +514,7 @@ fi
 
 # Ask about export mode installation
 log_section "Log Exporter Configuration"
-log_info "The log exporter allows you to export audit logs to external log aggregation"
-log_info "platforms (Elasticsearch, OpenSearch, Splunk, etc.) in JSON Lines format."
+log_info "The log exporter allows you to export audit logs to external log aggregation platforms (Elasticsearch, OpenSearch etc.) in JSON Lines format."
 log_info "WARNING: Exporting logs causes additional DB and system load. Logs are also exported outside of the encrypted DB."
 log_info "ONLY USE THIS IF YOU DON'T INTEND TO USE THE BUILT-IN WEB DASHBOARD FOR LOG VIEWING!"
 read -p "Do you want to install the log exporter? (y/n): " -n 1 -r
@@ -567,11 +565,9 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ] && [ -d "$SOURCE_DIR" ]; then
   echo ""
 fi
 
-if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
-  sudo bash "$INSTALL_DIR/scripts/harden.sh"
-else
-  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
-fi
+sleep 5
+sudo bash "$INSTALL_DIR/scripts/harden.sh"
+
 
 echo ""
 log_info "Service Management:"
@@ -596,10 +592,4 @@ if [ "$EXPORTER_INSTALLED" = "true" ]; then
   log_info "  - Logs: journalctl -u agentless-exporter -f"
   log_info "  - Export directory: /var/log/agentless-export/"
   echo ""
-fi
-
-if [ -f "$INSTALL_DIR/scripts/harden.sh" ]; then
-  sudo bash "$INSTALL_DIR/scripts/harden.sh"
-else
-  log_error "Hardening script not found at $INSTALL_DIR/scripts/harden.sh"
 fi

@@ -12,6 +12,16 @@ check_dependency() {
     fi
 }
 
+wait_for_apt_lock() {
+    # Wait until no process holds the dpkg/apt lock
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+       || fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+        log_info "APT is locked by another process. Waiting 5 seconds..."
+        sleep 5
+    done
+}
+
+
 # Get the directory containing the calling script
 get_script_dir() {
     cd "$(dirname "${BASH_SOURCE[1]}")" && pwd
