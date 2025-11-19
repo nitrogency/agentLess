@@ -281,7 +281,6 @@ EOF"
   sudo chown agentless:agentless "$SECRETS_FILE"
   
   log_success "Systemd secrets file created: $SECRETS_FILE"
-  log_info "Secrets are stored securely with 400 permissions (agentless:agentless)"
 else
   log_info "Secrets file already exists: $SECRETS_FILE"
 fi
@@ -389,20 +388,20 @@ fi
 
 # Display public key for user reference
 log_info "Public key for device enrollment:"
-sudo cat /etc/agentless/.ssh/monitor.pub
+cat /etc/agentless/.ssh/monitor.pub
 
 # Set up HTTPS certificates if they don't exist
 CERT_DIR="$APP_DIR/certs"
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
   log_progress "Generating self-signed SSL certificates for HTTPS..."
-  mkdir -p "$CERT_DIR"
+  sudo -u agentless mkdir -p "$CERT_DIR"
   
   # Get the hostname/IP for the certificate
   HOSTNAME=$(hostname -f 2>/dev/null || hostname)
   LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -n1)
   
   # Create certificate configuration file
-  sudo cat > "$CERT_DIR/cert.conf" << EOF
+  cat > "$CERT_DIR/cert.conf" << EOF
 [req]
 default_bits = 4096
 prompt = no
