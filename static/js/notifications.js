@@ -10,6 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!bell || !dropdown) return;
 
+  // Get CSRF token from meta tag
+  const getCSRFToken = () => {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  };
+
   const fetchSummary = async () => {
     try {
       const res = await fetch('/notifications/summary', { credentials: 'same-origin' });
@@ -98,7 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
                   method: 'POST', 
                   credentials: 'same-origin',
                   headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCSRFToken()
                   }
                 });
                 if (!response.ok) {
@@ -184,7 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST', 
           credentials: 'same-origin',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCSRFToken()
           }
         });
         if (!response.ok) {
