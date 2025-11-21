@@ -15,6 +15,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : '';
   };
+  
+  // Update CSRF token in meta tag (after token rotation)
+  const updateCSRFToken = (newToken) => {
+    if (newToken) {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta) {
+        meta.setAttribute('content', newToken);
+      }
+    }
+  };
 
   const fetchSummary = async () => {
     try {
@@ -58,8 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             // Handle main notification click (navigation)
             item.addEventListener('click', (e) => {
-              // Don't navigate if clicking the close button
-              if (e.target.classList.contains('notification-close')) {
+              // Don't navigate if clicking the close button or anything inside it
+              if (e.target.closest('.notification-close')) {
                 return;
               }
               
@@ -111,6 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!response.ok) {
                   console.error('Failed to mark notification as seen:', response.status);
                   // Could show user feedback here if needed
+                } else {
+                  // Update CSRF token from response header (token rotation)
+                  const newToken = response.headers.get('X-CSRF-Token');
+                  updateCSRFToken(newToken);
                 }
                 fetchSummary(); // Refresh notification counts only
               } catch (error) {
@@ -197,6 +211,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (!response.ok) {
           console.error('Failed to mark all notifications as seen:', response.status);
+        } else {
+          // Update CSRF token from response header (token rotation)
+          const newToken = response.headers.get('X-CSRF-Token');
+          updateCSRFToken(newToken);
         }
         fetchSummary(); // Refresh counts
       } catch (error) {

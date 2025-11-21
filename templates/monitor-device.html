@@ -19,9 +19,9 @@
         <strong>Configuration Update Required</strong><br>
         This device has configuration changes that require re-enrollment. Please run the following script to apply changes:<br><br>
         {{if eq .Device.OSType "linux"}}
-        <pre class="code-block" style="margin: 10px 0 0 0;">sudo -u agentless bash /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
+        <pre class="code-block" style="margin: 10px 0 0 0;">sudo /opt/agentless/scripts/linux/enroll-device.sh -u monitor -g monitor -l stebimas  -k /etc/agentless/.ssh/monitor 192.168.56.10</pre>
         {{else if eq .Device.OSType "windows"}}
-        <pre class="code-block" style="margin: 10px 0 0 0;">sudo bash /opt/agentless/scripts/setup-monitoring.sh</pre>
+        <pre class="code-block" style="margin: 10px 0 0 0;">sudo /opt/agentless/scripts/setup-monitoring.sh</pre>
         {{end}}
     </div>
     {{end}}
@@ -202,21 +202,13 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
                     <p class="note">Replace <code>&lt;IDS-SERVER-IP&gt;</code> with this server's IP, then paste the SSH public key from step 1 when prompted</p>
                 </li>
                 <li><strong>Start the setup-monitoring.sh script on the server</strong>
-                    <pre class="code-block">sudo bash /opt/agentless/scripts/setup-monitoring.sh</pre>
+                    <pre class="code-block">sudo /opt/agentless/scripts/setup-monitoring.sh</pre>
                 </li>
             </ol>
             {{else}}
             <!-- Linux Setup Instructions -->
-            <p>To set up this Linux device for monitoring, follow these steps:</p>
-            <ol>
-                <li><strong>Copy the server's public key to the client device:</strong>
-                    <pre class="code-block">sudo ssh-copy-id {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -i {{.Device.SSHKeyPath}}.pub {{if .Device.SetupUser}}{{.Device.SetupUser}}{{else}}root{{end}}@{{.Device.IPAddress}}</pre>
-                    <p class="note">If you're using a custom SSH port, add <code>-p PORT_NUMBER</code> to the command.</p>
-                </li>
-                <li><strong>Run the enrollment script from your terminal:</strong>
-                    <pre class="code-block">sudo /opt/agentless/scripts/linux/enlist.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
-                </li>
-            </ol>
+            <p>To set up this Linux device for monitoring, you need to run the following script with these parameters:</p>
+            <pre class="code-block">sudo /opt/agentless/scripts/linux/enroll-device.sh -u {{.Device.SSHUser}} -g {{.Device.SSHGroup}} {{if .Device.SetupUser}}-l {{.Device.SetupUser}}{{end}} {{if ne .Device.SSHPort 22}}-p {{.Device.SSHPort}}{{end}} -k {{.Device.SSHKeyPath}} {{.Device.IPAddress}}</pre>
             {{end}}
         </div>
     </div>

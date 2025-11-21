@@ -361,10 +361,12 @@ tbody tr:nth-child(odd) {
 .success-message {
     background-color: rgba(0, 200, 81, 0.1);
     border: 1px solid var(--success);
+    border-left: 4px solid var(--success);
     color: var(--success);
     padding: 1rem;
     border-radius: 4px;
     margin-bottom: 1rem;
+    text-align: left;
 }
 
 .info-message {

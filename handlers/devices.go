@@ -439,13 +439,13 @@ func EditDeviceHandler(c *gin.Context) {
 
 		// Check if enrollment-sensitive fields have changed
 		newDevice := &db.Device{
-			SSHPort:            sshPort,
-			SSHUser:            sshUser,
-			SSHKeyPath:         sshKeyPath,
-			SSHGroup:           sshGroup,
-			AuditArch:          auditArch,
-			AuditRuleset:       auditRuleset,
-			SetupUser:          setupUser,
+			SSHPort:      sshPort,
+			SSHUser:      sshUser,
+			SSHKeyPath:   sshKeyPath,
+			SSHGroup:     sshGroup,
+			AuditArch:    auditArch,
+			AuditRuleset: auditRuleset,
+			SetupUser:    setupUser,
 		}
 		needsReenrollment := db.NeedsReenrollmentChanged(device, newDevice)
 
@@ -655,4 +655,3 @@ func MonitorDeviceHandler(c *gin.Context) {
 
 	templates.RenderGinTemplate(c, "monitor-device", data)
 }
-

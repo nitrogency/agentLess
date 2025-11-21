@@ -10,10 +10,13 @@ On Linux endpoints, ClamAV is installed and logs are also gathered alongside aud
 The Linux endpoint monitoring workflow looks like this:
 
 1. Device is added through the Web interface.
-2. The server's pubkey is copied over to the endpoint using `ssh-copy-id` (the exact command to copy and paste in your terminal is displayed in the UI).
-3. The `/scripts/enlist.sh`, responsible for setting up the endpoint (configures user through which the logs will be read with appropriate permissions, copies over the audit rules, installs dependencies, etc.) script is launched (the exact command to copy and paste in your terminal is also displayed).
-4. Logs are then retrieved from the endpoint using the created systemd service (agentless-monitor@service). This service calls the `/scripts/start-monitoring.sh` script, which connects to the endpoint, reads the logs, and passes them over to the `/bin/monitor` binary, where the logs are parsed and written to DB.
-5. Logs are then displayed in the Web UI for the user to see.
+2. Run the `/scripts/linux/enroll-device.sh` script (the exact command is displayed in the UI). This single script:
+   - Copies the server's SSH key to the endpoint (you'll be prompted for the password once)
+   - Sets up the monitoring user with appropriate permissions
+   - Configures audit rules and installs dependencies
+   - Registers the device in the database
+3. Logs are then retrieved from the endpoint using the created systemd service (agentless-monitor@service). This service calls the `/scripts/start-monitoring.sh` script, which connects to the endpoint, reads the logs, and passes them over to the `/bin/monitor` binary, where the logs are parsed and written to DB.
+4. Logs are then displayed in the Web UI for the user to see.
 
 Log retrieval and device setup is done through SSH. Once the connection is established, two `tail -F` commands run in parallel on the endpoint - one for the `/var/log/audit/audit.log` file, and one for the `/var/log/clamav/clamav.log` file. Their output is combined and piped back over SSH to the monitoring server. If the connection gets interrupted, the service will attempt to reconnect. 
 
@@ -21,7 +24,8 @@ Log retrieval and device setup is done through SSH. Once the connection is estab
 
 Linux monitoring is done through the use of these scripts/binaries:
 
-- `/scripts/linux/enlist.sh` - responsible for setting up the endpoint.
+- `/scripts/linux/enroll-device.sh` - one-step enrollment script (copies SSH key + device setup).
+- `/scripts/linux/enlist.sh` - responsible for setting up the endpoint
 - `/scripts/start-monitoring.sh` - launcher script that detects OS type and launches appropriate monitoring script (linux or windows). Launched by the systemd service.
 - `/scripts/linux/monitoring.sh` - responsible for connecting to the Linux endpoint. Reads logs, passes them over to the `/bin/monitor` binary.
 - `/bin/monitor` - responsible for parsing received audit logs, prevents duplicates, writes to DB.

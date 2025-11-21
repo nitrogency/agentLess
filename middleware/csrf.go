@@ -69,6 +69,8 @@ func CSRFMiddleware() gin.HandlerFunc {
 				return
 			}
 			c.Set(csrfTokenKey, token)
+			// Send new token in response header for AJAX requests to update
+			c.Header("X-CSRF-Token", token)
 
 			c.Next()
 			return

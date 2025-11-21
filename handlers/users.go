@@ -190,7 +190,7 @@ func EditUserHandler(c *gin.Context) {
 		username := strings.TrimSpace(c.PostForm("username"))
 		password := c.PostForm("password")
 		confirmPassword := c.PostForm("confirm_password")
-		
+
 		// Only admins can change permissions and admin status
 		var isAdmin, canAddDevices, canModifyDevices, canAddUsers, canModifyUsers bool
 		if data.IsAdmin {
@@ -208,7 +208,7 @@ func EditUserHandler(c *gin.Context) {
 			canAddUsers = user.CanAddUsers
 			canModifyUsers = user.CanModifyUsers
 		}
-		
+
 		// Everyone can change their notification preferences
 		flickerLow := c.PostForm("flickerLow") == "on"
 		flickerMedium := c.PostForm("flickerMedium") == "on"
@@ -308,12 +308,17 @@ func EditUserHandler(c *gin.Context) {
 			// Don't fail the user update for notification rule errors, just log it
 		}
 
-		// Redirect based on user role
-		if data.IsAdmin {
-			c.Redirect(http.StatusFound, "/users")
-		} else {
-			c.Redirect(http.StatusFound, "/")
+		// Reload user data with updated values
+		updatedUser, err := db.GetUserByID(userID)
+		if err != nil {
+			log.Printf("Error reloading user after update: %v", err)
+			updatedUser = user // Fallback to old user data
 		}
+
+		// Show success message and re-render form
+		data.Success = "Settings updated successfully"
+		data.User = updatedUser
+		templates.RenderGinTemplate(c, "edit-user", data)
 		return
 	}
 
