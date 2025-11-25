@@ -1,11 +1,10 @@
 # Requirements and Prerequisites
 - For the server, a minimum of 2GB RAM and 2VCPUs is recommended. Storage requirements depends on the amount you plan to log. A minimum of 20GB is recommended.
 - Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but untested)
-- Go 1.16+ (for building the web application)
-- SQLite3 with SQLCipher extension
 - SSH server on target devices (installed by default on most Linux distributions, installed automatically by the enrollment script on Windows)
 - Systemd (for service management)
 - Root or sudo access through SSH on the monitoring server
+- Sudo user access through SSH to your Linux endpoints
 
 ## Installation
 
