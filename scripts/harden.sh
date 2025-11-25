@@ -26,6 +26,21 @@ echo
 
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     log_success "Aborted by user."
+    echo ""
+    log_success "Installation complete!"
+    log_info "Service Management:"
+    log_info "  - Check status: sudo systemctl status agentless"
+    log_info "  - View logs: sudo journalctl -u agentless -f"
+    log_info "  - Restart: sudo systemctl restart agentless"
+    log_info "  - Stop: sudo systemctl stop agentless"
+    echo ""
+    log_info "Important locations:"
+    log_info "  - Installation: $INSTALL_DIR"
+    log_info "  - Secrets: /etc/agentless/secrets.env"
+    log_info "  - Config: $INSTALL_DIR/.env"
+    log_info "  - Database: $INSTALL_DIR/data/site.db"
+    log_info "  - Logs: /var/log/agentless/"
+    log_success "Access the web interface: https://localhost:8443"
     exit 1
 fi
 

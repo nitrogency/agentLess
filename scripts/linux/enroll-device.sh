@@ -134,10 +134,10 @@ if [ "$SKIP_SSH_COPY" = false ]; then
     else
         log_error "Failed to copy SSH key to $TARGET_IP"
         log_info "Please ensure:"
-        log_info "  • The target device is reachable"
-        log_info "  • SSH is enabled on the target"
-        log_info "  • Password authentication is enabled"
-        log_info "  • User credentials are correct"
+        log_info "The target device is reachable"
+        log_info "SSH is enabled on the target"
+        log_info "Password authentication is enabled"
+        log_info "User credentials are correct"
         exit 1
     fi
     
