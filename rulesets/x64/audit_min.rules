@@ -120,6 +120,3 @@
 
 # 32 bit ABI exploitation: https://github.com/linux-audit/audit-userspace/blob/c014eec64b3a16c004f4a75e5792a4ac2fcc0df2/rules/21-no32bit.rules
 -a always,exit -F arch=b32 -S all -k 32bit_abi
-
-# Make the config immutable
--e 2
