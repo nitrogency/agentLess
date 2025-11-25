@@ -232,6 +232,3 @@
 
 # Log all human execute syscalls - can be noisy
 -a always,exit -F arch=b32 -S execve,execveat -k exec_all -F auid>=1000 -F auid!=unset
-
-# Make the config immutable
--e 2

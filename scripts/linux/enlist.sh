@@ -248,7 +248,7 @@ echo "Configuring passwordless sudo for log file access..."
 SUDOERS_FILE="/etc/sudoers.d/$REMOTE_USER"
 sudo bash -c "cat > \$SUDOERS_FILE" <<EOSUDOERS
 # Allow $REMOTE_USER to read audit and ClamAV logs without password
-# This is required for AgentLess IDS monitoring
+# This is required to properly read logs
 $REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail /var/log/audit/audit.log
 $REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -n * /var/log/audit/audit.log
 $REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/tail -F /var/log/audit/audit.log

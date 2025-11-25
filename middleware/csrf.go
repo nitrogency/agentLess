@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	
+
 	"example/go-website/models"
 	"example/go-website/templates"
 )
@@ -29,19 +29,23 @@ func GenerateCSRFToken() (string, error) {
 func CSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
-		
+
 		// For state-changing requests (POST, PUT, DELETE, PATCH)
 		if c.Request.Method != "GET" && c.Request.Method != "HEAD" && c.Request.Method != "OPTIONS" {
-			// Get token from form
+			// Get token from form or header
 			formToken := c.PostForm(csrfFormField)
 			if formToken == "" {
 				// Try multipart form
 				formToken = c.Request.FormValue(csrfFormField)
 			}
-			
+			if formToken == "" {
+				// Try X-CSRF-Token header (for AJAX requests)
+				formToken = c.GetHeader("X-CSRF-Token")
+			}
+
 			// Get token from session
 			sessionToken := session.Get(csrfTokenKey)
-			
+
 			// Validate token
 			if formToken == "" || sessionToken == nil || formToken != sessionToken.(string) {
 				log.Printf("CSRF validation failed for %s %s", c.Request.Method, c.Request.URL.Path)
@@ -52,7 +56,7 @@ func CSRFMiddleware() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			
+
 			// After successful validation, generate new token (token rotation)
 			token, err := GenerateCSRFToken()
 			if err != nil {
@@ -65,15 +69,17 @@ func CSRFMiddleware() gin.HandlerFunc {
 				return
 			}
 			c.Set(csrfTokenKey, token)
-			
+			// Send new token in response header for AJAX requests to update
+			c.Header("X-CSRF-Token", token)
+
 			c.Next()
 			return
 		}
-		
+
 		// For GET requests: check if token exists, generate only if missing
 		existingToken := session.Get(csrfTokenKey)
 		var token string
-		
+
 		if existingToken == nil {
 			// No token exists, generate new one
 			newToken, err := GenerateCSRFToken()
@@ -82,7 +88,7 @@ func CSRFMiddleware() gin.HandlerFunc {
 				return
 			}
 			token = newToken
-			
+
 			// Store in session
 			session.Set(csrfTokenKey, token)
 			if err := session.Save(); err != nil {
@@ -93,10 +99,10 @@ func CSRFMiddleware() gin.HandlerFunc {
 			// Use existing token
 			token = existingToken.(string)
 		}
-		
+
 		// Make token available to templates
 		c.Set(csrfTokenKey, token)
-		
+
 		c.Next()
 	}
 }

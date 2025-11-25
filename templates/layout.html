@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{.FormToken}}">
     <title>{{.Title}} - agent<</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +21,7 @@
             <a href="/devices">Devices</a>
             <a href="/logs">Logs</a>
             {{if .IsAdmin}}
-            <a href="/users">User Management</a>
+            <a href="/users">Users</a>
             {{end}}
         </div>
         <div class="nav-right">

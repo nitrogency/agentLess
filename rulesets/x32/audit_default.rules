@@ -229,6 +229,3 @@
 
 # Anonymous file creation
 -a always,exit -F arch=b32 -S memfd_create -k anon_file_create
-
-# Make the config immutable
--e 2

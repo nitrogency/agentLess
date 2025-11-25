@@ -106,7 +106,7 @@
 -a always,exit -F arch=b64 -F path=/var/log/faillog -F perm=wa -F auid!=unset -k session
 
 # File deletion
--a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat -F auid>=1000 -F auid!=unset -k file_delete
+-a always,exit -F arch=b64 -S rmdir,unlink,unlinkat,rename,renameat -F auid>=1000 -F auid!=unset -k file_delete
 
 # MAC policy changes
 # Changes to AppArmor profiles can alter system behavior or grant additional privileges
@@ -235,6 +235,3 @@
 
 # Log all human execute syscalls - can be noisy
 -a always,exit -F arch=b64 -S execve,execveat -k exec_all -F auid>=1000 -F auid!=unset
-
-# Make the config immutable
--e 2

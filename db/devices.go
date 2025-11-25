@@ -12,30 +12,30 @@ import (
 )
 
 type Device struct {
-	ID                 int64
-	Name               string
-	Type               string
-	Status             string
-	LastUpdated        time.Time
-	IPAddress          string
-	SSHUser            string
-	SSHKeyPath         string
-	SSHPort            int
-	Hostname           string
-	OSInfo             string
-	OSType             string // "linux" or "windows"
-	SSHGroup           string
-	SetupUser          string
-	AuditArch          string // "x32" or "x64"
-	AuditRuleset       string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
-	NeedsReenrollment  bool   // Flag indicating configuration changes require re-running enlist script
-	ICMPStatus         string // "ok", "none", or "unknown"
-	SSHStatus          string // "ok", "failed", or "unknown"
+	ID                int64
+	Name              string
+	Type              string
+	Status            string
+	LastUpdated       time.Time
+	IPAddress         string
+	SSHUser           string
+	SSHKeyPath        string
+	SSHPort           int
+	Hostname          string
+	OSInfo            string
+	OSType            string // "linux" or "windows"
+	SSHGroup          string
+	SetupUser         string
+	AuditArch         string // "x32" or "x64"
+	AuditRuleset      string // e.g., "audit_default.rules", "audit_high.rules", "audit_min.rules"
+	NeedsReenrollment bool   // Flag indicating configuration changes require re-running enlist script
+	ICMPStatus        string // "ok", "none", or "unknown"
+	SSHStatus         string // "ok", "failed", or "unknown"
 }
 
 // InitDeviceTable initializes the devices table
 func InitDeviceTable() error {
-    _, err := db.Exec(`
+	_, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -58,10 +58,9 @@ func InitDeviceTable() error {
             ssh_status TEXT DEFAULT 'unknown'
         )
     `)
-    if err != nil {
-        return err
-    }
-
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

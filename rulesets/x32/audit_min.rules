@@ -117,6 +117,3 @@
 # Systemd events - related to services, units, timers - sensitive,, method of persistance
 -a always,exit -F arch=b32 -S execve,execveat -F exe=/bin/systemctl -F auid>=1000 -F auid!=unset -k systemd_monitoring
 -a always,exit -F arch=b32 -F dir=/etc/systemd/   -F perm=wa -F auid>=1000 -F auid!=unset -k systemd_monitoring
-
-# Make the config immutable
--e 2
