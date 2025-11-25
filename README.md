@@ -10,11 +10,10 @@ A lightweight and agentless HIDS which supports Linux (Debian/RHEL) monitoring t
 ## Prerequisites
 
 - Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but **untested**)
-- Go 1.16+ (for building the web application)
-- SQLite3 with SQLCipher extension
-- SSH server on target devices
+- SSH server on Linux endpoints. For Windows, OpenSSH Server is installed using a script.
 - Systemd (for service management)
 - Root or sudo access through SSH on the monitoring server
+- Sudo user access through SSH to endpoints
 
 ## Installation
 
