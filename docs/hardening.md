@@ -8,7 +8,7 @@ An optional hardening script called `scripts/harden.sh`, which runs automaticall
 
 - Configuring automatic system updates.
 - Configuring sshd (disables root login, sets max login attempts, disables X11 forwarding)
-- Installing and configuring clamav. A systemd timer is configured to run daily scans. Scan directories, the timer interval and other parameters can be changed in the `scripts/systemd agentless-clamav-scan.timer` and `scripts/systemd agentless-clamav-scan.service` files.
+- Installing and configuring clamav. A systemd timer is configured to run daily scans. Scan directories, the timer interval and other parameters can be changed in the `scripts/systemd/agentless-clamav-scan.timer` and `scripts/systemd/agentless-clamav-scan.service` files.
 - Installing and configuring fail2ban. By default, Fail2ban bans SSH logins for an hour after 3 attempts and web logins for 30 minutes after 5 attempts. Configuration can be modified, like most other parameters, in the `scripts/lib/config.sh` file.
 - Installing and configuring ufw. By default all incoming traffic is blocked except for the set SSH port (default 4222) and the web service port (default 8443). **By default, all outgoing traffic is allowed. You should change this according to your environment.**
 - Installing and configuring auditd. By default, it uses the default 64-bit ruleset. Logs are **not** sent to the dashboard to better separate device logs from server logs. You can view logs using the `ausearch` tool, or by reading `audit.log`.

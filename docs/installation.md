@@ -64,23 +64,28 @@ By default, the app does not support HTTP. During setup, a self-signed certifica
 ├── cmd/                 # Go command programs
 │   └── exporter/        # Log export utility (optional)
 ├── config/              # Configuration package
-├── container/           # Dependency injection
 ├── data/                # SQLite database
 │   └── site.db          # Encrypted database file
 ├── db/                  # Database access layer
 ├── handlers/            # HTTP request handlers
-├── logger/              # Logging package
 ├── middleware/          # HTTP middleware
 ├── models/              # Data structures
-├── router/              # Route configuration
+├── rulesets/            # Audit rule templates
+│   ├── x32/             # 32-bit rulesets
+│   └── x64/             # 64-bit rulesets
 ├── scripts/             # Operational scripts
 │   ├── systemd/         # Systemd unit templates
 │   ├── lib/             # Shared libraries for scripts
-│   ├── linux/           # Linux monitoring scripts
-│   ├── windows/         # Windows monitoring scripts
+│   ├── linux/           # Linux monitoring and enrollment scripts
+│   ├── windows/         # Windows monitoring and enrollment scripts
 │   ├── cleanup/         # Log retention scripts
 │   ├── rotate/          # Secret rotation scripts
-│   └── export/          # Log export setup scripts
+│   ├── export/          # Log export setup scripts
+│   ├── cron/            # Cron templates for endpoints
+│   ├── harden.sh        # Security hardening script
+│   ├── setup-monitoring.sh   # Monitoring service setup
+│   └── start-monitoring.sh   # Monitoring launcher
+├── server/              # HTTP server package
 ├── static/              # Web assets
 │   ├── css/             # Stylesheets
 │   └── js/              # JavaScript
