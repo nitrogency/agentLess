@@ -11,12 +11,12 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/config"
-	"example/go-website/db"
-	"example/go-website/handlers"
-	"example/go-website/middleware"
-	"example/go-website/models"
-	"example/go-website/templates"
+	"agentless/config"
+	"agentless/db"
+	"agentless/handlers"
+	"agentless/middleware"
+	"agentless/models"
+	"agentless/templates"
 )
 
 // SetupRouter configures and returns a Gin router with all routes and middleware
@@ -35,7 +35,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 	// Setup session store
 	cookieStore := cookie.NewStore([]byte(cfg.Session.SecretKey))
-	
+
 	// Convert SameSite string to http.SameSite type
 	sameSite := http.SameSiteLaxMode // Default to Lax
 	switch strings.ToLower(cfg.Session.SameSite) {
@@ -46,7 +46,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	case "none":
 		sameSite = http.SameSiteNoneMode
 	}
-	
+
 	cookieStore.Options(sessions.Options{
 		Path:     "/",
 		HttpOnly: cfg.Session.HttpOnly,
@@ -56,13 +56,13 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	})
 
 	router.Use(sessions.Sessions(cfg.Session.Name, cookieStore))
-	
+
 	// Add session timeout enforcement
 	router.Use(middleware.SessionTimeoutMiddleware(
 		cfg.Session.IdleTimeout,
 		cfg.Session.AbsoluteTimeout,
 	))
-	
+
 	// Add CSRF protection middleware
 	router.Use(middleware.CSRFMiddleware())
 

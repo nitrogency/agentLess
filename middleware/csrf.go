@@ -9,8 +9,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/models"
-	"example/go-website/templates"
+	"agentless/models"
+	"agentless/templates"
 )
 
 const csrfTokenKey = "csrf_token"

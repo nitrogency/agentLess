@@ -9,8 +9,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/db"
-	"example/go-website/models"
+	"agentless/db"
+	"agentless/models"
 )
 
 // RenderGinTemplate renders a template with layout pattern for Gin
@@ -57,7 +57,7 @@ func RenderGinTemplate(c *gin.Context, tmpl string, data models.PageData) {
 
 	// Set content type
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	
+
 	// Execute the layout template
 	if err := t.ExecuteTemplate(c.Writer, "layout", data); err != nil {
 		log.Printf("Template execution error: %v", err)
@@ -69,13 +69,13 @@ func RenderGinTemplate(c *gin.Context, tmpl string, data models.PageData) {
 // GetPageDataFromGin creates a PageData struct with common fields populated from Gin context
 func GetPageDataFromGin(c *gin.Context) models.PageData {
 	session := sessions.Default(c)
-	
+
 	data := models.PageData{
 		Data:        make(map[string]interface{}),
 		FormData:    make(map[string]string),
 		ErrorFields: make(map[string]bool),
 	}
-	
+
 	// Get CSRF token from context (set by middleware)
 	if token, exists := c.Get("csrf_token"); exists {
 		if tokenStr, ok := token.(string); ok {
@@ -94,7 +94,7 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 	if usernameInterface == nil {
 		return data
 	}
-	
+
 	username, ok := usernameInterface.(string)
 	if !ok {
 		return data
@@ -105,7 +105,7 @@ func GetPageDataFromGin(c *gin.Context) models.PageData {
 	// Get user from database to get user ID and other details
 	user, err := db.GetUserByUsername(username)
 	if err == nil && user != nil {
-		data.UserID = user.ID  // Use user ID from database instead of session
+		data.UserID = user.ID // Use user ID from database instead of session
 		data.IsAdmin = user.IsAdmin
 		// Populate permission fields
 		data.CanAddDevices = user.CanAddDevices

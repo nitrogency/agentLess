@@ -1,4 +1,4 @@
-module example/go-website
+module agentless
 
 go 1.24.0
 

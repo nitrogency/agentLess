@@ -1,6 +1,6 @@
 package models
 
-import "example/go-website/db"
+import "agentless/db"
 
 // PageData represents the data structure passed to templates
 type PageData struct {

@@ -11,10 +11,10 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/db"
-	"example/go-website/models"
-	"example/go-website/templates"
-	"example/go-website/utils"
+	"agentless/db"
+	"agentless/models"
+	"agentless/templates"
+	"agentless/utils"
 )
 
 // Security logger for fail2ban integration

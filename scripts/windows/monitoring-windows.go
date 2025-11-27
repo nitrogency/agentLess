@@ -11,14 +11,14 @@ import (
 	"strconv"
 	"strings"
 
-	"example/go-website/db"
+	"agentless/db"
 )
 
 type SysmonEvent struct {
 	XMLName xml.Name `xml:"Event"`
 	System  struct {
-		EventID       int    `xml:"EventID"`
-		EventRecordID int64  `xml:"EventRecordID"`
+		EventID       int   `xml:"EventID"`
+		EventRecordID int64 `xml:"EventRecordID"`
 		TimeCreated   struct {
 			SystemTime string `xml:"SystemTime,attr"`
 		} `xml:"TimeCreated"`
@@ -37,7 +37,7 @@ type SysmonEvent struct {
 
 var (
 	names = map[int]string{1: "ProcessCreate", 2: "FileCreationTimeChanged", 3: "NetworkConnect", 4: "SysmonServiceStateChanged", 5: "ProcessTerminate", 6: "DriverLoad", 7: "ImageLoad", 8: "CreateRemoteThread", 9: "RawAccessRead", 10: "ProcessAccess", 11: "FileCreate", 12: "RegistryEventObjectCreateDelete", 13: "RegistryEventValueSet", 14: "RegistryEventKeyRename", 15: "FileCreateStreamHash", 16: "SysmonConfigStateChanged", 17: "PipeEventCreated", 18: "PipeEventConnected", 19: "WmiEventFilter", 20: "WmiEventConsumer", 21: "WmiEventConsumerToFilter", 22: "DnsQuery", 23: "FileDelete", 24: "ClipboardChange", 25: "ProcessTampering", 26: "FileDeleteDetected"}
-	
+
 	// Priority maps loaded from config file
 	highEventIDs   = make(map[int]struct{})
 	mediumEventIDs = make(map[int]struct{})
@@ -68,7 +68,6 @@ func classify(eventID int) string {
 	// Default to low for unknown event types
 	return "low"
 }
-
 
 // loadPriorities loads event priorities from configuration file
 func loadPriorities(path string) error {
@@ -204,11 +203,11 @@ func main() {
 	if *debug {
 		fmt.Fprintln(os.Stderr, "Reading XML from stdin (expecting UTF-8)")
 	}
-	
+
 	dec := xml.NewDecoder(os.Stdin)
 	eventCount := 0
 	insertCount := 0
-	
+
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -233,12 +232,12 @@ func main() {
 				}
 				continue
 			}
-			
+
 			if *debug {
-				fmt.Fprintf(os.Stderr, "Event %d: ID=%d, RecordID=%d, Provider=%s, Computer=%s\n", 
+				fmt.Fprintf(os.Stderr, "Event %d: ID=%d, RecordID=%d, Provider=%s, Computer=%s\n",
 					eventCount, e.System.EventID, e.System.EventRecordID, e.System.Provider.Name, e.System.Computer)
 			}
-			
+
 			if e.System.Provider.Name != "Microsoft-Windows-Sysmon" || e.System.EventRecordID == 0 {
 				if *debug {
 					fmt.Fprintf(os.Stderr, "Skipping event %d (provider or recordID check failed)\n", eventCount)
@@ -250,19 +249,19 @@ func main() {
 			ev := fmt.Sprintf("Sysmon-%d", e.System.EventID)
 			key := getName(e.System.EventID)
 			audit := fmt.Sprintf("sysmon-%s-%d", e.System.Computer, e.System.EventRecordID)
-			
+
 			// Marshal event back to XML for raw log storage
 			rawXML, err := xml.MarshalIndent(&e, "", "  ")
 			if err != nil {
 				rawXML = []byte(fmt.Sprintf("Error marshaling XML: %v", err))
 			}
 			rawLog := string(rawXML)
-			
+
 			if *debug {
-				fmt.Fprintf(os.Stderr, "Inserting: ts=%s, event=%s, key=%s, audit=%s, msg=%s, level=%s\n", 
+				fmt.Fprintf(os.Stderr, "Inserting: ts=%s, event=%s, key=%s, audit=%s, msg=%s, level=%s\n",
 					ts, ev, key, audit, msg(&e, m), classify(e.System.EventID))
 			}
-			
+
 			if rowID, err := db.InsertAuditLog(*device, ts, ev, key, msg(&e, m), rawLog, classify(e.System.EventID), audit); err != nil {
 				fmt.Fprintln(os.Stderr, "insert error:", err)
 			} else if rowID == 0 {

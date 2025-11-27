@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/db"
-	"example/go-website/templates"
+	"agentless/db"
+	"agentless/templates"
 )
 
 // HomeHandler handles the dashboard/home page
