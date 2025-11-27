@@ -9,4 +9,4 @@ The app uses various places for configuration. These are:
 - `/config/config.go` - web app configuration.
 - `/rulesets/` - audit ruleset directory. This is split into `x32` and `x64` folders, for 32-bit and 64-bit endpoints respectively. Any custom rulesets added here will appear in the Web UI.
 - `.env` - environment variables file. Used for mostly Web app related configuration.
-- `/etc/agentless/secrets.env` - secrets file. 
+- `/etc/agentless/secrets.env` - secrets file.

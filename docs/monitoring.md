@@ -11,14 +11,14 @@ The Linux endpoint monitoring workflow looks like this:
 
 1. Device is added through the Web interface.
 2. Run the `/scripts/linux/enroll-device.sh` script (the exact command is displayed in the UI). This single script:
-   - Copies the server's SSH key to the endpoint (you'll be prompted for the password once)
+   - Copies the server's SSH key to the endpoint (you'll be prompted for the password once). If you have already done this, this step is skipped. **This step may fail if your endpoint disallows password-based SSH authentication.** If you have configured this, add the server's ssh pubkey manually (you can use `ssh-copy-id` from your own machine)
    - Sets up the monitoring user with appropriate permissions
-   - Configures audit rules and installs dependencies
+   - Configures audit rules and installs dependencies. This includes the `auditd` service and `ClamAV`
    - Registers the device in the database
 3. Logs are then retrieved from the endpoint using the created systemd service (agentless-monitor@service). This service calls the `/scripts/start-monitoring.sh` script, which connects to the endpoint, reads the logs, and passes them over to the `/bin/monitor` binary, where the logs are parsed and written to DB.
 4. Logs are then displayed in the Web UI for the user to see.
 
-Log retrieval and device setup is done through SSH. Once the connection is established, two `tail -F` commands run in parallel on the endpoint - one for the `/var/log/audit/audit.log` file, and one for the `/var/log/clamav/clamav.log` file. Their output is combined and piped back over SSH to the monitoring server. If the connection gets interrupted, the service will attempt to reconnect. 
+Log retrieval and device setup is done through SSH. Once the connection is established, two `tail -F` commands run in parallel on the endpoint - one for the `/var/log/audit/audit.log` file, and one for the `/var/log/clamav/clamav.log` file. Their output is combined and piped back over SSH to the monitoring server. If the connection gets interrupted or any other error occurs, the service will attempt to reconnect. 
 
 `tail` is also run with the `-n` flag to prevent the loss of logs during this downtime. The last amount of lines specified (default is `-n 1000`) is sent over to the server, where they are parsed and de-duplicated if necessary. If you suspect that the number of logs generated during interruptions can be higher, you can change this number in `scripts/lib/config.sh`.
 

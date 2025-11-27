@@ -94,7 +94,7 @@ Directory watch rules are similar to file watch rules - they just watch director
 
 Will log all write and access events (`-F perm=wa`) made by any user (excluding system daemons, `-F auid!=unset`) to any file or subdirectory within the `/etc` directory, and assign it the `config_mod` key. 
 
-Due to these rules being recursive, a frequent surprise with directory watches is the volume of events they can produce. Because of this, you should try to monitor only sensitive directories that experience little change, or only monitor specific directories (`/etc/passwd` instead of `/etc`, for example).
+Due to these rules being recursive, a frequent surprise with directory watches is the volume of events they can produce. Because of this, you should try to monitor only sensitive directories that experience little change, or only monitor specific directories (`/etc/network` instead of `/etc`, for example).
 
 ### Executable watch rules
 
@@ -114,7 +114,7 @@ Now, we would only get logs that show when `ls` runs. Note that the command's ar
 
 To summarize, think of the `exe` filter as identifying which process to audit, whereas `perm` identifies what kind of file operation to audit.
 
-You might wonder when to use an `-F exe` rule versus a directory execute watch ( `-w /some/dir -p x` ). A directory watch is broad – for example, `-w /usr/bin -p x` will log any program executed from /usr/bin (i.e., nearly every command on the system). That is a lot of data and not selective. An -F exe rule, by contrast, is very specific – e.g., “monitor this exact program.” 
+You might wonder when to use an `-F exe` rule versus a directory execute watch ( `-w /some/dir -p x` ). A directory watch is broad – for example, `-w /usr/bin -p x` will log any program executed from /usr/bin (i.e., nearly every command on the system). That is a lot of data and not selective. An `-F exe` rule, by contrast, is very specific – e.g., “monitor this exact program.” 
 
 Use directory execution watches if you need a catch-all in less busy or sensitive directories, but prefer exe rules for targeted auditing of specific programs.
 
@@ -143,6 +143,10 @@ It's worth noting that `exe=` rules are not supported by older versions of audit
 ## Custom rules
 
 You can write and save your custom rules to `/rulesets/` directory. These rules will automatically appear in the web interface upon refresh. If you wish to apply a custom ruleset (or change rules in general), you can just re-run the `enlist.sh` script after changing the ruleset through the UI.
+
+**Make sure your custom ruleset's file extension is `.rules`**
+
+Also, when writing custom rules, **make sure all of your rules have keys.** This is both standard practice (much easier to understand what the log is associated with) and required by the system's design. By default, **all logs with no keys get filtered out.**
 
 You can change the alert priorities in the `/config/audit_priorities.conf` file.
 

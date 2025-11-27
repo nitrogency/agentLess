@@ -20,15 +20,14 @@ cd agentLess
 ### 2. Run the setup script
 
 This sets up the necessary requirements and builds the application.
-**Make sure you run as sudo.**
 ```bash
 chmod +x setup.sh
-sudo ./setup.sh
+./setup.sh
 ```
 
 After setup, the web interface should be accessible at https://localhost:8443.
 
-After the script is done, the cloned repository is wiped and the application is installed to `/opt/agentless`. **Be sure to `cd` out of the removed directory once install is complete.**
+After the script is done, the cloned repository is wiped and the application is installed to `/opt/agentless`. **Be sure to `cd` out of the removed directory once install is complete.** If you run any endpoint enrollment scripts while in the deleted directory, they will **FAIL**.
 
 # After installation
 At the end of the `setup.sh` script, the `agentless` service is created. This service runs and handles the web application.
@@ -38,6 +37,8 @@ To view the status of the service, type:
 sudo systemctl status agentless
 ```
 If you wish to `restart`, `stop` or `disable` the service, replace the `status` word accordingly.
+
+The status of other services the application uses can be viewed and handled similarly. Just replace the service name.
 
 ## Logging
 
