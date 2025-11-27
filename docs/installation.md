@@ -26,7 +26,7 @@ chmod +x setup.sh
 
 After setup, the web interface should be accessible at https://localhost:8443.
 
-After the script is done, the cloned repository is wiped and the application is installed to `/opt/agentless`. **Be sure to `cd` out of the removed directory once install is complete.**
+After the script is done, the cloned repository is wiped and the application is installed to `/opt/agentless`. **Be sure to `cd` out of the removed directory once install is complete.** If you run any endpoint enrollment scripts while in the deleted directory, they will **FAIL**.
 
 # After installation
 At the end of the `setup.sh` script, the `agentless` service is created. This service runs and handles the web application.
@@ -36,6 +36,8 @@ To view the status of the service, type:
 sudo systemctl status agentless
 ```
 If you wish to `restart`, `stop` or `disable` the service, replace the `status` word accordingly.
+
+The status of other services the application uses can be viewed and handled similarly. Just replace the service name.
 
 ## Logging
 
@@ -62,23 +64,28 @@ By default, the app does not support HTTP. During setup, a self-signed certifica
 ├── cmd/                 # Go command programs
 │   └── exporter/        # Log export utility (optional)
 ├── config/              # Configuration package
-├── container/           # Dependency injection
 ├── data/                # SQLite database
 │   └── site.db          # Encrypted database file
 ├── db/                  # Database access layer
 ├── handlers/            # HTTP request handlers
-├── logger/              # Logging package
 ├── middleware/          # HTTP middleware
 ├── models/              # Data structures
-├── router/              # Route configuration
+├── rulesets/            # Audit rule templates
+│   ├── x32/             # 32-bit rulesets
+│   └── x64/             # 64-bit rulesets
 ├── scripts/             # Operational scripts
 │   ├── systemd/         # Systemd unit templates
 │   ├── lib/             # Shared libraries for scripts
-│   ├── linux/           # Linux monitoring scripts
-│   ├── windows/         # Windows monitoring scripts
+│   ├── linux/           # Linux monitoring and enrollment scripts
+│   ├── windows/         # Windows monitoring and enrollment scripts
 │   ├── cleanup/         # Log retention scripts
 │   ├── rotate/          # Secret rotation scripts
-│   └── export/          # Log export setup scripts
+│   ├── export/          # Log export setup scripts
+│   ├── cron/            # Cron templates for endpoints
+│   ├── harden.sh        # Security hardening script
+│   ├── setup-monitoring.sh   # Monitoring service setup
+│   └── start-monitoring.sh   # Monitoring launcher
+├── server/              # HTTP server package
 ├── static/              # Web assets
 │   ├── css/             # Stylesheets
 │   └── js/              # JavaScript
