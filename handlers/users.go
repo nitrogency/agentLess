@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/db"
-	"example/go-website/templates"
-	"example/go-website/utils"
+	"agentless/db"
+	"agentless/templates"
+	"agentless/utils"
 )
 
 // UsersHandler handles user listing and management

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"example/go-website/db"
+	"agentless/db"
 )
 
 var (
@@ -101,7 +101,6 @@ func loadPriorities(configPath string) error {
 
 	return nil
 }
-
 
 // classify determines the security level of an audit event based purely on the audit rule key
 // The audit rules assign keys to events at the kernel level:

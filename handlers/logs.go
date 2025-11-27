@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example/go-website/db"
-	"example/go-website/templates"
+	"agentless/db"
+	"agentless/templates"
 )
 
 // AllLogsHandler handles system audit logs viewing
@@ -190,36 +190,36 @@ func exportLogsAsCSV(c *gin.Context, deviceID int64, searchTerm, securityLevel s
 // calculateLogStatistics calculates statistics for the current log set
 func calculateLogStatistics(logs []db.AuditLog) map[string]interface{} {
 	stats := make(map[string]interface{})
-	
+
 	// Count by security level
 	securityCounts := map[string]int{
 		"high":   0,
 		"medium": 0,
 		"low":    0,
 	}
-	
+
 	// Count by device
 	deviceCounts := make(map[int64]int)
-	
+
 	// Count by type
 	typeCounts := make(map[string]int)
-	
+
 	for _, logEntry := range logs {
 		// Security level counts
 		securityCounts[string(logEntry.SecurityLevel)]++
-		
+
 		// Device counts
 		deviceCounts[logEntry.DeviceID]++
-		
+
 		// Type counts
 		typeCounts[logEntry.Type]++
 	}
-	
+
 	stats["SecurityCounts"] = securityCounts
 	stats["DeviceCounts"] = deviceCounts
 	stats["TypeCounts"] = typeCounts
 	stats["TotalCount"] = len(logs)
-	
+
 	return stats
 }
 
@@ -302,7 +302,6 @@ func DeviceLogsHandler(c *gin.Context) {
 
 	templates.RenderGinTemplate(c, "device-logs", data)
 }
-
 
 // LogRetentionHandler handles log retention/cleanup
 func LogRetentionHandler(c *gin.Context) {
