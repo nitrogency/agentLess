@@ -1,5 +1,5 @@
 # Requirements and Prerequisites
-- For the server, a minimum of 2GB RAM and 2VCPUs is recommended. Storage requirements depends on the amount you plan to log. A minimum of 20GB is recommended.
+- For the server, a minimum of 2GB RAM and 2VCPUs is recommended. Storage requirements depends on the amount you plan to log. A minimum of 20GB is recommended. Requirements heavily depend on how many devices you plan to monitor.
 - Linux server/VM (Ubuntu Server is recommended. Debian+RHEL is supported, but untested)
 - SSH server on target devices (installed by default on most Linux distributions, installed automatically by the enrollment script on Windows)
 - Systemd (for service management)
