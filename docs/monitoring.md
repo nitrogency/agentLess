@@ -18,6 +18,8 @@ The Linux endpoint monitoring workflow looks like this:
 3. Logs are then retrieved from the endpoint using the created systemd service (agentless-monitor@service). This service calls the `/scripts/start-monitoring.sh` script, which connects to the endpoint, reads the logs, and passes them over to the `/bin/monitor` binary, where the logs are parsed and written to DB.
 4. Logs are then displayed in the Web UI for the user to see.
 
+Devices added to the database are not enrolled automatically. You have to run the `enroll-device.sh` script. During enrollment, you will be prompted for the sudo password for that device's user. The reason why devices aren't enrolled automatically is because to not store these sudo passwords in the application.
+
 Log retrieval and device setup is done through SSH. Once the connection is established, two `tail -F` commands run in parallel on the endpoint - one for the `/var/log/audit/audit.log` file, and one for the `/var/log/clamav/clamav.log` file. Their output is combined and piped back over SSH to the monitoring server. If the connection gets interrupted or any other error occurs, the service will attempt to reconnect. 
 
 `tail` is also run with the `-n` flag to prevent the loss of logs during this downtime. The last amount of lines specified (default is `-n 1000`) is sent over to the server, where they are parsed and de-duplicated if necessary. If you suspect that the number of logs generated during interruptions can be higher, you can change this number in `scripts/lib/config.sh`.
