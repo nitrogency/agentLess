@@ -110,6 +110,8 @@ However, with common binaries, it can generate a lot of noise. If you wish to ju
 ```bash
 -a always,exit -S exec,execve -F exe=/usr/bin/ls -F auid!=unset -k ls_exec
 ```
+**Note: You can also use `-F perm=x` instead of `-S exec, execve`. The `perm` argument is a shortcut, instead of specifying specific syscalls, you specify all appropriate execute syscalls to that arch.**
+
 Now, we would only get logs that show when `ls` runs. Note that the command's arguments can still be seen and used to understand what `ls` was used for.
 
 To summarize, think of the `exe` filter as identifying which process to audit, whereas `perm` identifies what kind of file operation to audit.
